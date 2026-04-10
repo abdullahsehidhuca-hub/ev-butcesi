@@ -67,19 +67,19 @@ const HAREMALTIN_XAU = "https://www.haremaltin.com/grafik?tip=altin&birim=ALTIN"
 const HAREMALTIN_USD = "https://www.haremaltin.com/grafik?tip=doviz&birim=USDTRY";
 const HAREMALTIN_EUR = "https://www.haremaltin.com/grafik?tip=doviz&birim=EURTRY";
 
-const X = { bg: "#E4E9F2", card: "rgba(255,255,255,0.42)", cardSolid: "#FFFFFF", border: "rgba(255,255,255,0.55)", g: "#16A34A", gd: "rgba(22,163,74,0.1)", w: "#D97706", wd: "rgba(217,119,6,0.1)", r: "#DC2626", rd: "rgba(220,38,38,0.1)", b: "#2563EB", bd: "rgba(37,99,235,0.1)", p: "#7C3AED", pd: "rgba(124,58,237,0.1)", o: "#EA580C", od: "rgba(234,88,12,0.1)", t: "#1E293B", tm: "#64748B", td: "#94A3B8" };
+const X = { bg: "#E4E9F2", card: "rgba(200,215,210,0.55)", cardSolid: "#C8D7D2", border: "rgba(255,255,255,0.5)", g: "#16A34A", gd: "rgba(22,163,74,0.12)", w: "#D97706", wd: "rgba(217,119,6,0.12)", r: "#DC2626", rd: "rgba(220,38,38,0.12)", b: "#2563EB", bd: "rgba(37,99,235,0.12)", p: "#7C3AED", pd: "rgba(124,58,237,0.12)", o: "#EA580C", od: "rgba(234,88,12,0.12)", t: "#1E293B", tm: "#475569", td: "#64748B" };
 const ff = `'DM Sans',sans-serif`;
 const fm = `'JetBrains Mono','Fira Code',monospace`;
-const neu = "6px 6px 14px rgba(0,0,0,0.08), -6px -6px 14px rgba(255,255,255,0.85)";
-const neuIn = "inset 3px 3px 6px rgba(0,0,0,0.06), inset -3px -3px 6px rgba(255,255,255,0.7)";
-const glass = { background: X.card, backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: `1px solid ${X.border}`, boxShadow: neu };
-const glassSolid = { background: "rgba(255,255,255,0.55)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", border: `1px solid rgba(255,255,255,0.7)` };
+const neu = "6px 6px 14px rgba(0,0,0,0.1), -6px -6px 14px rgba(255,255,255,0.7)";
+const neuIn = "inset 3px 3px 6px rgba(0,0,0,0.08), inset -3px -3px 6px rgba(255,255,255,0.5)";
+const glass = { background: "rgba(190,210,205,0.5)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(255,255,255,0.4)", boxShadow: neu };
+const glassSolid = { background: "rgba(200,218,212,0.75)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", border: "1px solid rgba(255,255,255,0.5)" };
 
 /* ═══ UI ═══ */
 function Card({ children, s, onClick }) { return <div onClick={onClick} style={{ borderRadius: 14, padding: "14px 16px", cursor: onClick ? "pointer" : "default", ...glass, ...s }}>{children}</div>; }
 function Btn({ children, c = X.g, v = "filled", onClick, s, disabled }) { return <button disabled={disabled} onClick={onClick} style={{ background: v === "filled" ? c : "transparent", color: v === "filled" ? "#fff" : c, border: v === "filled" ? "none" : `2px solid ${c}`, borderRadius: 12, padding: "12px 20px", fontSize: 15, fontWeight: 700, fontFamily: ff, cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? .5 : 1, width: "100%", boxShadow: v === "filled" ? `0 2px 8px ${c}40` : "none", ...s }}>{children}</button>; }
-function Inp({ label, value, onChange, type = "text", placeholder, suffix, s }) { return (<div style={{ marginBottom: 12, ...s }}>{label && <label style={{ fontSize: 12, color: X.tm, fontWeight: 600, marginBottom: 4, display: "block", fontFamily: ff }}>{label}</label>}<div style={{ position: "relative" }}><input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} style={{ width: "100%", background: "rgba(255,255,255,0.5)", border: `1px solid rgba(0,0,0,0.08)`, borderRadius: 10, padding: "12px 14px", paddingRight: suffix ? 50 : 14, color: X.t, fontSize: 16, fontFamily: type === "number" ? fm : ff, outline: "none", boxSizing: "border-box", boxShadow: neuIn }} />{suffix && <span style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", color: X.td, fontSize: 13, fontWeight: 600 }}>{suffix}</span>}</div></div>); }
-function Sel({ label, value, onChange, options }) { return (<div style={{ marginBottom: 12 }}>{label && <label style={{ fontSize: 12, color: X.tm, fontWeight: 600, marginBottom: 4, display: "block", fontFamily: ff }}>{label}</label>}<select value={value} onChange={e => onChange(e.target.value)} style={{ width: "100%", background: "rgba(255,255,255,0.5)", border: `1px solid rgba(0,0,0,0.08)`, borderRadius: 10, padding: "12px 14px", color: X.t, fontSize: 15, fontFamily: ff, outline: "none", boxSizing: "border-box", boxShadow: neuIn }}>{options.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}</select></div>); }
+function Inp({ label, value, onChange, type = "text", placeholder, suffix, s }) { return (<div style={{ marginBottom: 12, ...s }}>{label && <label style={{ fontSize: 12, color: X.tm, fontWeight: 600, marginBottom: 4, display: "block", fontFamily: ff }}>{label}</label>}<div style={{ position: "relative" }}><input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} style={{ width: "100%", background: "rgba(220,235,230,0.6)", border: `1px solid rgba(0,0,0,0.08)`, borderRadius: 10, padding: "12px 14px", paddingRight: suffix ? 50 : 14, color: X.t, fontSize: 16, fontFamily: type === "number" ? fm : ff, outline: "none", boxSizing: "border-box", boxShadow: neuIn }} />{suffix && <span style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", color: X.td, fontSize: 13, fontWeight: 600 }}>{suffix}</span>}</div></div>); }
+function Sel({ label, value, onChange, options }) { return (<div style={{ marginBottom: 12 }}>{label && <label style={{ fontSize: 12, color: X.tm, fontWeight: 600, marginBottom: 4, display: "block", fontFamily: ff }}>{label}</label>}<select value={value} onChange={e => onChange(e.target.value)} style={{ width: "100%", background: "rgba(220,235,230,0.6)", border: `1px solid rgba(0,0,0,0.08)`, borderRadius: 10, padding: "12px 14px", color: X.t, fontSize: 15, fontFamily: ff, outline: "none", boxSizing: "border-box", boxShadow: neuIn }}>{options.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}</select></div>); }
 function Modal({ title, onClose, children }) { return (<div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.3)", backdropFilter: "blur(8px)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 1000 }} onClick={onClose}><div onClick={e => e.stopPropagation()} style={{ ...glassSolid, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, maxHeight: "85vh", overflow: "auto", padding: 24, boxShadow: "0 -8px 32px rgba(0,0,0,0.1)" }}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}><h3 style={{ margin: 0, color: X.t, fontSize: 18, fontFamily: ff }}>{title}</h3><button onClick={onClose} style={{ background: "none", border: "none", color: X.tm, fontSize: 22, cursor: "pointer" }}>✕</button></div>{children}</div></div>); }
 
 /* ═══ INFO POPUP ═══ */
@@ -91,7 +91,7 @@ function InfoModal({ title, text, onClose }) {
 }
 
 function CatButton({ icon, label, total, color, dimColor, expanded, onToggle, children, onInfo }) {
-  return (<div style={{ marginBottom: 8 }}><div onClick={onToggle} style={{ display: "flex", alignItems: "center", gap: 12, ...glass, borderRadius: expanded ? "14px 14px 0 0" : 14, padding: "14px 16px", cursor: "pointer", position: "relative", border: `1px solid ${expanded ? color + "40" : "rgba(255,255,255,0.55)"}` }}><span style={{ fontSize: 28, lineHeight: 1 }}>{icon}</span><div style={{ flex: 1 }}><div style={{ color: X.t, fontWeight: 700, fontSize: 14, fontFamily: ff }}>{label}</div></div><div style={{ textAlign: "right", marginRight: 4 }}><div style={{ color, fontWeight: 800, fontSize: 17, fontFamily: fm }}>{C(total)}</div></div><span style={{ color: X.td, fontSize: 11, transform: expanded ? "rotate(180deg)" : "rotate(0)", transition: "0.2s" }}>▼</span>{onInfo && <InfoBtn onClick={onInfo} />}</div>{expanded && <div style={{ background: "rgba(255,255,255,0.35)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", borderTop: `1px solid rgba(0,0,0,0.05)`, borderRadius: "0 0 14px 14px", padding: "8px 16px 14px", boxShadow: "0 4px 10px rgba(0,0,0,0.04)" }}>{children}</div>}</div>);
+  return (<div style={{ marginBottom: 8 }}><div onClick={onToggle} style={{ display: "flex", alignItems: "center", gap: 12, ...glass, borderRadius: expanded ? "14px 14px 0 0" : 14, padding: "14px 16px", cursor: "pointer", position: "relative", border: `1px solid ${expanded ? color + "40" : "rgba(255,255,255,0.55)"}` }}><span style={{ fontSize: 28, lineHeight: 1 }}>{icon}</span><div style={{ flex: 1 }}><div style={{ color: X.t, fontWeight: 700, fontSize: 14, fontFamily: ff }}>{label}</div></div><div style={{ textAlign: "right", marginRight: 4 }}><div style={{ color, fontWeight: 800, fontSize: 17, fontFamily: fm }}>{C(total)}</div></div><span style={{ color: X.td, fontSize: 11, transform: expanded ? "rotate(180deg)" : "rotate(0)", transition: "0.2s" }}>▼</span>{onInfo && <InfoBtn onClick={onInfo} />}</div>{expanded && <div style={{ background: "rgba(200,218,212,0.45)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", borderTop: `1px solid rgba(0,0,0,0.05)`, borderRadius: "0 0 14px 14px", padding: "8px 16px 14px", boxShadow: "0 4px 10px rgba(0,0,0,0.04)" }}>{children}</div>}</div>);
 }
 function ItemRow({ label, value, sub, color = X.t, onAction, actionLabel }) { return (<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid rgba(0,0,0,0.06)" }}><div style={{ flex: 1, minWidth: 0 }}><div style={{ color: X.t, fontSize: 13, fontWeight: 600 }}>{label}</div>{sub && <div style={{ color: X.td, fontSize: 11 }}>{sub}</div>}</div><div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}><span style={{ color, fontWeight: 700, fontFamily: fm, fontSize: 14 }}>{typeof value === "number" ? C(value) : value}</span>{onAction && <button onClick={e => { e.stopPropagation(); onAction(); }} style={{ background: "rgba(22,163,74,0.1)", border: "none", borderRadius: 8, padding: "5px 10px", color: X.g, fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: ff }}>{actionLabel || "✓"}</button>}</div></div>); }
 
@@ -444,7 +444,7 @@ function EmergencyFundSettings({ data, setData, onBack }) {
       <p style={{ color: X.td, fontSize: 12, marginBottom: 16 }}>Acil durum fonu, beklenmedik durumlarda (iş kaybı, sağlık harcaması, büyük tamirat vs.) kullanabileceğiniz güvenlik havuzudur. Hedef belirlediğinizde birikim havuzunuz bu hedefe göre ölçülür.</p>
 
       {target > 0 && (
-        <Card s={{ marginBottom: 12, background: "rgba(22,163,74,0.08)", border: "1px solid rgba(22,163,74,0.15)" }}>
+        <Card s={{ marginBottom: 12, background: "rgba(22,163,74,0.12)", border: "1px solid rgba(22,163,74,0.15)" }}>
           <div style={{ color: X.g, fontSize: 13, fontWeight: 700, marginBottom: 8 }}>HEDEFE İLERLEMEN</div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
             <span style={{ color: X.t, fontSize: 22, fontWeight: 800, fontFamily: fm }}>{C(currentTotal)}</span>
@@ -594,7 +594,7 @@ function BackupSettings({ data, setData, onBack }) {
           <input type="file" accept=".json,application/json" onChange={importFile} style={{ display: "none" }} />
         </label>
         <div style={{ color: X.td, fontSize: 11, marginBottom: 8, textAlign: "center" }}>— veya —</div>
-        <textarea value={importData} onChange={e => setImportData(e.target.value)} placeholder="JSON içeriğini buraya yapıştırın..." style={{ width: "100%", background: "rgba(255,255,255,0.5)", border: `1px solid ${X.border}`, borderRadius: 10, padding: "12px 14px", color: X.t, fontSize: 12, fontFamily: fm, outline: "none", boxSizing: "border-box", minHeight: 100, resize: "vertical", marginBottom: 8 }} />
+        <textarea value={importData} onChange={e => setImportData(e.target.value)} placeholder="JSON içeriğini buraya yapıştırın..." style={{ width: "100%", background: "rgba(220,235,230,0.6)", border: `1px solid ${X.border}`, borderRadius: 10, padding: "12px 14px", color: X.t, fontSize: 12, fontFamily: fm, outline: "none", boxSizing: "border-box", minHeight: 100, resize: "vertical", marginBottom: 8 }} />
         <Btn onClick={pasteImport} v="outline" c={X.p} disabled={!importData.trim()}>📋 Panodan İçe Aktar</Btn>
       </Card>
 
@@ -716,7 +716,7 @@ function WeeklyBackupRitual({ data, setData }) {
           </Card>
         )}
 
-        <Card s={{ marginBottom: 12, background: "rgba(255,255,255,0.3)" }}>
+        <Card s={{ marginBottom: 12, background: "rgba(200,218,212,0.4)" }}>
           <div style={{ color: X.tm, fontSize: 11, fontWeight: 700, marginBottom: 4 }}>DURUM</div>
           <div style={{ color: X.t, fontSize: 13 }}>{lastBackupText}</div>
           <div style={{ color: X.td, fontSize: 11, marginTop: 2 }}>Bu haftanın başlangıcı: {weekStart}</div>
@@ -807,7 +807,7 @@ function CCInstallModal({ data, mk, cards, variableExpenses, onClose, onSave, st
       )}
       {sim && (
         <>
-          <Card s={{ marginBottom: 10, background: "rgba(255,255,255,0.4)", border: `1px solid ${X.border}` }}>
+          <Card s={{ marginBottom: 10, background: "rgba(200,218,212,0.45)", border: `1px solid ${X.border}` }}>
             <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 4, fontSize: 11, marginBottom: 4 }}>
               <span style={{ color: X.td }}>Ay</span><span style={{ color: X.td, textAlign: "right" }}>Şimdi</span><span style={{ color: X.p, textAlign: "right" }}>Taksitle</span>
             </div>
@@ -912,7 +912,7 @@ function SellAssetModal({ asset, data, onClose, onSave }) {
       <Inp label="Tarih" type="date" value={date} onChange={setDate} />
       <div style={{ marginBottom: 12 }}>
         <label style={{ fontSize: 12, color: X.tm, fontWeight: 600, marginBottom: 4, display: "block" }}>Ne için bozduruldu? <span style={{ color: X.r }}>*</span></label>
-        <textarea value={reason} onChange={e => setReason(e.target.value)} placeholder="Örn: Okul taksidi için, acil sağlık harcaması için..." style={{ width: "100%", background: "rgba(255,255,255,0.5)", border: `1px solid ${reason ? X.border : X.r}`, borderRadius: 10, padding: "12px 14px", color: X.t, fontSize: 14, fontFamily: ff, outline: "none", boxSizing: "border-box", minHeight: 60, resize: "vertical" }} />
+        <textarea value={reason} onChange={e => setReason(e.target.value)} placeholder="Örn: Okul taksidi için, acil sağlık harcaması için..." style={{ width: "100%", background: "rgba(220,235,230,0.6)", border: `1px solid ${reason ? X.border : X.r}`, borderRadius: 10, padding: "12px 14px", color: X.t, fontSize: 14, fontFamily: ff, outline: "none", boxSizing: "border-box", minHeight: 60, resize: "vertical" }} />
       </div>
       <Btn onClick={save} disabled={!canSave} c={X.r}>{info.icon} Sat / Boz</Btn>
     </Modal>
@@ -1029,7 +1029,7 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
         </div>
 
         {/* Savings full width */}
-        <div style={{ gridColumn: "1 / -1", background: "rgba(22,163,74,0.08)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(22,163,74,0.15)", borderRadius: 16, padding: "14px 16px", position: "relative", minHeight: 92, display: "flex", flexDirection: "column", justifyContent: "space-between", boxShadow: neu }}>
+        <div style={{ gridColumn: "1 / -1", background: "rgba(22,163,74,0.12)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(22,163,74,0.15)", borderRadius: 16, padding: "14px 16px", position: "relative", minHeight: 92, display: "flex", flexDirection: "column", justifyContent: "space-between", boxShadow: neu }}>
           <InfoBtn onClick={() => setInfo("savings")} />
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
             <span style={{ fontSize: 24 }}>💰</span>
@@ -1394,7 +1394,7 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
         const assets = ["TRY", "XAU", "USD", "EUR"];
         return (
           <>
-            <Card s={{ marginBottom: 12, background: "rgba(22,163,74,0.08)", border: "1px solid rgba(22,163,74,0.15)" }}>
+            <Card s={{ marginBottom: 12, background: "rgba(22,163,74,0.12)", border: "1px solid rgba(22,163,74,0.15)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div><div style={{ color: X.g, fontSize: 14, fontWeight: 800 }}>💰 Birikim Havuzu</div><div style={{ color: X.tm, fontSize: 11, marginTop: 2 }}>Anlık toplam TL değeri</div></div>
                 <span style={{ color: X.g, fontSize: 24, fontWeight: 800, fontFamily: fm }}>{C(totalSavings)}</span>
@@ -2010,7 +2010,7 @@ function VariableSettings({ data, setData, onBack }) {
           <Inp label="Beklenen Aylık Tutar" type="number" value={ex} onChange={se} suffix="₺" placeholder="Opsiyonel" />
           <div style={{ marginBottom: 12 }}>
             <label style={{ fontSize: 12, color: X.tm, fontWeight: 600, marginBottom: 4, display: "block" }}>Anahtar Kelimeler (virgülle ayırın)</label>
-            <textarea value={kw} onChange={e => setKw(e.target.value)} placeholder="shell, opet, bp, dizel, benzin, yakıt, akaryakıt" style={{ width: "100%", background: "rgba(255,255,255,0.5)", border: `1px solid ${X.border}`, borderRadius: 10, padding: "12px 14px", color: X.t, fontSize: 14, fontFamily: ff, outline: "none", boxSizing: "border-box", minHeight: 60, resize: "vertical" }} />
+            <textarea value={kw} onChange={e => setKw(e.target.value)} placeholder="shell, opet, bp, dizel, benzin, yakıt, akaryakıt" style={{ width: "100%", background: "rgba(220,235,230,0.6)", border: `1px solid ${X.border}`, borderRadius: 10, padding: "12px 14px", color: X.t, fontSize: 14, fontFamily: ff, outline: "none", boxSizing: "border-box", minHeight: 60, resize: "vertical" }} />
             <div style={{ color: X.td, fontSize: 10, marginTop: 4 }}>Bu kelimelerden biri harcamanın açıklaması veya işyeri adında geçerse bu kategoriye otomatik atanır.</div>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
@@ -2328,7 +2328,7 @@ function MonthCloseRitual({ data, setData, prevMk, onClose }) {
           <div style={{ color: X.tm, fontSize: 12, marginTop: 4 }}>{ml(prevMk)} ayını kapatıp {ml(newMk)} ayını başlatın</div>
         </div>
 
-        <Card s={{ marginBottom: 12, background: "rgba(255,255,255,0.4)", border: `1px solid ${X.border}` }}>
+        <Card s={{ marginBottom: 12, background: "rgba(200,218,212,0.45)", border: `1px solid ${X.border}` }}>
           <div style={{ color: X.tm, fontSize: 12, fontWeight: 700, marginBottom: 10 }}>ÖNCEKİ AY ÖZETİ</div>
           <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: 13 }}>
             <span style={{ color: X.t }}>Bütçe</span>
@@ -2349,7 +2349,7 @@ function MonthCloseRitual({ data, setData, prevMk, onClose }) {
         </Card>
 
         {hasSurplus ? (
-          <Card s={{ marginBottom: 12, background: "rgba(22,163,74,0.08)", border: "1px solid rgba(22,163,74,0.15)" }}>
+          <Card s={{ marginBottom: 12, background: "rgba(22,163,74,0.12)", border: "1px solid rgba(22,163,74,0.15)" }}>
             <div style={{ color: X.g, fontSize: 13, fontWeight: 700, marginBottom: 4 }}>💰 TL Birikiminize Eklendi</div>
             <div style={{ color: X.t, fontSize: 20, fontWeight: 800, fontFamily: fm }}>+{C(prev.remaining)}</div>
             <div style={{ color: X.tm, fontSize: 11, marginTop: 4 }}>{motivation}</div>
@@ -2397,7 +2397,7 @@ export default function App() {
     return null;
   }, [loaded, data.lastClosedMonth, data.months, mk]);
 
-  if (!loaded) return <div style={{ background: "rgba(255,255,255,0.4)", height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: X.g, fontFamily: ff }}>Yükleniyor...</div>;
+  if (!loaded) return <div style={{ background: "rgba(200,218,212,0.45)", height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: X.g, fontFamily: ff }}>Yükleniyor...</div>;
   const c = calcMonth(data, mk, null);
 
   return (
