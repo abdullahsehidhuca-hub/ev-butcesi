@@ -2430,7 +2430,7 @@ export default function App() {
   return (
     <div style={{ background: X.bg, minHeight: "100vh", color: X.t, fontFamily: ff, maxWidth: 480, margin: "0 auto", position: "relative" }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700;800&display=swap" rel="stylesheet" />
-      <div style={{ background: X.card, borderBottom: `1px solid ${X.border}`, padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", position: "sticky", top: 0, zIndex: 50 }}>
+      <div style={{ background: X.card, borderBottom: `1px solid ${X.border}`, padding: "calc(12px + env(safe-area-inset-top)) 16px 12px", display: "flex", justifyContent: "space-between", alignItems: "center", position: "sticky", top: 0, zIndex: 50 }}>
         <div><div style={{ fontSize: 15, fontWeight: 800, letterSpacing: "-0.3px" }}>EV BÜTÇESİ</div><div style={{ fontSize: 11, color: X.td }}>{ml(mk)}</div></div>
         <div style={{ textAlign: "right" }}>
           <div style={{ fontSize: 10, color: X.tm, letterSpacing: 0.5 }}>BÜTÇE / KALAN</div>
