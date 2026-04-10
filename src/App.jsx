@@ -15,7 +15,7 @@ const CARD_LOAD_PER_TX_PCT = 0.10; // tek seferde %10
 const CARD_LOAD_TOTAL_PCT = 0.15; // ay toplamı %15
 
 const DD = { settings: { monthlyBudget: 450000, fixedExpenses: [], variableExpenses: [], cards: [], emergencyFundTarget: null }, months: {}, installmentPlans: [], debts: [], merchantMap: {}, goldRates: {}, usdRates: {}, eurRates: {}, liveRates: { USD: null, EUR: null, XAU: null, fetchedAt: null }, savings: { TRY: [], USD: [], EUR: [], XAU: [] }, lastClosedMonth: null, lastBackup: null };
-const DM = () => ({ budget: null, fixedPaid: {}, variableEntries: {}, ccSingle: [], cardLoaded: 0, debtPayments: {}, csvByCard: {}, finalSavings: null });
+const DM = () => ({ budget: null, fixedPaid: {}, variableEntries: {}, ccSingle: [], cardLoaded: 0, debtPayments: {}, ccTransferred: {}, csvByCard: {}, finalSavings: null });
 
 const STORAGE_KEY = "ev-butce-v11";
 
@@ -67,29 +67,33 @@ const HAREMALTIN_XAU = "https://www.haremaltin.com/grafik?tip=altin&birim=ALTIN"
 const HAREMALTIN_USD = "https://www.haremaltin.com/grafik?tip=doviz&birim=USDTRY";
 const HAREMALTIN_EUR = "https://www.haremaltin.com/grafik?tip=doviz&birim=EURTRY";
 
-const X = { bg: "#0C0E16", card: "#151823", border: "#252836", g: "#22C55E", gd: "rgba(34,197,94,0.12)", w: "#F59E0B", wd: "rgba(245,158,11,0.12)", r: "#EF4444", rd: "rgba(239,68,68,0.12)", b: "#3B82F6", bd: "rgba(59,130,246,0.12)", p: "#A855F7", pd: "rgba(168,85,247,0.12)", o: "#F97316", od: "rgba(249,115,22,0.12)", t: "#E2E8F0", tm: "#94A3B8", td: "#475569" };
+const X = { bg: "#E4E9F2", card: "rgba(255,255,255,0.42)", cardSolid: "#FFFFFF", border: "rgba(255,255,255,0.55)", g: "#16A34A", gd: "rgba(22,163,74,0.1)", w: "#D97706", wd: "rgba(217,119,6,0.1)", r: "#DC2626", rd: "rgba(220,38,38,0.1)", b: "#2563EB", bd: "rgba(37,99,235,0.1)", p: "#7C3AED", pd: "rgba(124,58,237,0.1)", o: "#EA580C", od: "rgba(234,88,12,0.1)", t: "#1E293B", tm: "#64748B", td: "#94A3B8" };
 const ff = `'DM Sans',sans-serif`;
 const fm = `'JetBrains Mono','Fira Code',monospace`;
+const neu = "6px 6px 14px rgba(0,0,0,0.08), -6px -6px 14px rgba(255,255,255,0.85)";
+const neuIn = "inset 3px 3px 6px rgba(0,0,0,0.06), inset -3px -3px 6px rgba(255,255,255,0.7)";
+const glass = { background: X.card, backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: `1px solid ${X.border}`, boxShadow: neu };
+const glassSolid = { background: "rgba(255,255,255,0.55)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", border: `1px solid rgba(255,255,255,0.7)` };
 
 /* ═══ UI ═══ */
-function Card({ children, s, onClick }) { return <div onClick={onClick} style={{ background: X.card, borderRadius: 14, padding: "14px 16px", border: `1px solid ${X.border}`, cursor: onClick ? "pointer" : "default", ...s }}>{children}</div>; }
-function Btn({ children, c = X.g, v = "filled", onClick, s, disabled }) { return <button disabled={disabled} onClick={onClick} style={{ background: v === "filled" ? c : "transparent", color: v === "filled" ? "#000" : c, border: v === "filled" ? "none" : `2px solid ${c}`, borderRadius: 12, padding: "12px 20px", fontSize: 15, fontWeight: 700, fontFamily: ff, cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? .5 : 1, width: "100%", ...s }}>{children}</button>; }
-function Inp({ label, value, onChange, type = "text", placeholder, suffix, s }) { return (<div style={{ marginBottom: 12, ...s }}>{label && <label style={{ fontSize: 12, color: X.tm, fontWeight: 600, marginBottom: 4, display: "block", fontFamily: ff }}>{label}</label>}<div style={{ position: "relative" }}><input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} style={{ width: "100%", background: "#0C0E16", border: `1px solid ${X.border}`, borderRadius: 10, padding: "12px 14px", paddingRight: suffix ? 50 : 14, color: X.t, fontSize: 16, fontFamily: type === "number" ? fm : ff, outline: "none", boxSizing: "border-box" }} />{suffix && <span style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", color: X.td, fontSize: 13, fontWeight: 600 }}>{suffix}</span>}</div></div>); }
-function Sel({ label, value, onChange, options }) { return (<div style={{ marginBottom: 12 }}>{label && <label style={{ fontSize: 12, color: X.tm, fontWeight: 600, marginBottom: 4, display: "block", fontFamily: ff }}>{label}</label>}<select value={value} onChange={e => onChange(e.target.value)} style={{ width: "100%", background: "#0C0E16", border: `1px solid ${X.border}`, borderRadius: 10, padding: "12px 14px", color: X.t, fontSize: 15, fontFamily: ff, outline: "none", boxSizing: "border-box" }}>{options.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}</select></div>); }
-function Modal({ title, onClose, children }) { return (<div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", backdropFilter: "blur(8px)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 1000 }} onClick={onClose}><div onClick={e => e.stopPropagation()} style={{ background: X.card, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, maxHeight: "85vh", overflow: "auto", padding: 24 }}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}><h3 style={{ margin: 0, color: X.t, fontSize: 18, fontFamily: ff }}>{title}</h3><button onClick={onClose} style={{ background: "none", border: "none", color: X.tm, fontSize: 22, cursor: "pointer" }}>✕</button></div>{children}</div></div>); }
+function Card({ children, s, onClick }) { return <div onClick={onClick} style={{ borderRadius: 14, padding: "14px 16px", cursor: onClick ? "pointer" : "default", ...glass, ...s }}>{children}</div>; }
+function Btn({ children, c = X.g, v = "filled", onClick, s, disabled }) { return <button disabled={disabled} onClick={onClick} style={{ background: v === "filled" ? c : "transparent", color: v === "filled" ? "#fff" : c, border: v === "filled" ? "none" : `2px solid ${c}`, borderRadius: 12, padding: "12px 20px", fontSize: 15, fontWeight: 700, fontFamily: ff, cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? .5 : 1, width: "100%", boxShadow: v === "filled" ? `0 2px 8px ${c}40` : "none", ...s }}>{children}</button>; }
+function Inp({ label, value, onChange, type = "text", placeholder, suffix, s }) { return (<div style={{ marginBottom: 12, ...s }}>{label && <label style={{ fontSize: 12, color: X.tm, fontWeight: 600, marginBottom: 4, display: "block", fontFamily: ff }}>{label}</label>}<div style={{ position: "relative" }}><input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} style={{ width: "100%", background: "rgba(255,255,255,0.5)", border: `1px solid rgba(0,0,0,0.08)`, borderRadius: 10, padding: "12px 14px", paddingRight: suffix ? 50 : 14, color: X.t, fontSize: 16, fontFamily: type === "number" ? fm : ff, outline: "none", boxSizing: "border-box", boxShadow: neuIn }} />{suffix && <span style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", color: X.td, fontSize: 13, fontWeight: 600 }}>{suffix}</span>}</div></div>); }
+function Sel({ label, value, onChange, options }) { return (<div style={{ marginBottom: 12 }}>{label && <label style={{ fontSize: 12, color: X.tm, fontWeight: 600, marginBottom: 4, display: "block", fontFamily: ff }}>{label}</label>}<select value={value} onChange={e => onChange(e.target.value)} style={{ width: "100%", background: "rgba(255,255,255,0.5)", border: `1px solid rgba(0,0,0,0.08)`, borderRadius: 10, padding: "12px 14px", color: X.t, fontSize: 15, fontFamily: ff, outline: "none", boxSizing: "border-box", boxShadow: neuIn }}>{options.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}</select></div>); }
+function Modal({ title, onClose, children }) { return (<div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.3)", backdropFilter: "blur(8px)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 1000 }} onClick={onClose}><div onClick={e => e.stopPropagation()} style={{ ...glassSolid, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, maxHeight: "85vh", overflow: "auto", padding: 24, boxShadow: "0 -8px 32px rgba(0,0,0,0.1)" }}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}><h3 style={{ margin: 0, color: X.t, fontSize: 18, fontFamily: ff }}>{title}</h3><button onClick={onClose} style={{ background: "none", border: "none", color: X.tm, fontSize: 22, cursor: "pointer" }}>✕</button></div>{children}</div></div>); }
 
 /* ═══ INFO POPUP ═══ */
 function InfoBtn({ onClick }) {
-  return <button onClick={e => { e.stopPropagation(); onClick(); }} style={{ position: "absolute", top: 6, right: 6, width: 18, height: 18, borderRadius: "50%", background: "rgba(255,255,255,0.1)", border: "none", color: X.tm, fontSize: 11, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, fontFamily: ff }}>i</button>;
+  return <button onClick={e => { e.stopPropagation(); onClick(); }} style={{ position: "absolute", top: 6, right: 6, width: 18, height: 18, borderRadius: "50%", background: "rgba(0,0,0,0.06)", border: "none", color: X.tm, fontSize: 11, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, fontFamily: ff }}>i</button>;
 }
 function InfoModal({ title, text, onClose }) {
   return <Modal title={`ℹ️ ${title}`} onClose={onClose}><div style={{ color: X.t, fontSize: 14, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{text}</div><Btn onClick={onClose} s={{ marginTop: 16 }}>Anladım</Btn></Modal>;
 }
 
 function CatButton({ icon, label, total, color, dimColor, expanded, onToggle, children, onInfo }) {
-  return (<div style={{ marginBottom: 8 }}><div onClick={onToggle} style={{ display: "flex", alignItems: "center", gap: 12, background: expanded ? dimColor : X.card, border: `1px solid ${expanded ? color : X.border}`, borderRadius: expanded ? "14px 14px 0 0" : 14, padding: "14px 16px", cursor: "pointer", position: "relative" }}><span style={{ fontSize: 28, lineHeight: 1 }}>{icon}</span><div style={{ flex: 1 }}><div style={{ color: X.t, fontWeight: 700, fontSize: 14, fontFamily: ff }}>{label}</div></div><div style={{ textAlign: "right", marginRight: 4 }}><div style={{ color, fontWeight: 800, fontSize: 17, fontFamily: fm }}>{C(total)}</div></div><span style={{ color: X.td, fontSize: 11, transform: expanded ? "rotate(180deg)" : "rotate(0)" }}>▼</span>{onInfo && <InfoBtn onClick={onInfo} />}</div>{expanded && <div style={{ background: X.card, border: `1px solid ${color}`, borderTop: "none", borderRadius: "0 0 14px 14px", padding: "8px 16px 14px" }}>{children}</div>}</div>);
+  return (<div style={{ marginBottom: 8 }}><div onClick={onToggle} style={{ display: "flex", alignItems: "center", gap: 12, ...glass, borderRadius: expanded ? "14px 14px 0 0" : 14, padding: "14px 16px", cursor: "pointer", position: "relative", border: `1px solid ${expanded ? color + "40" : "rgba(255,255,255,0.55)"}` }}><span style={{ fontSize: 28, lineHeight: 1 }}>{icon}</span><div style={{ flex: 1 }}><div style={{ color: X.t, fontWeight: 700, fontSize: 14, fontFamily: ff }}>{label}</div></div><div style={{ textAlign: "right", marginRight: 4 }}><div style={{ color, fontWeight: 800, fontSize: 17, fontFamily: fm }}>{C(total)}</div></div><span style={{ color: X.td, fontSize: 11, transform: expanded ? "rotate(180deg)" : "rotate(0)", transition: "0.2s" }}>▼</span>{onInfo && <InfoBtn onClick={onInfo} />}</div>{expanded && <div style={{ background: "rgba(255,255,255,0.35)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", borderTop: `1px solid rgba(0,0,0,0.05)`, borderRadius: "0 0 14px 14px", padding: "8px 16px 14px", boxShadow: "0 4px 10px rgba(0,0,0,0.04)" }}>{children}</div>}</div>);
 }
-function ItemRow({ label, value, sub, color = X.t, onAction, actionLabel }) { return (<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `1px solid ${X.border}` }}><div style={{ flex: 1, minWidth: 0 }}><div style={{ color: X.t, fontSize: 13, fontWeight: 600 }}>{label}</div>{sub && <div style={{ color: X.td, fontSize: 11 }}>{sub}</div>}</div><div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}><span style={{ color, fontWeight: 700, fontFamily: fm, fontSize: 14 }}>{typeof value === "number" ? C(value) : value}</span>{onAction && <button onClick={e => { e.stopPropagation(); onAction(); }} style={{ background: X.gd, border: `1px solid ${X.g}`, borderRadius: 6, padding: "4px 10px", color: X.g, fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: ff }}>{actionLabel || "✓"}</button>}</div></div>); }
+function ItemRow({ label, value, sub, color = X.t, onAction, actionLabel }) { return (<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid rgba(0,0,0,0.06)" }}><div style={{ flex: 1, minWidth: 0 }}><div style={{ color: X.t, fontSize: 13, fontWeight: 600 }}>{label}</div>{sub && <div style={{ color: X.td, fontSize: 11 }}>{sub}</div>}</div><div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}><span style={{ color, fontWeight: 700, fontFamily: fm, fontSize: 14 }}>{typeof value === "number" ? C(value) : value}</span>{onAction && <button onClick={e => { e.stopPropagation(); onAction(); }} style={{ background: "rgba(22,163,74,0.1)", border: "none", borderRadius: 8, padding: "5px 10px", color: X.g, fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: ff }}>{actionLabel || "✓"}</button>}</div></div>); }
 
 /* ═══ ENGINE ═══ */
 /* ═══ BİRİKİM HELPER ═══ */
@@ -300,16 +304,15 @@ const INFO = {
 function RiskBar({ score, onInfo }) {
   const info = getRiskInfo(score);
   return (
-    <div style={{ margin: "0 0 12px", padding: "10px 14px", background: X.card, borderRadius: 12, border: `1px solid ${info.color}40`, display: "flex", alignItems: "center", gap: 12, position: "relative" }}>
-      <div style={{ color: info.color, fontSize: 22, fontWeight: 900, fontFamily: fm, minWidth: 32 }}>{score}</div>
+    <div style={{ margin: "0 0 12px", padding: "10px 14px", borderRadius: 14, ...glass, display: "flex", alignItems: "center", gap: 14, position: "relative" }}>
+      <div style={{ width: 34, height: 34, borderRadius: 10, background: info.color, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 14, fontWeight: 900, fontFamily: fm, boxShadow: `0 2px 8px ${info.color}40` }}>{score}</div>
       <div style={{ flex: 1 }}>
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
           <span style={{ color: info.color, fontSize: 12, fontWeight: 800 }}>{info.label}</span>
           <span style={{ color: X.td, fontSize: 10, marginRight: 18 }}>{info.sub}</span>
         </div>
-        <div style={{ height: 6, borderRadius: 3, background: "linear-gradient(to right, #22C55E 0%, #84CC16 20%, #F59E0B 40%, #FF6B35 60%, #EF4444 80%, #DC2626 100%)", position: "relative", overflow: "visible" }}>
-          <div style={{ position: "absolute", top: 0, right: 0, height: "100%", width: `${100 - score}%`, background: "rgba(12,14,22,0.75)", borderRadius: "0 3px 3px 0" }} />
-          <div style={{ position: "absolute", top: -3, left: `${score}%`, transform: "translateX(-50%)", width: 12, height: 12, borderRadius: "50%", background: info.color, border: "2px solid #0C0E16" }} />
+        <div style={{ height: 5, borderRadius: 3, background: "linear-gradient(to right, #16A34A, #D97706, #DC2626)", position: "relative", overflow: "visible", boxShadow: neuIn }}>
+          <div style={{ position: "absolute", top: -3, left: `${score}%`, transform: "translateX(-50%)", width: 11, height: 11, borderRadius: "50%", background: info.color, border: `2px solid ${X.bg}`, boxShadow: `0 1px 4px ${info.color}60` }} />
         </div>
       </div>
       <InfoBtn onClick={onInfo} />
@@ -319,7 +322,7 @@ function RiskBar({ score, onInfo }) {
 
 /* ═══ TABS ═══ */
 const TABS = [{ id: "home", label: "Özet", icon: "◉" }, { id: "report", label: "Analiz", icon: "▤" }, { id: "settings", label: "Ayar", icon: "⚙" }];
-function TabBar({ tab, setTab }) { return (<div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: X.card, borderTop: `1px solid ${X.border}`, display: "flex", justifyContent: "space-around", padding: "6px 0 env(safe-area-inset-bottom, 8px)", zIndex: 100 }}>{TABS.map(t => (<button key={t.id} onClick={() => setTab(t.id)} style={{ background: "none", border: "none", display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "6px 20px", cursor: "pointer", color: tab === t.id ? X.g : X.td, fontFamily: ff }}><span style={{ fontSize: 20, lineHeight: 1 }}>{t.icon}</span><span style={{ fontSize: 10, fontWeight: 600 }}>{t.label}</span></button>))}</div>); }
+function TabBar({ tab, setTab }) { return (<div style={{ position: "fixed", bottom: 0, left: 0, right: 0, ...glassSolid, borderRadius: "16px 16px 0 0", display: "flex", justifyContent: "space-around", padding: "6px 0 env(safe-area-inset-bottom, 8px)", zIndex: 100, boxShadow: "0 -4px 16px rgba(0,0,0,0.06)" }}>{TABS.map(t => (<button key={t.id} onClick={() => setTab(t.id)} style={{ background: "none", border: "none", display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "6px 20px", cursor: "pointer", color: tab === t.id ? X.g : X.td, fontFamily: ff }}><span style={{ fontSize: 20, lineHeight: 1 }}>{t.icon}</span><span style={{ fontSize: 10, fontWeight: 600 }}>{t.label}</span></button>))}</div>); }
 
 /* ═══ MODALS ═══ */
 function CCSingleModal({ cards, variableExpenses, onClose, onSave }) {
@@ -441,13 +444,13 @@ function EmergencyFundSettings({ data, setData, onBack }) {
       <p style={{ color: X.td, fontSize: 12, marginBottom: 16 }}>Acil durum fonu, beklenmedik durumlarda (iş kaybı, sağlık harcaması, büyük tamirat vs.) kullanabileceğiniz güvenlik havuzudur. Hedef belirlediğinizde birikim havuzunuz bu hedefe göre ölçülür.</p>
 
       {target > 0 && (
-        <Card s={{ marginBottom: 12, background: "#0D2818", border: "1px solid #1A5C2E" }}>
+        <Card s={{ marginBottom: 12, background: "rgba(22,163,74,0.08)", border: "1px solid rgba(22,163,74,0.15)" }}>
           <div style={{ color: X.g, fontSize: 13, fontWeight: 700, marginBottom: 8 }}>HEDEFE İLERLEMEN</div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
             <span style={{ color: X.t, fontSize: 22, fontWeight: 800, fontFamily: fm }}>{C(currentTotal)}</span>
             <span style={{ color: X.tm, fontSize: 13, fontFamily: fm }}>/ {C(target)}</span>
           </div>
-          <div style={{ height: 8, borderRadius: 4, background: "rgba(255,255,255,0.08)", overflow: "hidden", marginBottom: 6 }}>
+          <div style={{ height: 8, borderRadius: 4, background: "rgba(0,0,0,0.06)", overflow: "hidden", marginBottom: 6 }}>
             <div style={{ height: "100%", borderRadius: 4, background: X.g, width: `${progress}%`, transition: "width 0.5s" }} />
           </div>
           <div style={{ color: X.g, fontSize: 12, fontWeight: 700, textAlign: "right" }}>%{progress.toFixed(1)}</div>
@@ -591,7 +594,7 @@ function BackupSettings({ data, setData, onBack }) {
           <input type="file" accept=".json,application/json" onChange={importFile} style={{ display: "none" }} />
         </label>
         <div style={{ color: X.td, fontSize: 11, marginBottom: 8, textAlign: "center" }}>— veya —</div>
-        <textarea value={importData} onChange={e => setImportData(e.target.value)} placeholder="JSON içeriğini buraya yapıştırın..." style={{ width: "100%", background: "#0C0E16", border: `1px solid ${X.border}`, borderRadius: 10, padding: "12px 14px", color: X.t, fontSize: 12, fontFamily: fm, outline: "none", boxSizing: "border-box", minHeight: 100, resize: "vertical", marginBottom: 8 }} />
+        <textarea value={importData} onChange={e => setImportData(e.target.value)} placeholder="JSON içeriğini buraya yapıştırın..." style={{ width: "100%", background: "rgba(255,255,255,0.5)", border: `1px solid ${X.border}`, borderRadius: 10, padding: "12px 14px", color: X.t, fontSize: 12, fontFamily: fm, outline: "none", boxSizing: "border-box", minHeight: 100, resize: "vertical", marginBottom: 8 }} />
         <Btn onClick={pasteImport} v="outline" c={X.p} disabled={!importData.trim()}>📋 Panodan İçe Aktar</Btn>
       </Card>
 
@@ -699,8 +702,8 @@ function WeeklyBackupRitual({ data, setData }) {
     : "Henüz hiç yedek alınmadı";
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", backdropFilter: "blur(12px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9998, padding: 16 }}>
-      <div style={{ background: X.card, borderRadius: 20, width: "100%", maxWidth: 440, maxHeight: "90vh", overflow: "auto", padding: 24, border: `2px solid ${X.w}` }}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.3)", backdropFilter: "blur(12px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9998, padding: 16 }}>
+      <div style={{ ...glassSolid, borderRadius: 20, width: "100%", maxWidth: 440, maxHeight: "90vh", overflow: "auto", padding: 24, border: `2px solid ${X.w}`, boxShadow: "0 8px 32px rgba(0,0,0,0.12)" }}>
         <div style={{ textAlign: "center", marginBottom: 20 }}>
           <div style={{ fontSize: 48, marginBottom: 8 }}>💾</div>
           <div style={{ color: X.t, fontSize: 20, fontWeight: 800, fontFamily: ff }}>Haftalık Yedek Zamanı</div>
@@ -713,7 +716,7 @@ function WeeklyBackupRitual({ data, setData }) {
           </Card>
         )}
 
-        <Card s={{ marginBottom: 12, background: X.bg }}>
+        <Card s={{ marginBottom: 12, background: "rgba(255,255,255,0.3)" }}>
           <div style={{ color: X.tm, fontSize: 11, fontWeight: 700, marginBottom: 4 }}>DURUM</div>
           <div style={{ color: X.t, fontSize: 13 }}>{lastBackupText}</div>
           <div style={{ color: X.td, fontSize: 11, marginTop: 2 }}>Bu haftanın başlangıcı: {weekStart}</div>
@@ -804,7 +807,7 @@ function CCInstallModal({ data, mk, cards, variableExpenses, onClose, onSave, st
       )}
       {sim && (
         <>
-          <Card s={{ marginBottom: 10, background: X.bg, border: `1px solid ${X.border}` }}>
+          <Card s={{ marginBottom: 10, background: "rgba(255,255,255,0.4)", border: `1px solid ${X.border}` }}>
             <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 4, fontSize: 11, marginBottom: 4 }}>
               <span style={{ color: X.td }}>Ay</span><span style={{ color: X.td, textAlign: "right" }}>Şimdi</span><span style={{ color: X.p, textAlign: "right" }}>Taksitle</span>
             </div>
@@ -824,67 +827,6 @@ function CCInstallModal({ data, mk, cards, variableExpenses, onClose, onSave, st
           </div>
         </>
       )}
-    </Modal>
-  );
-}
-
-function CCTransferModal({ data, mk, onClose }) {
-  const md = data.months[mk] || DM();
-  const cards = data.settings.cards || [];
-
-  // Calculate per-card breakdown
-  const breakdown = {};
-  cards.forEach(c => { breakdown[c.id] = { name: c.name, fixed: 0, variable: 0, single: 0, installment: 0, total: 0 }; });
-
-  // Fixed expenses paid by CC
-  data.settings.fixedExpenses.filter(e => e.paymentMethod === "cc").forEach(e => {
-    const cid = e.cardId || cards[0]?.id;
-    if (cid && breakdown[cid]) { breakdown[cid].fixed += e.amount; breakdown[cid].total += e.amount; }
-  });
-  // Variable CC entries
-  Object.values(md.variableEntries || {}).filter(e => e.method === "cc").forEach(e => {
-    const cid = e.cardId || cards[0]?.id;
-    if (cid && breakdown[cid]) { breakdown[cid].variable += e.amount; breakdown[cid].total += e.amount; }
-  });
-  // CC singles
-  (md.ccSingle || []).forEach(e => {
-    const cid = e.cardId || cards[0]?.id;
-    if (cid && breakdown[cid]) { breakdown[cid].single += e.amount; breakdown[cid].total += e.amount; }
-  });
-  // Installments active this month
-  data.installmentPlans.forEach(p => {
-    let cur = p.startMonth;
-    for (let i = 0; i < p.months; i++) {
-      if (cur === mk) {
-        const cid = p.cardId || cards[0]?.id;
-        if (cid && breakdown[cid]) { breakdown[cid].installment += p.monthlyPayment; breakdown[cid].total += p.monthlyPayment; }
-        break;
-      }
-      cur = nmk(cur);
-    }
-  });
-
-  const grandTotal = Object.values(breakdown).reduce((s, b) => s + b.total, 0);
-
-  return (
-    <Modal title="💳 Kredi Kartlarına Aktar" onClose={onClose}>
-      <div style={{ textAlign: "center", marginBottom: 16 }}>
-        <div style={{ color: X.tm, fontSize: 12 }}>Toplam Aktarılacak</div>
-        <div style={{ color: X.b, fontSize: 32, fontWeight: 800, fontFamily: fm }}>{C(grandTotal)}</div>
-      </div>
-      {Object.values(breakdown).filter(b => b.total > 0).map((b, i) => (
-        <Card key={i} s={{ marginBottom: 8, border: `1px solid ${X.b}40` }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-            <div style={{ color: X.t, fontWeight: 800, fontSize: 15 }}>{b.name}</div>
-            <div style={{ color: X.b, fontWeight: 800, fontSize: 18, fontFamily: fm }}>{C(b.total)}</div>
-          </div>
-          {b.fixed > 0 && <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: X.tm, padding: "3px 0" }}><span>Sabit zorunlu</span><span style={{ fontFamily: fm }}>{C(b.fixed)}</span></div>}
-          {b.variable > 0 && <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: X.tm, padding: "3px 0" }}><span>Değişken zorunlu</span><span style={{ fontFamily: fm }}>{C(b.variable)}</span></div>}
-          {b.single > 0 && <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: X.tm, padding: "3px 0" }}><span>Tek çekim</span><span style={{ fontFamily: fm }}>{C(b.single)}</span></div>}
-          {b.installment > 0 && <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: X.tm, padding: "3px 0" }}><span>Taksitler</span><span style={{ fontFamily: fm }}>{C(b.installment)}</span></div>}
-        </Card>
-      ))}
-      {Object.values(breakdown).filter(b => b.total > 0).length === 0 && <div style={{ color: X.td, textAlign: "center", padding: 20 }}>Bu ay aktarılacak tutar yok</div>}
     </Modal>
   );
 }
@@ -970,7 +912,7 @@ function SellAssetModal({ asset, data, onClose, onSave }) {
       <Inp label="Tarih" type="date" value={date} onChange={setDate} />
       <div style={{ marginBottom: 12 }}>
         <label style={{ fontSize: 12, color: X.tm, fontWeight: 600, marginBottom: 4, display: "block" }}>Ne için bozduruldu? <span style={{ color: X.r }}>*</span></label>
-        <textarea value={reason} onChange={e => setReason(e.target.value)} placeholder="Örn: Okul taksidi için, acil sağlık harcaması için..." style={{ width: "100%", background: "#0C0E16", border: `1px solid ${reason ? X.border : X.r}`, borderRadius: 10, padding: "12px 14px", color: X.t, fontSize: 14, fontFamily: ff, outline: "none", boxSizing: "border-box", minHeight: 60, resize: "vertical" }} />
+        <textarea value={reason} onChange={e => setReason(e.target.value)} placeholder="Örn: Okul taksidi için, acil sağlık harcaması için..." style={{ width: "100%", background: "rgba(255,255,255,0.5)", border: `1px solid ${reason ? X.border : X.r}`, borderRadius: 10, padding: "12px 14px", color: X.t, fontSize: 14, fontFamily: ff, outline: "none", boxSizing: "border-box", minHeight: 60, resize: "vertical" }} />
       </div>
       <Btn onClick={save} disabled={!canSave} c={X.r}>{info.icon} Sat / Boz</Btn>
     </Modal>
@@ -996,6 +938,36 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
   const handleCardLoad = amt => { setMonthField(mk, "cardLoaded", (md.cardLoaded || 0) + amt); flash("✓"); };
   const handleDebtPay = debtId => { setMonthField(mk, "debtPayments", { ...md.debtPayments, [debtId]: { paid: true, date: td() } }); setData(d => ({ ...d, debts: d.debts.map(db => db.id === debtId ? { ...db, remainingMonths: Math.max(0, db.remainingMonths - 1) } : db) })); flash("✓"); };
   const handleInstSave = plan => { setData(d => ({ ...d, installmentPlans: [...d.installmentPlans, plan] })); flash("✓ Taksit kaydedildi"); };
+  const handleCCTransfer = itemKey => { setMonthField(mk, "ccTransferred", { ...(md.ccTransferred || {}), [itemKey]: { transferred: true, date: td() } }); };
+
+  // CC Hesabına Aktarılacak Kalemlerin Listesi
+  const ccTransferItems = useMemo(() => {
+    const items = [];
+    // 1. Sabit zorunlu giderler (CC ile ödenenler)
+    data.settings.fixedExpenses.filter(e => e.paymentMethod === "cc").forEach(e => {
+      items.push({ key: `fixed-${e.id}`, label: e.name, sub: "Sabit zorunlu", amount: e.amount });
+    });
+    // 2. CC tek çekim harcamaları
+    (md.ccSingle || []).forEach(e => {
+      const cardName = (data.settings.cards || []).find(c2 => c2.id === e.cardId)?.name;
+      items.push({ key: `single-${e.id}`, label: e.note || e.merchantName || "Tek çekim", sub: `${e.date || ""}${cardName ? " • " + cardName : ""}`, amount: e.amount });
+    });
+    // 3. Bu ay aktif taksitler
+    data.installmentPlans.forEach(p => {
+      let cur = p.startMonth;
+      for (let i = 0; i < p.months; i++) {
+        if (cur === mk) {
+          const cardName = (data.settings.cards || []).find(c2 => c2.id === p.cardId)?.name;
+          items.push({ key: `inst-${p.id}`, label: p.note || "Taksit", sub: `${p.monthlyPayment > 0 ? `Taksit ${i + 1}/${p.months}` : ""}${cardName ? " • " + cardName : ""}`, amount: p.monthlyPayment });
+          break;
+        }
+        cur = nmk(cur);
+      }
+    });
+    return items;
+  }, [data, md, mk]);
+  const ccTransferTotal = ccTransferItems.reduce((s, i) => s + i.amount, 0);
+  const ccTransferredCount = ccTransferItems.filter(i => md.ccTransferred?.[i.key]?.transferred).length;
 
   // Savings progress
   const savingsProgress = c.savingsTarget > 0 ? Math.min((c.remaining / c.savingsTarget) * 100, 100) : 0;
@@ -1014,26 +986,26 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
       {warnings.map((w, i) => (<Card key={i} s={{ marginBottom: 6, border: `1px solid ${w.color}`, background: w.color === X.r ? X.rd : w.color === X.o ? X.od : X.wd, padding: "10px 14px" }}><div style={{ color: w.color, fontSize: 13, fontWeight: 600, lineHeight: 1.4 }}>{w.icon} {w.msg}</div></Card>))}
 
       {/* QUICK ACTIONS */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, margin: "12px 0" }}>
-        <div onClick={() => setModal("ccSingle")} style={{ background: X.bd, border: `1px solid ${X.b}`, borderRadius: 12, padding: "14px 12px", cursor: "pointer", textAlign: "center", position: "relative" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, margin: "12px 0" }}>
+        <div onClick={() => setModal("ccSingle")} style={{ ...glass, borderRadius: 16, padding: "14px 12px", cursor: "pointer", textAlign: "center", position: "relative" }}>
           <InfoBtn onClick={() => setInfo("ccSingle")} />
           <div style={{ fontSize: 24, marginBottom: 4 }}>💳</div>
           <div style={{ color: X.b, fontSize: 12, fontWeight: 700 }}>Kredi Kartı Tek Çekim</div>
           <div style={{ color: X.t, fontSize: 16, fontWeight: 800, fontFamily: fm, marginTop: 2 }}>{C(c.ccSingleTotal)}</div>
         </div>
-        <div onClick={() => setModal("ccInstall")} style={{ background: X.pd, border: `1px solid ${X.p}`, borderRadius: 12, padding: "14px 12px", cursor: "pointer", textAlign: "center", position: "relative" }}>
+        <div onClick={() => setModal("ccInstall")} style={{ ...glass, borderRadius: 16, padding: "14px 12px", cursor: "pointer", textAlign: "center", position: "relative" }}>
           <InfoBtn onClick={() => setInfo("ccInstall")} />
           <div style={{ fontSize: 24, marginBottom: 4 }}>📅</div>
           <div style={{ color: X.p, fontSize: 12, fontWeight: 700 }}>Kredi Kartı Taksitli</div>
           <div style={{ color: X.t, fontSize: 16, fontWeight: 800, fontFamily: fm, marginTop: 2 }}>{C(c.installmentTotal)}</div>
         </div>
-        <div onClick={() => setModal("cardLoad")} style={{ background: X.gd, border: `1px solid ${X.g}`, borderRadius: 12, padding: "14px 12px", cursor: "pointer", textAlign: "center", position: "relative" }}>
+        <div onClick={() => setModal("cardLoad")} style={{ ...glass, borderRadius: 16, padding: "14px 12px", cursor: "pointer", textAlign: "center", position: "relative" }}>
           <InfoBtn onClick={() => setInfo("cardLoad")} />
           <div style={{ fontSize: 24, marginBottom: 4 }}>🛒</div>
           <div style={{ color: X.g, fontSize: 12, fontWeight: 700 }}>Genel Harcama Kartı</div>
           <div style={{ color: X.t, fontSize: 14, fontWeight: 800, fontFamily: fm, marginTop: 2 }}>{C(md.cardLoaded || 0)} <span style={{ color: X.td, fontSize: 10 }}>/ {C(c.cardLoadMaxTotal)}</span></div>
         </div>
-        <div onClick={() => setModal("debtPay")} style={{ background: X.wd, border: `1px solid ${X.w}`, borderRadius: 12, padding: "14px 12px", cursor: "pointer", textAlign: "center", position: "relative" }}>
+        <div onClick={() => setModal("debtPay")} style={{ ...glass, borderRadius: 16, padding: "14px 12px", cursor: "pointer", textAlign: "center", position: "relative" }}>
           <InfoBtn onClick={() => setInfo("debt")} />
           <div style={{ fontSize: 24, marginBottom: 4 }}>📌</div>
           <div style={{ color: X.w, fontSize: 12, fontWeight: 700 }}>Borç Ödemeleri</div>
@@ -1041,7 +1013,7 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
         </div>
 
         {/* Simulation full width */}
-        <div onClick={() => setModal("simulate")} style={{ gridColumn: "1 / -1", background: X.pd, border: `1px solid ${X.p}`, borderRadius: 12, padding: "14px 16px", cursor: "pointer", position: "relative", minHeight: 92, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+        <div onClick={() => setModal("simulate")} style={{ gridColumn: "1 / -1", ...glass, borderRadius: 16, padding: "14px 16px", cursor: "pointer", position: "relative", minHeight: 92, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
           <InfoBtn onClick={() => setInfo("simulate")} />
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
             <span style={{ fontSize: 24 }}>🔮</span>
@@ -1057,7 +1029,7 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
         </div>
 
         {/* Savings full width */}
-        <div style={{ gridColumn: "1 / -1", background: "#0D2818", border: "1px solid #1A5C2E", borderRadius: 12, padding: "14px 16px", position: "relative", minHeight: 92, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+        <div style={{ gridColumn: "1 / -1", background: "rgba(22,163,74,0.08)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(22,163,74,0.15)", borderRadius: 16, padding: "14px 16px", position: "relative", minHeight: 92, display: "flex", flexDirection: "column", justifyContent: "space-between", boxShadow: neu }}>
           <InfoBtn onClick={() => setInfo("savings")} />
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
             <span style={{ fontSize: 24 }}>💰</span>
@@ -1067,21 +1039,23 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
             <span style={{ color: c.remaining >= 0 ? X.g : X.r, fontSize: 22, fontWeight: 800, fontFamily: fm }}>{C(Math.max(0, c.remaining))}</span>
             <span style={{ color: X.tm, fontSize: 13, fontFamily: fm }}>/ {C(c.savingsTarget)} hedef</span>
           </div>
-          <div style={{ height: 6, borderRadius: 3, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
+          <div style={{ height: 6, borderRadius: 3, boxShadow: neuIn }}>
             <div style={{ height: "100%", borderRadius: 3, background: X.g, width: `${savingsProgress}%`, transition: "width 0.5s" }} />
           </div>
         </div>
       </div>
 
       {/* CC TRANSFER */}
-      {c.ccTransferNeeded > 0 && (
-        <Card onClick={() => setModal("ccTransfer")} s={{ marginBottom: 8, border: `1px solid ${X.b}`, background: X.bd, position: "relative", cursor: "pointer" }}>
-          <InfoBtn onClick={() => setInfo("ccTransfer")} />
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div style={{ color: X.b, fontSize: 13, fontWeight: 700 }}>💳 CC Hesabına Aktar <span style={{ color: X.td, fontSize: 11, fontWeight: 500 }}>(detay için tıkla)</span></div>
-            <span style={{ color: X.b, fontSize: 20, fontWeight: 800, fontFamily: fm, marginRight: 18 }}>{C(c.ccTransferNeeded)}</span>
+      {ccTransferTotal > 0 && (
+        <CatButton icon="💳" label="CC Hesabına Aktar" total={ccTransferTotal} color={X.b} dimColor={X.bd} expanded={expanded === "ccTransfer"} onToggle={() => toggle("ccTransfer")} onInfo={() => setInfo("ccTransfer")}>
+          <div style={{ color: X.td, fontSize: 11, marginBottom: 8 }}>
+            {ccTransferredCount}/{ccTransferItems.length} kalem aktarıldı
           </div>
-        </Card>
+          {ccTransferItems.map(item => {
+            const transferred = md.ccTransferred?.[item.key]?.transferred;
+            return <ItemRow key={item.key} label={item.label} sub={item.sub} value={item.amount} color={transferred ? X.g : X.t} onAction={!transferred ? () => handleCCTransfer(item.key) : null} actionLabel="Aktardım" />;
+          })}
+        </CatButton>
       )}
 
       {/* CATEGORIES */}
@@ -1093,7 +1067,6 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
       {modal === "ccSingle" && <CCSingleModal cards={data.settings.cards || []} variableExpenses={data.settings.variableExpenses || []} onClose={() => setModal(null)} onSave={handleCCSingle} />}
       {modal === "ccInstall" && <CCInstallModal data={data} mk={mk} cards={data.settings.cards || []} variableExpenses={data.settings.variableExpenses || []} onClose={() => setModal(null)} onSave={handleInstSave} />}
       {modal === "simulate" && <CCInstallModal data={data} mk={mk} cards={data.settings.cards || []} variableExpenses={data.settings.variableExpenses || []} onClose={() => setModal(null)} onSave={handleInstSave} startInSim={true} />}
-      {modal === "ccTransfer" && <CCTransferModal data={data} mk={mk} onClose={() => setModal(null)} />}
       {modal === "cardLoad" && <CardLoadModal currentLoaded={md.cardLoaded || 0} maxPerTx={c.cardLoadMaxPerTx} maxTotal={c.cardLoadMaxTotal} onClose={() => setModal(null)} onSave={handleCardLoad} />}
       {modal === "debtPay" && <DebtPayModal debts={data.debts} debtPayments={md.debtPayments} data={data} mk={mk} onClose={() => setModal(null)} onPay={handleDebtPay} />}
       {modal === "budget" && <BudgetModal mk={mk} cur={md.budget || data.settings.monthlyBudget} def={data.settings.monthlyBudget} onSave={v => setMonthField(mk, "budget", v)} onClose={() => setModal(null)} />}
@@ -1421,7 +1394,7 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
         const assets = ["TRY", "XAU", "USD", "EUR"];
         return (
           <>
-            <Card s={{ marginBottom: 12, background: "#0D2818", border: "1px solid #1A5C2E" }}>
+            <Card s={{ marginBottom: 12, background: "rgba(22,163,74,0.08)", border: "1px solid rgba(22,163,74,0.15)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div><div style={{ color: X.g, fontSize: 14, fontWeight: 800 }}>💰 Birikim Havuzu</div><div style={{ color: X.tm, fontSize: 11, marginTop: 2 }}>Anlık toplam TL değeri</div></div>
                 <span style={{ color: X.g, fontSize: 24, fontWeight: 800, fontFamily: fm }}>{C(totalSavings)}</span>
@@ -1637,7 +1610,7 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
                             <span style={{ color: X.t, fontSize: 13, fontWeight: 700, fontFamily: fm, flexShrink: 0 }}>{C(tx.amount)}</span>
                           </div>
                           {tx.date && <div style={{ color: X.td, fontSize: 10, marginBottom: 4 }}>{tx.date}</div>}
-                          <select value={tx.categoryId || ""} onChange={e => updateCsvTransaction(cardId, tx.id, e.target.value || null)} style={{ width: "100%", background: tx.categoryId ? X.bd : "#0C0E16", border: `1px solid ${tx.categoryId ? X.b : X.border}`, borderRadius: 6, padding: "6px 10px", color: tx.categoryId ? X.b : X.tm, fontSize: 11, fontFamily: ff, outline: "none", boxSizing: "border-box" }}>
+                          <select value={tx.categoryId || ""} onChange={e => updateCsvTransaction(cardId, tx.id, e.target.value || null)} style={{ width: "100%", background: tx.categoryId ? X.bd : "rgba(255,255,255,0.5)", border: `1px solid ${tx.categoryId ? X.b : X.border}`, borderRadius: 6, padding: "6px 10px", color: tx.categoryId ? X.b : X.tm, fontSize: 11, fontFamily: ff, outline: "none", boxSizing: "border-box" }}>
                             <option value="">— Kategorisiz —</option>
                             {ves.map(ve => <option key={ve.id} value={ve.id}>{(ve.icon || "📋")} {ve.name}</option>)}
                           </select>
@@ -2037,7 +2010,7 @@ function VariableSettings({ data, setData, onBack }) {
           <Inp label="Beklenen Aylık Tutar" type="number" value={ex} onChange={se} suffix="₺" placeholder="Opsiyonel" />
           <div style={{ marginBottom: 12 }}>
             <label style={{ fontSize: 12, color: X.tm, fontWeight: 600, marginBottom: 4, display: "block" }}>Anahtar Kelimeler (virgülle ayırın)</label>
-            <textarea value={kw} onChange={e => setKw(e.target.value)} placeholder="shell, opet, bp, dizel, benzin, yakıt, akaryakıt" style={{ width: "100%", background: "#0C0E16", border: `1px solid ${X.border}`, borderRadius: 10, padding: "12px 14px", color: X.t, fontSize: 14, fontFamily: ff, outline: "none", boxSizing: "border-box", minHeight: 60, resize: "vertical" }} />
+            <textarea value={kw} onChange={e => setKw(e.target.value)} placeholder="shell, opet, bp, dizel, benzin, yakıt, akaryakıt" style={{ width: "100%", background: "rgba(255,255,255,0.5)", border: `1px solid ${X.border}`, borderRadius: 10, padding: "12px 14px", color: X.t, fontSize: 14, fontFamily: ff, outline: "none", boxSizing: "border-box", minHeight: 60, resize: "vertical" }} />
             <div style={{ color: X.td, fontSize: 10, marginTop: 4 }}>Bu kelimelerden biri harcamanın açıklaması veya işyeri adında geçerse bu kategoriye otomatik atanır.</div>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
@@ -2347,15 +2320,15 @@ function MonthCloseRitual({ data, setData, prevMk, onClose }) {
   };
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", backdropFilter: "blur(12px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999, padding: 16 }}>
-      <div style={{ background: X.card, borderRadius: 20, width: "100%", maxWidth: 440, maxHeight: "90vh", overflow: "auto", padding: 24, border: `1px solid ${X.border}` }}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.3)", backdropFilter: "blur(12px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999, padding: 16 }}>
+      <div style={{ ...glassSolid, borderRadius: 20, width: "100%", maxWidth: 440, maxHeight: "90vh", overflow: "auto", padding: 24, boxShadow: "0 8px 32px rgba(0,0,0,0.12)" }}>
         <div style={{ textAlign: "center", marginBottom: 20 }}>
           <div style={{ fontSize: 40, marginBottom: 8 }}>📅</div>
           <div style={{ color: X.t, fontSize: 18, fontWeight: 800, fontFamily: ff }}>Ay Kapatma</div>
           <div style={{ color: X.tm, fontSize: 12, marginTop: 4 }}>{ml(prevMk)} ayını kapatıp {ml(newMk)} ayını başlatın</div>
         </div>
 
-        <Card s={{ marginBottom: 12, background: X.bg, border: `1px solid ${X.border}` }}>
+        <Card s={{ marginBottom: 12, background: "rgba(255,255,255,0.4)", border: `1px solid ${X.border}` }}>
           <div style={{ color: X.tm, fontSize: 12, fontWeight: 700, marginBottom: 10 }}>ÖNCEKİ AY ÖZETİ</div>
           <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: 13 }}>
             <span style={{ color: X.t }}>Bütçe</span>
@@ -2376,7 +2349,7 @@ function MonthCloseRitual({ data, setData, prevMk, onClose }) {
         </Card>
 
         {hasSurplus ? (
-          <Card s={{ marginBottom: 12, background: "#0D2818", border: "1px solid #1A5C2E" }}>
+          <Card s={{ marginBottom: 12, background: "rgba(22,163,74,0.08)", border: "1px solid rgba(22,163,74,0.15)" }}>
             <div style={{ color: X.g, fontSize: 13, fontWeight: 700, marginBottom: 4 }}>💰 TL Birikiminize Eklendi</div>
             <div style={{ color: X.t, fontSize: 20, fontWeight: 800, fontFamily: fm }}>+{C(prev.remaining)}</div>
             <div style={{ color: X.tm, fontSize: 11, marginTop: 4 }}>{motivation}</div>
@@ -2424,14 +2397,18 @@ export default function App() {
     return null;
   }, [loaded, data.lastClosedMonth, data.months, mk]);
 
-  if (!loaded) return <div style={{ background: X.bg, height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: X.g, fontFamily: ff }}>Yükleniyor...</div>;
+  if (!loaded) return <div style={{ background: "rgba(255,255,255,0.4)", height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: X.g, fontFamily: ff }}>Yükleniyor...</div>;
   const c = calcMonth(data, mk, null);
 
   return (
-    <div style={{ background: X.bg, minHeight: "100vh", color: X.t, fontFamily: ff, maxWidth: 480, margin: "0 auto", position: "relative" }}>
+    <div style={{ background: "linear-gradient(160deg, #E4E9F2 0%, #D8DFE8 40%, #E8ECF4 100%)", minHeight: "100vh", color: X.t, fontFamily: ff, maxWidth: 480, margin: "0 auto", position: "relative" }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700;800&display=swap" rel="stylesheet" />
-      <div style={{ background: X.card, borderBottom: `1px solid ${X.border}`, padding: "calc(12px + env(safe-area-inset-top)) 16px 12px", display: "flex", justifyContent: "space-between", alignItems: "center", position: "sticky", top: 0, zIndex: 50 }}>
-        <div><div style={{ fontSize: 15, fontWeight: 800, letterSpacing: "-0.3px" }}>EV BÜTÇESİ</div><div style={{ fontSize: 11, color: X.td }}>{ml(mk)}</div></div>
+      {/* Renk lekeleri */}
+      <div style={{ position: "fixed", top: 60, left: -50, width: 200, height: 200, borderRadius: "50%", background: "rgba(22,163,74,0.07)", filter: "blur(60px)", pointerEvents: "none" }} />
+      <div style={{ position: "fixed", top: 280, right: -40, width: 170, height: 170, borderRadius: "50%", background: "rgba(37,99,235,0.06)", filter: "blur(50px)", pointerEvents: "none" }} />
+      <div style={{ position: "fixed", bottom: 250, left: 10, width: 140, height: 140, borderRadius: "50%", background: "rgba(124,58,237,0.05)", filter: "blur(45px)", pointerEvents: "none" }} />
+      <div style={{ ...glassSolid, borderBottom: "none", borderRadius: "0 0 18px 18px", padding: "calc(12px + env(safe-area-inset-top)) 20px 12px", display: "flex", justifyContent: "space-between", alignItems: "center", position: "sticky", top: 0, zIndex: 50, boxShadow: "0 4px 16px rgba(0,0,0,0.06)" }}>
+        <div><div style={{ fontSize: 15, fontWeight: 800, letterSpacing: "-0.3px", color: X.t }}>EV BÜTÇESİ</div><div style={{ fontSize: 11, color: X.td }}>{ml(mk)}</div></div>
         <div style={{ textAlign: "right" }}>
           <div style={{ fontSize: 10, color: X.tm, letterSpacing: 0.5 }}>BÜTÇE / KALAN</div>
           <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
