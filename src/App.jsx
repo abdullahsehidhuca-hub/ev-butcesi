@@ -475,8 +475,8 @@ function RiskBar({ score, onInfo }) {
 }
 
 /* ═══ TABS ═══ */
-const TABS = [{ id: "home", label: "Özet", icon: "◉" }, { id: "report", label: "Analiz", icon: "▤" }, { id: "settings", label: "Ayarlar", icon: "⚙" }];
-function TabBar({ tab, setTab }) { return (<div style={{ position: "fixed", bottom: 0, left: 0, right: 0, ...glassSolid, borderRadius: "16px 16px 0 0", display: "flex", justifyContent: "space-around", padding: "6px 0 env(safe-area-inset-bottom, 8px)", zIndex: 100, boxShadow: "0 -4px 16px rgba(0,0,0,0.06)" }}>{TABS.map(t => (<button key={t.id} onClick={() => setTab(t.id)} style={{ background: "none", border: "none", display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "6px 20px", cursor: "pointer", color: tab === t.id ? X.g : X.td, fontFamily: ff }}><span style={{ fontSize: 20, lineHeight: 1 }}>{t.icon}</span><span style={{ fontSize: 10, fontWeight: 600 }}>{t.label}</span></button>))}</div>); }
+const TABS = [{ id: "home", label: "Özet", icon: "◉" }, { id: "report", label: "Analiz", icon: "▤" }, { id: "plan", label: "Planlama", icon: "◈" }, { id: "settings", label: "Ayarlar", icon: "⚙" }];
+function TabBar({ tab, setTab }) { return (<div style={{ position: "fixed", bottom: 0, left: 0, right: 0, ...glassSolid, borderRadius: "16px 16px 0 0", display: "flex", justifyContent: "space-around", padding: "6px 0 env(safe-area-inset-bottom, 8px)", zIndex: 100, boxShadow: "0 -4px 16px rgba(0,0,0,0.06)" }}>{TABS.map(t => (<button key={t.id} onClick={() => setTab(t.id)} style={{ background: "none", border: "none", display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "6px 12px", cursor: "pointer", color: tab === t.id ? X.g : X.td, fontFamily: ff }}><span style={{ fontSize: 18, lineHeight: 1 }}>{t.icon}</span><span style={{ fontSize: 9, fontWeight: 600 }}>{t.label}</span></button>))}</div>); }
 
 /* ═══ MODALS ═══ */
 function CCSingleModal({ cards, variableExpenses, onClose, onSave }) {
@@ -1718,10 +1718,7 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
         {[
           { id: "risk", l: "Risk", i: "⚠️" },
           { id: "variable", l: "Harcama Kategorileri", i: "🔄" },
-          { id: "debts", l: "Borçlar", i: "📌" },
-          { id: "savings", l: "Birikim", i: "💰" },
-          { id: "csv", l: "Banka Ekstresi Analizi", i: "🧾" },
-          { id: "forecast", l: "Projeksiyon", i: "🔮" }
+          { id: "csv", l: "Banka Ekstresi Analizi", i: "🧾" }
         ].map(t => (
           <button key={t.id} onClick={() => setView(t.id)} style={{ background: view === t.id ? X.gd : X.bg, border: `1px solid ${view === t.id ? X.g : X.border}`, borderRadius: 10, padding: "12px 6px", color: view === t.id ? X.g : X.tm, fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: ff, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, lineHeight: 1.2 }}>
             <span style={{ fontSize: 20 }}>{t.i}</span>
@@ -2230,6 +2227,375 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
 }
 
 /* ═══ SETTINGS ═══ */
+/* ═══ PLANLAMA ═══ */
+function PlanningScreen({ data, setData, mk }) {
+  const [view, setView] = useState("map");
+  const [expandedAsset, setExpandedAsset] = useState(null);
+  const [savingsModal, setSavingsModal] = useState(null);
+  const [incSim, setIncSim] = useState({});
+  const c = calcMonth(data, mk, null);
+  const assets = ["TRY", "XAU", "USD", "EUR"];
+  const totalSavings = getTotalSavingsTL(data);
+
+  // 12 Ay Haritası verileri
+  const yearMap = useMemo(() => {
+    const months = [];
+    let m = mk;
+    for (let i = 0; i < 12; i++) {
+      const mc = calcMonth(data, m, null);
+      const events = [];
+      // Taksit başlama/bitiş
+      data.installmentPlans.forEach(p => {
+        if (p.startMonth === m) events.push({ icon: "📅", text: `Taksit başladı: ${p.note || "Taksitli işlem"}`, color: X.p });
+        let cur = p.startMonth;
+        for (let j = 0; j < p.months; j++) cur = nmk(cur);
+        if (pmk(cur) === m || cur === m) events.push({ icon: "✅", text: `Taksit bitti: ${p.note || "Taksitli işlem"} (+${C(p.monthlyPayment)}/ay)`, color: X.g });
+      });
+      // Borç bitiş
+      data.debts.filter(d => d.remainingMonths > 0).forEach(d => {
+        let em = mk;
+        for (let j = 0; j < d.remainingMonths; j++) em = nmk(em);
+        if (pmk(em) === m) {
+          const sym = debtCurSymbol(d.currency);
+          const tlVal = debtTLValue(d, data, mk);
+          events.push({ icon: "🎯", text: `Borç bitti: ${d.name} (+${C(tlVal)}/ay)`, color: X.g });
+        }
+      });
+      // Artışlar
+      data.settings.fixedExpenses.forEach(exp => {
+        if (exp.increaseDate && exp.increaseDate.startsWith(m)) {
+          events.push({ icon: "📈", text: `Artış: ${exp.name} (şu an ${C(exp.amount)})`, color: X.o });
+        }
+      });
+      months.push({ mk: m, ...mc, events });
+      m = nmk(m);
+    }
+    return months;
+  }, [data, mk]);
+
+  // Artış simülasyonu
+  const expensesWithIncrease = data.settings.fixedExpenses.filter(e => e.increaseDate);
+  const incSimTotal = useMemo(() => {
+    return expensesWithIncrease.reduce((s, e) => {
+      const pct = parseFloat(incSim[e.id]) || 0;
+      return s + Math.round(e.amount * pct / 100);
+    }, 0);
+  }, [incSim, expensesWithIncrease]);
+
+  // Borç bitiş verileri
+  const debtEnds = data.debts.filter(d => d.remainingMonths > 0).map(d => {
+    let m2 = mk;
+    for (let i = 0; i < d.remainingMonths; i++) m2 = nmk(m2);
+    return { ...d, endMonth: m2, monthlyTL: debtTLValue(d, data, mk) };
+  });
+
+  const views = [
+    { id: "map", l: "12 Ay Haritası", i: "🗺️" },
+    { id: "increases", l: "Artış Simülasyonu", i: "📈" },
+    { id: "debts", l: "Borçlar", i: "📌" },
+    { id: "savings", l: "Birikim", i: "💰" },
+  ];
+
+  return (
+    <div style={{ padding: "20px 16px 100px" }}>
+      {/* SEKME SEÇİCİ */}
+      <div style={{ display: "grid", gridTemplateColumns: `repeat(${views.length}, 1fr)`, gap: 6, marginBottom: 12 }}>
+        {views.map(v => (
+          <button key={v.id} onClick={() => setView(v.id)} style={{ background: view === v.id ? X.gd : "transparent", border: `1px solid ${view === v.id ? X.g : X.border}`, borderRadius: 10, padding: "8px 4px", color: view === v.id ? X.g : X.tm, fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: ff, display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+            <span style={{ fontSize: 16 }}>{v.i}</span><span>{v.l}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* 12 AY HARİTASI */}
+      {view === "map" && (
+        <>
+          <Card s={{ marginBottom: 12 }}>
+            <div style={{ color: X.tm, fontSize: 13, fontWeight: 700, marginBottom: 12 }}>GELECEK 12 AY</div>
+            {yearMap.map((m2, i) => (
+              <div key={m2.mk} style={{ padding: "10px 0", borderBottom: i < 11 ? `1px solid rgba(0,0,0,0.06)` : "none" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ color: X.t, fontSize: 14, fontWeight: i === 0 ? 800 : 600 }}>{ml(m2.mk)}{i === 0 ? " (bu ay)" : ""}</div>
+                    <div style={{ color: X.td, fontSize: 10, marginTop: 2 }}>
+                      Harcanan: {C(m2.totalSpent)}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ color: m2.remaining >= CARD_LOAD_MIN ? X.g : m2.remaining >= 0 ? X.w : X.r, fontWeight: 800, fontFamily: fm, fontSize: 16 }}>{C(m2.remaining)}</div>
+                    <div style={{ color: X.td, fontSize: 9 }}>serbest</div>
+                  </div>
+                </div>
+                {m2.events.length > 0 && (
+                  <div style={{ marginTop: 6 }}>
+                    {m2.events.map((ev, j) => (
+                      <div key={j} style={{ color: ev.color, fontSize: 11, fontWeight: 600, padding: "2px 0" }}>{ev.icon} {ev.text}</div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </Card>
+
+          {/* Özet bilgiler */}
+          <Card s={{ marginBottom: 12, background: "rgba(22,163,74,0.08)", border: "1px solid rgba(22,163,74,0.15)" }}>
+            <div style={{ color: X.g, fontSize: 12, fontWeight: 700, marginBottom: 8 }}>📊 12 AY ÖZETİ</div>
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: 12 }}>
+              <span style={{ color: X.tm }}>En düşük serbest bütçe</span>
+              <span style={{ color: X.r, fontFamily: fm, fontWeight: 700 }}>{C(Math.min(...yearMap.map(m2 => m2.remaining)))} ({ml(yearMap.reduce((min, m2) => m2.remaining < min.remaining ? m2 : min, yearMap[0]).mk)})</span>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: 12 }}>
+              <span style={{ color: X.tm }}>En yüksek serbest bütçe</span>
+              <span style={{ color: X.g, fontFamily: fm, fontWeight: 700 }}>{C(Math.max(...yearMap.map(m2 => m2.remaining)))} ({ml(yearMap.reduce((max, m2) => m2.remaining > max.remaining ? m2 : max, yearMap[0]).mk)})</span>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: 12 }}>
+              <span style={{ color: X.tm }}>Açık olan ay sayısı</span>
+              <span style={{ color: yearMap.filter(m2 => m2.remaining < 0).length > 0 ? X.r : X.g, fontFamily: fm, fontWeight: 700 }}>{yearMap.filter(m2 => m2.remaining < 0).length} ay</span>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: 12 }}>
+              <span style={{ color: X.tm }}>₺{(CARD_LOAD_MIN/1000).toFixed(0)}k altı ay sayısı</span>
+              <span style={{ color: yearMap.filter(m2 => m2.remaining < CARD_LOAD_MIN).length > 0 ? X.w : X.g, fontFamily: fm, fontWeight: 700 }}>{yearMap.filter(m2 => m2.remaining < CARD_LOAD_MIN).length} ay</span>
+            </div>
+          </Card>
+        </>
+      )}
+
+      {/* ARTIŞ SİMÜLASYONU */}
+      {view === "increases" && (
+        <>
+          {expensesWithIncrease.length === 0 ? (
+            <Card s={{ textAlign: "center", padding: 24 }}>
+              <div style={{ color: X.tm, fontSize: 13 }}>Artış tarihi tanımlanmış sabit gider yok. Ayarlar → Sabit Giderler'den artış tarihi ekleyebilirsiniz.</div>
+            </Card>
+          ) : (
+            <>
+              <Card s={{ marginBottom: 12 }}>
+                <div style={{ color: X.tm, fontSize: 13, fontWeight: 700, marginBottom: 12 }}>TAHMİNİ ARTIŞ ORANLARI</div>
+                <div style={{ color: X.td, fontSize: 11, marginBottom: 12 }}>Her sabit gider için tahmini artış yüzdesini girin. Bütçeye toplam etkiyi göreceksiniz.</div>
+                {expensesWithIncrease.map(exp => {
+                  const pct = incSim[exp.id] || "";
+                  const impact = Math.round(exp.amount * (parseFloat(pct) || 0) / 100);
+                  return (
+                    <div key={exp.id} style={{ padding: "10px 0", borderBottom: `1px solid rgba(0,0,0,0.06)` }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                        <div>
+                          <div style={{ color: X.t, fontSize: 13, fontWeight: 700 }}>{exp.name}</div>
+                          <div style={{ color: X.td, fontSize: 11 }}>Şu an: {C(exp.amount)} · Artış: {ml(exp.increaseDate)}</div>
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ color: X.tm, fontSize: 12 }}>%</span>
+                        <input type="number" value={pct} onChange={e => setIncSim(s => ({ ...s, [exp.id]: e.target.value }))} placeholder="0" style={{ width: 60, background: "rgba(220,235,230,0.6)", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 8, padding: "6px 10px", color: X.t, fontSize: 14, fontFamily: fm, outline: "none", textAlign: "center" }} />
+                        {impact > 0 && (
+                          <div style={{ flex: 1, textAlign: "right" }}>
+                            <span style={{ color: X.t, fontSize: 13, fontFamily: fm, fontWeight: 700 }}>→ {C(exp.amount + impact)}</span>
+                            <span style={{ color: X.r, fontSize: 11, marginLeft: 4 }}>+{C(impact)}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </Card>
+
+              {incSimTotal > 0 && (
+                <Card s={{ marginBottom: 12, background: incSimTotal > c.remaining * 0.5 ? X.rd : X.wd, border: `1px solid ${incSimTotal > c.remaining * 0.5 ? X.r : X.w}` }}>
+                  <div style={{ color: incSimTotal > c.remaining * 0.5 ? X.r : X.w, fontSize: 13, fontWeight: 700, marginBottom: 8 }}>TOPLAM ETKİ</div>
+                  <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: 13 }}>
+                    <span style={{ color: X.tm }}>Aylık ek yük</span>
+                    <span style={{ color: X.r, fontFamily: fm, fontWeight: 800 }}>+{C(incSimTotal)}</span>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: 13 }}>
+                    <span style={{ color: X.tm }}>Şu anki serbest bütçe</span>
+                    <span style={{ color: X.g, fontFamily: fm, fontWeight: 700 }}>{C(c.remaining)}</span>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: 13, borderTop: `1px solid rgba(0,0,0,0.08)`, marginTop: 4, paddingTop: 8 }}>
+                    <span style={{ color: X.t, fontWeight: 700 }}>Artış sonrası serbest</span>
+                    <span style={{ color: c.remaining - incSimTotal >= CARD_LOAD_MIN ? X.g : c.remaining - incSimTotal >= 0 ? X.w : X.r, fontFamily: fm, fontWeight: 800 }}>{C(c.remaining - incSimTotal)}</span>
+                  </div>
+                  {c.remaining - incSimTotal < CARD_LOAD_MIN && (
+                    <div style={{ color: X.r, fontSize: 11, fontWeight: 600, marginTop: 8 }}>
+                      ⚠️ Artışlar sonrası serbest bütçe {C(CARD_LOAD_MIN)} alt limitinin altına düşüyor.
+                      {debtEnds.length > 0 && ` ${ml(debtEnds[0].endMonth)}'da borç bitiyor (+${C(debtEnds[0].monthlyTL)}), artışlara o zamana kadar dayanmanız gerekiyor.`}
+                    </div>
+                  )}
+                </Card>
+              )}
+            </>
+          )}
+        </>
+      )}
+
+      {/* BORÇLAR + BİTİŞ PLANLAYICISI */}
+      {view === "debts" && (() => {
+        const activeDebts = data.debts.filter(d => d.remainingMonths > 0);
+        return (
+          <>
+            {activeDebts.length === 0 ? (
+              <Card s={{ textAlign: "center", padding: 24 }}>
+                <div style={{ fontSize: 36, marginBottom: 8 }}>🎉</div>
+                <div style={{ color: X.g, fontSize: 14, fontWeight: 700 }}>Aktif borcunuz yok!</div>
+              </Card>
+            ) : (
+              <>
+                <Card s={{ marginBottom: 12 }}>
+                  <div style={{ color: X.tm, fontSize: 13, fontWeight: 700, marginBottom: 12 }}>AKTİF BORÇLAR</div>
+                  {activeDebts.map(d => {
+                    const sym = debtCurSymbol(d.currency);
+                    const tlVal = debtTLValue(d, data, mk);
+                    const totalM = d.totalMonths || d.remainingMonths;
+                    const paidCount = totalM - d.remainingMonths;
+                    const end = debtEnds.find(de => de.id === d.id);
+                    const progressPct = totalM > 0 ? (paidCount / totalM) * 100 : 0;
+                    return (
+                      <div key={d.id} style={{ padding: "12px 0", borderBottom: `1px solid rgba(0,0,0,0.06)` }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                          <div style={{ color: X.t, fontSize: 14, fontWeight: 700 }}>{d.name}</div>
+                          <div style={{ color: X.w, fontSize: 15, fontWeight: 800, fontFamily: fm }}>{C(tlVal)}<span style={{ fontSize: 10, color: X.td }}>/ay</span></div>
+                        </div>
+                        {d.currency !== "TRY" && <div style={{ color: X.td, fontSize: 11 }}>{d.monthlyPayment} {sym} × {d.remainingMonths} ay kaldı</div>}
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: X.tm, marginTop: 4, marginBottom: 4 }}>
+                          <span>{paidCount}/{totalM} ödendi</span>
+                          <span>Bitiş: {end ? ml(end.endMonth) : "?"}</span>
+                        </div>
+                        <div style={{ height: 5, borderRadius: 3, background: "rgba(0,0,0,0.06)" }}>
+                          <div style={{ height: "100%", borderRadius: 3, background: X.g, width: `${progressPct}%` }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </Card>
+
+                {/* BORÇ BİTİŞ PLANLAYICISI */}
+                {debtEnds.length > 0 && (
+                  <Card s={{ border: `1px solid ${X.g}`, background: "rgba(22,163,74,0.06)" }}>
+                    <div style={{ color: X.g, fontSize: 13, fontWeight: 700, marginBottom: 10 }}>🎯 BORÇ BİTİŞ PLANLAYICISI</div>
+                    {debtEnds.sort((a, b) => a.endMonth.localeCompare(b.endMonth)).map(d => {
+                      const sym = debtCurSymbol(d.currency);
+                      const amtText = d.currency === "TRY" ? C(d.monthlyTL) : `${C(d.monthlyTL)} (${d.monthlyPayment} ${sym})`;
+                      // Kalan ay hesapla
+                      let monthsAway = 0; let m2 = mk;
+                      while (m2 < d.endMonth && monthsAway < 60) { m2 = nmk(m2); monthsAway++; }
+                      return (
+                        <div key={d.id} style={{ padding: "10px 0", borderBottom: `1px solid rgba(0,0,0,0.06)` }}>
+                          <div style={{ color: X.t, fontSize: 13, fontWeight: 700, marginBottom: 4 }}>{d.name}</div>
+                          <div style={{ color: X.g, fontSize: 12 }}>
+                            {monthsAway} ay sonra ({ml(d.endMonth)}) bitecek → her ay {amtText} serbest kalacak.
+                          </div>
+                          <div style={{ color: X.tm, fontSize: 11, marginTop: 6, lineHeight: 1.5 }}>
+                            💡 Bu tutar serbest kalınca: acil durum fonuna yönlendirebilir, yeni birikim başlatabilir veya sabit gider artışlarını absorbe edebilirsiniz.
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {(() => {
+                      const totalFree = debtEnds.reduce((s, d) => s + d.monthlyTL, 0);
+                      const emTarget = data.settings.emergencyFundTarget || 0;
+                      const remaining = emTarget - totalSavings;
+                      const monthsToTarget = totalFree > 0 && remaining > 0 ? Math.ceil(remaining / totalFree) : 0;
+                      return emTarget > 0 && remaining > 0 ? (
+                        <div style={{ marginTop: 10, padding: "8px 10px", background: "rgba(22,163,74,0.08)", borderRadius: 8 }}>
+                          <div style={{ color: X.g, fontSize: 11, fontWeight: 700 }}>
+                            Tüm borçlar bitince aylık {C(totalFree)} serbest kalacak. Bu tutarı acil durum fonuna yönlendirirseniz {monthsToTarget} ayda hedefe ulaşırsınız.
+                          </div>
+                        </div>
+                      ) : null;
+                    })()}
+                  </Card>
+                )}
+              </>
+            )}
+          </>
+        );
+      })()}
+
+      {/* BİRİKİM */}
+      {view === "savings" && (() => {
+        return (
+          <>
+            <Card s={{ marginBottom: 12, background: "rgba(22,163,74,0.12)", border: "1px solid rgba(22,163,74,0.15)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div><div style={{ color: X.g, fontSize: 14, fontWeight: 800 }}>💰 Birikim Havuzu</div><div style={{ color: X.tm, fontSize: 11, marginTop: 2 }}>Tüm varlıklarınızın güncel TL karşılığı</div></div>
+                <span style={{ color: X.g, fontSize: 24, fontWeight: 800, fontFamily: fm }}>{C(totalSavings)}</span>
+              </div>
+            </Card>
+
+            {data.settings.emergencyFundTarget > 0 && (() => {
+              const target = data.settings.emergencyFundTarget;
+              const progress = Math.min((totalSavings / target) * 100, 100);
+              const reached = totalSavings >= target;
+              return (
+                <Card s={{ marginBottom: 12, border: `1px solid ${reached ? X.g : X.w}` }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                    <div style={{ color: reached ? X.g : X.w, fontSize: 13, fontWeight: 700 }}>🛡️ Acil Durum Fonu {reached && "✓"}</div>
+                    <div style={{ color: reached ? X.g : X.t, fontSize: 13, fontWeight: 700, fontFamily: fm }}>%{progress.toFixed(1)}</div>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                    <span style={{ color: X.tm, fontSize: 11, fontFamily: fm }}>{C(totalSavings)}</span>
+                    <span style={{ color: X.td, fontSize: 11, fontFamily: fm }}>/ {C(target)}</span>
+                  </div>
+                  <div style={{ height: 6, borderRadius: 3, background: "rgba(0,0,0,0.06)", overflow: "hidden" }}>
+                    <div style={{ height: "100%", borderRadius: 3, background: reached ? X.g : X.w, width: `${progress}%`, transition: "width 0.5s" }} />
+                  </div>
+                  {!reached && target - totalSavings > 0 && (
+                    <div style={{ color: X.tm, fontSize: 11, marginTop: 6 }}>Hedefe kalan: {C(target - totalSavings)}</div>
+                  )}
+                </Card>
+              );
+            })()}
+
+            {assets.map(asset => {
+              const info = ASSET_INFO[asset];
+              const { qty, totalCost, txs } = getAssetBalance(data, asset);
+              const tlValue = getAssetTLValue(data, asset);
+              const profit = asset === "TRY" ? 0 : tlValue - totalCost;
+              const profitPct = totalCost > 0 ? (profit / totalCost) * 100 : 0;
+              const expanded = expandedAsset === asset;
+              const isEmpty = qty === 0 && txs.length === 0;
+              return (
+                <Card key={asset} s={{ marginBottom: 8, borderColor: expanded ? info.color : X.border }}>
+                  <div onClick={() => setExpandedAsset(expanded ? null : asset)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <span style={{ fontSize: 22 }}>{info.icon}</span>
+                      <div>
+                        <div style={{ color: X.t, fontWeight: 700 }}>{info.label}</div>
+                        <div style={{ color: X.tm, fontSize: 12, fontFamily: fm }}>{qty > 0 ? `${qty.toFixed(asset === "TRY" ? 0 : 4)} ${info.unit}` : "—"}</div>
+                      </div>
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      {qty > 0 && <div style={{ color: info.color, fontWeight: 800, fontFamily: fm, fontSize: 16 }}>{C(tlValue)}</div>}
+                      {profit !== 0 && <div style={{ color: profit > 0 ? X.g : X.r, fontSize: 11, fontFamily: fm }}>{profit > 0 ? "+" : ""}{profitPct.toFixed(1)}%</div>}
+                    </div>
+                  </div>
+                  {expanded && (
+                    <div style={{ marginTop: 10, borderTop: `1px solid rgba(0,0,0,0.06)`, paddingTop: 10 }}>
+                      <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+                        <button onClick={e => { e.stopPropagation(); setSavingsModal({ type: "buy", asset }); }} style={{ background: X.gd, border: "none", borderRadius: 6, padding: "6px 10px", color: X.g, fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: ff }}>+ Al</button>
+                        {qty > 0 && <button onClick={e => { e.stopPropagation(); setSavingsModal({ type: "sell", asset }); }} style={{ background: X.rd, border: "none", borderRadius: 6, padding: "6px 10px", color: X.r, fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: ff }}>− Sat</button>}
+                      </div>
+                      {txs.length > 0 && txs.map((tx, i) => (
+                        <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", borderBottom: `1px solid rgba(0,0,0,0.04)`, fontSize: 11, color: X.tm }}>
+                          <span>{tx.date} · {tx.type === "buy" ? "Alım" : "Satım"}{tx.note ? ` · ${tx.note}` : ""}</span>
+                          <span style={{ fontFamily: fm, color: tx.type === "buy" ? X.g : X.r }}>{tx.type === "buy" ? "+" : "-"}{tx.amount} {info.unit}</span>
+                        </div>
+                      ))}
+                      {isEmpty && <div style={{ color: X.td, fontSize: 12 }}>Henüz işlem yok</div>}
+                    </div>
+                  )}
+                </Card>
+              );
+            })}
+          </>
+        );
+      })()}
+
+      {/* Savings modals */}
+      {savingsModal?.type === "buy" && <BuyAssetModal asset={savingsModal.asset} data={data} onClose={() => setSavingsModal(null)} onSave={tx => { setData(d => ({ ...d, savings: { ...d.savings, [savingsModal.asset]: [...(d.savings[savingsModal.asset] || []), tx] } })); setSavingsModal(null); }} />}
+      {savingsModal?.type === "sell" && <SellAssetModal asset={savingsModal.asset} data={data} onClose={() => setSavingsModal(null)} onSave={tx => { setData(d => ({ ...d, savings: { ...d.savings, [savingsModal.asset]: [...(d.savings[savingsModal.asset] || []), tx] } })); setSavingsModal(null); }} />}
+    </div>
+  );
+}
+
 function Settings({ data, setData }) {
   const [sec, setSec] = useState(null); const [form, setForm] = useState({}); const mk = cmk();
   const secs = [{ id: "budget", l: "Aylık Bütçe", i: "💰", d: C(data.settings.monthlyBudget) }, { id: "cards", l: "Kartlarım", i: "💳", d: `${(data.settings.cards || []).length} kart` }, { id: "fixed", l: "Sabit Giderler", i: "🔒", d: `${data.settings.fixedExpenses.length} kalem` }, { id: "variable", l: "Harcama Kategorileri", i: "🔄", d: `${data.settings.variableExpenses.length} kategori` }, { id: "debts", l: "Borçlar", i: "📌", d: `${data.debts.filter(d => d.remainingMonths > 0).length} aktif` }, { id: "emergency", l: "Acil Durum Fonu", i: "🛡️", d: data.settings.emergencyFundTarget ? C(data.settings.emergencyFundTarget) : "Henüz belirlenmedi" }, { id: "rates", l: "Güncel Kurlar", i: "💱", d: data.liveRates?.USD ? `$${data.liveRates.USD.toFixed(2)}` : "Henüz girilmedi" }, { id: "backup", l: "Yedekleme", i: "💾", d: "Yedek Al / Geri Yükle" }, { id: "reset", l: "Sıfırla", i: "🗑️", d: "Geri alınamaz" }, { id: "logout", l: "Çıkış Yap", i: "🚪", d: auth.currentUser?.email || "" }];
@@ -2248,7 +2614,7 @@ function Settings({ data, setData }) {
   return null;
 }
 function FixedSettings({ data, setData, onBack }) {
-  const [editing, setEditing] = useState(null); // null | "new" | id
+  const [editing, setEditing] = useState(null);
   const [n, sn] = useState(""); const [a, sa] = useState(""); const [m, sm] = useState("account"); const [d, sd] = useState(""); const [cardId, setCardId] = useState("");
   const cards = data.settings.cards || [];
 
@@ -2272,47 +2638,54 @@ function FixedSettings({ data, setData, onBack }) {
     cancel();
   };
 
-  const rm = id => setData(dd => ({ ...dd, settings: { ...dd.settings, fixedExpenses: dd.settings.fixedExpenses.filter(e => e.id !== id) } }));
+  const rm = id => { if (confirm("Bu kalemi silmek istediğinize emin misiniz?")) setData(dd => ({ ...dd, settings: { ...dd.settings, fixedExpenses: dd.settings.fixedExpenses.filter(e => e.id !== id) } })); };
+
+  const editForm = (
+    <Card s={{ border: `1px solid ${X.g}`, marginBottom: 8 }}>
+      <div style={{ color: X.g, fontSize: 13, fontWeight: 700, marginBottom: 10 }}>{editing === "new" ? "Yeni Kalem" : "Düzenle"}</div>
+      <Inp label="Ad" value={n} onChange={sn} />
+      <Inp label="Tutar" type="number" value={a} onChange={sa} suffix="₺" />
+      <Sel label="Ödeme" value={m} onChange={sm} options={PM.map(p => ({ v: p.id, l: p.icon + " " + p.label }))} />
+      {m === "cc" && cards.length > 0 && <Sel label="Hangi Kart" value={cardId} onChange={setCardId} options={cards.map(c => ({ v: c.id, l: c.name }))} />}
+      {m === "cc" && cards.length === 0 && <div style={{ color: X.w, fontSize: 12, marginBottom: 8 }}>⚠️ Önce Ayarlar → Kartlarım'dan kart ekleyin</div>}
+      <Inp label="Artış Tarihi" type="month" value={d} onChange={sd} />
+      <div style={{ display: "flex", gap: 8 }}>
+        <Btn onClick={save} s={{ flex: 1 }}>Kaydet</Btn>
+        <Btn onClick={cancel} v="outline" c={X.td} s={{ flex: 1 }}>İptal</Btn>
+      </div>
+    </Card>
+  );
 
   return (
     <div style={{ padding: "20px 16px 100px" }}>
       <button onClick={onBack} style={{ background: "none", border: "none", color: X.g, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff, padding: 0, marginBottom: 16 }}>← Geri</button>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-        <h3 style={{ color: X.t, fontSize: 16, margin: 0 }}>🔒 Sabit Zorunlu</h3>
+        <h3 style={{ color: X.t, fontSize: 16, margin: 0 }}>🔒 Sabit Giderler</h3>
         {!editing && <button onClick={startNew} style={{ background: X.gd, border: `1px solid ${X.g}`, borderRadius: 8, padding: "6px 12px", color: X.g, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>+ Ekle</button>}
       </div>
+      {/* Yeni ekleme formu en üstte */}
+      {editing === "new" && editForm}
       {data.settings.fixedExpenses.map(exp => {
         const cardName = exp.cardId ? cards.find(c => c.id === exp.cardId)?.name : null;
         return (
-          <Card key={exp.id} s={{ marginBottom: 8 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ color: X.t, fontWeight: 700 }}>{exp.name}</div>
-                <div style={{ color: X.tm, fontSize: 12 }}>{C(exp.amount)} • {exp.paymentMethod === "cc" ? "💳" + (cardName ? " " + cardName : "") : "🏦"}{exp.increaseDate ? " • " + exp.increaseDate : ""}</div>
+          <div key={exp.id}>
+            <Card s={{ marginBottom: editing === exp.id ? 0 : 8, borderRadius: editing === exp.id ? "14px 14px 0 0" : 14 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ color: X.t, fontWeight: 700 }}>{exp.name}</div>
+                  <div style={{ color: X.tm, fontSize: 12 }}>{C(exp.amount)} • {exp.paymentMethod === "cc" ? "💳" + (cardName ? " " + cardName : "") : "🏦"}{exp.increaseDate ? " • " + exp.increaseDate : ""}</div>
+                </div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <button onClick={() => editing === exp.id ? cancel() : startEdit(exp)} style={{ background: X.bd, border: `1px solid ${X.b}`, borderRadius: 6, padding: "4px 10px", color: X.b, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{editing === exp.id ? "▲" : "✎"}</button>
+                  <button onClick={() => rm(exp.id)} style={{ background: X.rd, border: `1px solid ${X.r}`, borderRadius: 6, padding: "4px 10px", color: X.r, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>✕</button>
+                </div>
               </div>
-              <div style={{ display: "flex", gap: 6 }}>
-                <button onClick={() => startEdit(exp)} style={{ background: X.bd, border: `1px solid ${X.b}`, borderRadius: 6, padding: "4px 10px", color: X.b, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>✎</button>
-                <button onClick={() => rm(exp.id)} style={{ background: X.rd, border: `1px solid ${X.r}`, borderRadius: 6, padding: "4px 10px", color: X.r, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>✕</button>
-              </div>
-            </div>
-          </Card>
+            </Card>
+            {/* Düzenleme formu kalemin hemen altında */}
+            {editing === exp.id && <div style={{ marginBottom: 8 }}>{editForm}</div>}
+          </div>
         );
       })}
-      {editing && (
-        <Card s={{ border: `1px solid ${X.g}`, marginTop: 12 }}>
-          <div style={{ color: X.g, fontSize: 13, fontWeight: 700, marginBottom: 10 }}>{editing === "new" ? "Yeni Kalem" : "Düzenle"}</div>
-          <Inp label="Ad" value={n} onChange={sn} />
-          <Inp label="Tutar" type="number" value={a} onChange={sa} suffix="₺" />
-          <Sel label="Ödeme" value={m} onChange={sm} options={PM.map(p => ({ v: p.id, l: p.icon + " " + p.label }))} />
-          {m === "cc" && cards.length > 0 && <Sel label="Hangi Kart" value={cardId} onChange={setCardId} options={cards.map(c => ({ v: c.id, l: c.name }))} />}
-          {m === "cc" && cards.length === 0 && <div style={{ color: X.w, fontSize: 12, marginBottom: 8 }}>⚠️ Önce Ayarlar → Kartlarım'dan kart ekleyin</div>}
-          <Inp label="Artış Tarihi" type="month" value={d} onChange={sd} />
-          <div style={{ display: "flex", gap: 8 }}>
-            <Btn onClick={save} s={{ flex: 1 }}>Kaydet</Btn>
-            <Btn onClick={cancel} v="outline" c={X.td} s={{ flex: 1 }}>İptal</Btn>
-          </div>
-        </Card>
-      )}
     </div>
   );
 }
@@ -2341,61 +2714,66 @@ function VariableSettings({ data, setData, onBack }) {
     cancel();
   };
 
-  const rm = id => setData(dd => ({ ...dd, settings: { ...dd.settings, variableExpenses: dd.settings.variableExpenses.filter(e => e.id !== id) } }));
+  const rm = id => { if (confirm("Bu kategoriyi silmek istediğinize emin misiniz?")) setData(dd => ({ ...dd, settings: { ...dd.settings, variableExpenses: dd.settings.variableExpenses.filter(e => e.id !== id) } })); };
+
+  const editForm = (
+    <Card s={{ border: `1px solid ${X.g}`, marginBottom: 8 }}>
+      <div style={{ color: X.g, fontSize: 13, fontWeight: 700, marginBottom: 10 }}>{editing === "new" ? "Yeni Kategori" : "Düzenle"}</div>
+      <Inp label="Ad" value={n} onChange={sn} placeholder="Örn: Akaryakıt, Market" />
+      <div style={{ marginBottom: 12 }}>
+        <label style={{ fontSize: 12, color: X.tm, fontWeight: 600, marginBottom: 4, display: "block" }}>Simge</label>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {icons.map(i => (<button key={i} onClick={() => sic(i)} style={{ fontSize: 22, padding: "6px 8px", background: ic === i ? X.gd : X.bg, border: `1px solid ${ic === i ? X.g : X.border}`, borderRadius: 8, cursor: "pointer" }}>{i}</button>))}
+        </div>
+      </div>
+      <Inp label="Beklenen Aylık Tutar" type="number" value={ex} onChange={se} suffix="₺" placeholder="Opsiyonel" />
+      <div style={{ marginBottom: 12 }}>
+        <label style={{ fontSize: 12, color: X.tm, fontWeight: 600, marginBottom: 4, display: "block" }}>Anahtar Kelimeler (virgülle ayırın)</label>
+        <textarea value={kw} onChange={e => setKw(e.target.value)} placeholder="shell, opet, bp, dizel, benzin, yakıt, akaryakıt" style={{ width: "100%", background: "rgba(220,235,230,0.6)", border: `1px solid ${X.border}`, borderRadius: 10, padding: "12px 14px", color: X.t, fontSize: 14, fontFamily: ff, outline: "none", boxSizing: "border-box", minHeight: 60, resize: "vertical" }} />
+        <div style={{ color: X.td, fontSize: 10, marginTop: 4 }}>Bu kelimelerden biri harcamanın açıklaması veya işyeri adında geçerse bu kategoriye otomatik atanır.</div>
+      </div>
+      <div style={{ display: "flex", gap: 8 }}>
+        <Btn onClick={save} s={{ flex: 1 }}>Kaydet</Btn>
+        <Btn onClick={cancel} v="outline" c={X.td} s={{ flex: 1 }}>İptal</Btn>
+      </div>
+    </Card>
+  );
 
   return (
     <div style={{ padding: "20px 16px 100px" }}>
       <button onClick={onBack} style={{ background: "none", border: "none", color: X.g, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff, padding: 0, marginBottom: 16 }}>← Geri</button>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-        <h3 style={{ color: X.t, fontSize: 16, margin: 0 }}>🔄 Kategoriler</h3>
+        <h3 style={{ color: X.t, fontSize: 16, margin: 0 }}>🔄 Harcama Kategorileri</h3>
         {!editing && <button onClick={startNew} style={{ background: X.gd, border: `1px solid ${X.g}`, borderRadius: 8, padding: "6px 12px", color: X.g, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>+ Ekle</button>}
       </div>
       <p style={{ color: X.td, fontSize: 12, marginBottom: 16 }}>Kategori tanımlayın ve anahtar kelimeler atayın. Harcama girerken anahtar kelimelerinizden biri açıklamada veya işyeri adında geçerse bu kategoriye otomatik atanır.</p>
       {data.settings.variableExpenses.length === 0 && !editing && <Card s={{ textAlign: "center", padding: 20 }}><div style={{ color: X.tm, fontSize: 13 }}>Henüz kategori eklenmedi</div></Card>}
+      {editing === "new" && editForm}
       {data.settings.variableExpenses.map(ve => (
-        <Card key={ve.id} s={{ marginBottom: 8 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-            <div style={{ display: "flex", alignItems: "flex-start", gap: 8, flex: 1, minWidth: 0 }}>
-              <span style={{ fontSize: 20 }}>{ve.icon}</span>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ color: X.t, fontWeight: 700 }}>{ve.name}</div>
-                {ve.expectedAmount > 0 && <div style={{ color: X.tm, fontSize: 11 }}>Beklenen: {C(ve.expectedAmount)}</div>}
-                {(ve.keywords || []).length > 0 && (
-                  <div style={{ marginTop: 4, display: "flex", flexWrap: "wrap", gap: 3 }}>
-                    {ve.keywords.map((k, i) => <span key={i} style={{ background: X.bd, color: X.b, fontSize: 10, fontWeight: 600, padding: "2px 6px", borderRadius: 4 }}>{k}</span>)}
-                  </div>
-                )}
+        <div key={ve.id}>
+          <Card s={{ marginBottom: editing === ve.id ? 0 : 8, borderRadius: editing === ve.id ? "14px 14px 0 0" : 14 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 8, flex: 1, minWidth: 0 }}>
+                <span style={{ fontSize: 20 }}>{ve.icon}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ color: X.t, fontWeight: 700 }}>{ve.name}</div>
+                  {ve.expectedAmount > 0 && <div style={{ color: X.tm, fontSize: 11 }}>Beklenen: {C(ve.expectedAmount)}</div>}
+                  {(ve.keywords || []).length > 0 && (
+                    <div style={{ marginTop: 4, display: "flex", flexWrap: "wrap", gap: 3 }}>
+                      {ve.keywords.map((k, i) => <span key={i} style={{ background: X.bd, color: X.b, fontSize: 10, fontWeight: 600, padding: "2px 6px", borderRadius: 4 }}>{k}</span>)}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 6, marginLeft: 8 }}>
+                <button onClick={() => editing === ve.id ? cancel() : startEdit(ve)} style={{ background: X.bd, border: `1px solid ${X.b}`, borderRadius: 6, padding: "4px 10px", color: X.b, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{editing === ve.id ? "▲" : "✎"}</button>
+                <button onClick={() => rm(ve.id)} style={{ background: X.rd, border: `1px solid ${X.r}`, borderRadius: 6, padding: "4px 10px", color: X.r, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>✕</button>
               </div>
             </div>
-            <div style={{ display: "flex", gap: 6, marginLeft: 8 }}>
-              <button onClick={() => startEdit(ve)} style={{ background: X.bd, border: `1px solid ${X.b}`, borderRadius: 6, padding: "4px 10px", color: X.b, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>✎</button>
-              <button onClick={() => rm(ve.id)} style={{ background: X.rd, border: `1px solid ${X.r}`, borderRadius: 6, padding: "4px 10px", color: X.r, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>✕</button>
-            </div>
-          </div>
-        </Card>
+          </Card>
+          {editing === ve.id && <div style={{ marginBottom: 8 }}>{editForm}</div>}
+        </div>
       ))}
-      {editing && (
-        <Card s={{ border: `1px solid ${X.g}`, marginTop: 12 }}>
-          <div style={{ color: X.g, fontSize: 13, fontWeight: 700, marginBottom: 10 }}>{editing === "new" ? "Yeni Kategori" : "Düzenle"}</div>
-          <Inp label="Ad" value={n} onChange={sn} placeholder="Örn: Akaryakıt, Market" />
-          <div style={{ marginBottom: 12 }}>
-            <label style={{ fontSize: 12, color: X.tm, fontWeight: 600, marginBottom: 4, display: "block" }}>Simge</label>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {icons.map(i => (<button key={i} onClick={() => sic(i)} style={{ fontSize: 22, padding: "6px 8px", background: ic === i ? X.gd : X.bg, border: `1px solid ${ic === i ? X.g : X.border}`, borderRadius: 8, cursor: "pointer" }}>{i}</button>))}
-            </div>
-          </div>
-          <Inp label="Beklenen Aylık Tutar" type="number" value={ex} onChange={se} suffix="₺" placeholder="Opsiyonel" />
-          <div style={{ marginBottom: 12 }}>
-            <label style={{ fontSize: 12, color: X.tm, fontWeight: 600, marginBottom: 4, display: "block" }}>Anahtar Kelimeler (virgülle ayırın)</label>
-            <textarea value={kw} onChange={e => setKw(e.target.value)} placeholder="shell, opet, bp, dizel, benzin, yakıt, akaryakıt" style={{ width: "100%", background: "rgba(220,235,230,0.6)", border: `1px solid ${X.border}`, borderRadius: 10, padding: "12px 14px", color: X.t, fontSize: 14, fontFamily: ff, outline: "none", boxSizing: "border-box", minHeight: 60, resize: "vertical" }} />
-            <div style={{ color: X.td, fontSize: 10, marginTop: 4 }}>Bu kelimelerden biri harcamanın açıklaması veya işyeri adında geçerse bu kategoriye otomatik atanır.</div>
-          </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <Btn onClick={save} s={{ flex: 1 }}>Kaydet</Btn>
-            <Btn onClick={cancel} v="outline" c={X.td} s={{ flex: 1 }}>İptal</Btn>
-          </div>
-        </Card>
-      )}
     </div>
   );
 }
@@ -2487,9 +2865,20 @@ function CardsSettings({ data, setData, onBack }) {
   };
 
   const rm = id => {
-    if (!confirm("Bu kartı silmek istediğinize emin misiniz? Bu karta bağlı geçmiş harcamalar etkilenmez ama hangi karta ait oldukları görünmez olur.")) return;
+    if (!confirm("Bu kartı silmek istediğinize emin misiniz?")) return;
     setData(d => ({ ...d, settings: { ...d.settings, cards: (d.settings.cards || []).filter(c => c.id !== id) } }));
   };
+
+  const editForm = (
+    <Card s={{ border: `1px solid ${X.g}`, marginBottom: 8 }}>
+      <div style={{ color: X.g, fontSize: 13, fontWeight: 700, marginBottom: 10 }}>{editing === "new" ? "Yeni Kart" : "Düzenle"}</div>
+      <Inp label="Kart Adı" value={n} onChange={sn} placeholder="Örn: Garanti Bonus, Yapı Kredi World" />
+      <div style={{ display: "flex", gap: 8 }}>
+        <Btn onClick={save} s={{ flex: 1 }}>Kaydet</Btn>
+        <Btn onClick={cancel} v="outline" c={X.td} s={{ flex: 1 }}>İptal</Btn>
+      </div>
+    </Card>
+  );
 
   return (
     <div style={{ padding: "20px 16px 100px" }}>
@@ -2500,29 +2889,23 @@ function CardsSettings({ data, setData, onBack }) {
       </div>
       <p style={{ color: X.td, fontSize: 12, marginBottom: 16 }}>Kredi kartlarınızı tanımlayın. Harcama girerken hangi karta ait olduğunu seçeceksiniz.</p>
       {cards.length === 0 && !editing && <Card s={{ textAlign: "center", padding: 20 }}><div style={{ color: X.tm, fontSize: 13 }}>Henüz kart eklenmedi</div></Card>}
+      {editing === "new" && editForm}
       {cards.map(c => (
-        <Card key={c.id} s={{ marginBottom: 8 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div style={{ flex: 1 }}>
-              <div style={{ color: X.t, fontWeight: 700 }}>{c.name}</div>
+        <div key={c.id}>
+          <Card s={{ marginBottom: editing === c.id ? 0 : 8, borderRadius: editing === c.id ? "14px 14px 0 0" : 14 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ color: X.t, fontWeight: 700 }}>{c.name}</div>
+              </div>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button onClick={() => editing === c.id ? cancel() : startEdit(c)} style={{ background: X.bd, border: `1px solid ${X.b}`, borderRadius: 6, padding: "4px 10px", color: X.b, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{editing === c.id ? "▲" : "✎"}</button>
+                <button onClick={() => rm(c.id)} style={{ background: X.rd, border: `1px solid ${X.r}`, borderRadius: 6, padding: "4px 10px", color: X.r, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>✕</button>
+              </div>
             </div>
-            <div style={{ display: "flex", gap: 6 }}>
-              <button onClick={() => startEdit(c)} style={{ background: X.bd, border: `1px solid ${X.b}`, borderRadius: 6, padding: "4px 10px", color: X.b, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>✎</button>
-              <button onClick={() => rm(c.id)} style={{ background: X.rd, border: `1px solid ${X.r}`, borderRadius: 6, padding: "4px 10px", color: X.r, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>✕</button>
-            </div>
-          </div>
-        </Card>
+          </Card>
+          {editing === c.id && <div style={{ marginBottom: 8 }}>{editForm}</div>}
+        </div>
       ))}
-      {editing && (
-        <Card s={{ border: `1px solid ${X.g}`, marginTop: 12 }}>
-          <div style={{ color: X.g, fontSize: 13, fontWeight: 700, marginBottom: 10 }}>{editing === "new" ? "Yeni Kart" : "Düzenle"}</div>
-          <Inp label="Kart Adı" value={n} onChange={sn} placeholder="Örn: Garanti Bonus, Yapı Kredi World" />
-          <div style={{ display: "flex", gap: 8 }}>
-            <Btn onClick={save} s={{ flex: 1 }}>Kaydet</Btn>
-            <Btn onClick={cancel} v="outline" c={X.td} s={{ flex: 1 }}>İptal</Btn>
-          </div>
-        </Card>
-      )}
     </div>
   );
 }
@@ -2535,7 +2918,6 @@ function DebtSettings({ data, setData, onBack }) {
   const startNew = () => { sn(""); sc("TRY"); setTotal(""); setMonths(""); setEditing("new"); };
   const startEdit = debt => {
     sn(debt.name); sc(debt.currency);
-    // Geriye dönük uyum: eski borçlarda totalAmount yoksa monthly * remaining
     const t = debt.totalAmount || (debt.monthlyPayment * (debt.totalMonths || debt.remainingMonths));
     const m2 = debt.totalMonths || debt.remainingMonths;
     setTotal(String(t)); setMonths(String(m2));
@@ -2552,27 +2934,14 @@ function DebtSettings({ data, setData, onBack }) {
     setData(d => {
       const list = [...d.debts];
       if (editing === "new") {
-        list.push({
-          id: uid(), name: n, currency: c,
-          totalAmount: totalNum,
-          totalMonths: monthsNum,
-          remainingMonths: monthsNum,
-          monthlyPayment: monthlyCalc
-        });
+        list.push({ id: uid(), name: n, currency: c, totalAmount: totalNum, totalMonths: monthsNum, remainingMonths: monthsNum, monthlyPayment: monthlyCalc });
       } else {
         const idx = list.findIndex(x => x.id === editing);
         if (idx >= 0) {
           const old = list[idx];
-          // Düzenlemede ödenen taksitleri koru: ödenen = eski totalMonths - eski remainingMonths
           const paidCount = (old.totalMonths || old.remainingMonths) - old.remainingMonths;
           const newRemaining = Math.max(0, monthsNum - paidCount);
-          list[idx] = {
-            ...old, name: n, currency: c,
-            totalAmount: totalNum,
-            totalMonths: monthsNum,
-            remainingMonths: newRemaining,
-            monthlyPayment: monthlyCalc
-          };
+          list[idx] = { ...old, name: n, currency: c, totalAmount: totalNum, totalMonths: monthsNum, remainingMonths: newRemaining, monthlyPayment: monthlyCalc };
         }
       }
       return { ...d, debts: list };
@@ -2580,7 +2949,41 @@ function DebtSettings({ data, setData, onBack }) {
     cancel();
   };
 
-  const rm = id => setData(dd => ({ ...dd, debts: dd.debts.filter(x => x.id !== id) }));
+  const rm = id => { if (confirm("Bu borcu silmek istediğinize emin misiniz?")) setData(dd => ({ ...dd, debts: dd.debts.filter(x => x.id !== id) })); };
+
+  const editForm = (
+    <Card s={{ border: `1px solid ${X.w}`, marginBottom: 8 }}>
+      <div style={{ color: X.w, fontSize: 13, fontWeight: 700, marginBottom: 10 }}>{editing === "new" ? "Yeni Borç" : "Düzenle"}</div>
+      <Inp label="Ad" value={n} onChange={sn} placeholder="Örn: Ahmet Abi" />
+      <Sel label="Birim" value={c} onChange={sc} options={[{ v: "TRY", l: "₺ Türk Lirası" }, { v: "USD", l: "$ Dolar" }, { v: "EUR", l: "€ Euro" }, { v: "XAU", l: "🪙 Altın (gram)" }]} />
+      {(c === "XAU" || c === "USD" || c === "EUR") && (
+        <div style={{ marginBottom: 12 }}>
+          <a href={c === "XAU" ? HAREMALTIN_XAU : c === "USD" ? HAREMALTIN_USD : HAREMALTIN_EUR} target="_blank" rel="noopener noreferrer" style={{ display: "inline-block", background: X.wd, border: `1px solid ${X.w}`, borderRadius: 6, padding: "6px 12px", color: X.w, fontSize: 12, fontWeight: 700, textDecoration: "none" }}>🔗 Haremaltin'den fiyat kontrol</a>
+        </div>
+      )}
+      <Inp label="Toplam Borç" type="number" value={total} onChange={setTotal} suffix={debtCurSymbol(c)} placeholder="Örn: 24" />
+      <Inp label="Geri Ödeme Süresi (ay)" type="number" value={months} onChange={setMonths} placeholder="Örn: 12" />
+      {totalNum > 0 && monthsNum > 0 && (
+        <Card s={{ background: X.wd, border: `1px solid ${X.w}`, marginBottom: 12, padding: "10px 14px" }}>
+          <div style={{ color: X.tm, fontSize: 11, fontWeight: 700, marginBottom: 4 }}>HESAPLANAN AYLIK TAKSİT</div>
+          <div style={{ color: X.w, fontSize: 18, fontWeight: 800, fontFamily: fm }}>
+            {monthlyCalc.toFixed(2)} {debtCurSymbol(c)}
+            {c !== "TRY" && data.liveRates && (
+              <span style={{ color: X.td, fontSize: 12, marginLeft: 6 }}>
+                ({c === "USD" && data.liveRates.USD ? C(monthlyCalc * data.liveRates.USD) : ""}
+                {c === "EUR" && data.liveRates.EUR ? C(monthlyCalc * data.liveRates.EUR) : ""}
+                {c === "XAU" && data.liveRates.XAU ? C(monthlyCalc * data.liveRates.XAU) : ""})
+              </span>
+            )}
+          </div>
+        </Card>
+      )}
+      <div style={{ display: "flex", gap: 8 }}>
+        <Btn onClick={save} c={X.w} s={{ flex: 1 }} disabled={!n || !totalNum || !monthsNum}>Kaydet</Btn>
+        <Btn onClick={cancel} v="outline" c={X.td} s={{ flex: 1 }}>İptal</Btn>
+      </div>
+    </Card>
+  );
 
   const activeDebts = data.debts.filter(d => d.remainingMonths > 0);
 
@@ -2591,66 +2994,37 @@ function DebtSettings({ data, setData, onBack }) {
         <h3 style={{ color: X.t, fontSize: 16, margin: 0 }}>📌 Borçlar</h3>
         {!editing && <button onClick={startNew} style={{ background: X.gd, border: `1px solid ${X.g}`, borderRadius: 8, padding: "6px 12px", color: X.g, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>+ Ekle</button>}
       </div>
+      {editing === "new" && editForm}
       {activeDebts.map(d => {
         const sym = debtCurSymbol(d.currency);
         const tlVal = debtTLValue(d, data, cmk());
         const totalM = d.totalMonths || d.remainingMonths;
         const paidCount = totalM - d.remainingMonths;
         return (
-          <Card key={d.id} s={{ marginBottom: 8 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ color: X.t, fontWeight: 700 }}>{d.name}</div>
-                <div style={{ color: X.tm, fontSize: 12 }}>
-                  <span style={{ fontFamily: fm }}>{d.monthlyPayment.toFixed(2)} {sym}</span>
-                  {d.currency !== "TRY" && <span style={{ color: X.td }}> ({C(tlVal)})</span>}
-                  <span> /ay</span>
+          <div key={d.id}>
+            <Card s={{ marginBottom: editing === d.id ? 0 : 8, borderRadius: editing === d.id ? "14px 14px 0 0" : 14 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ color: X.t, fontWeight: 700 }}>{d.name}</div>
+                  <div style={{ color: X.tm, fontSize: 12 }}>
+                    <span style={{ fontFamily: fm }}>{d.monthlyPayment.toFixed(2)} {sym}</span>
+                    {d.currency !== "TRY" && <span style={{ color: X.td }}> ({C(tlVal)})</span>}
+                    <span> /ay</span>
+                  </div>
+                  <div style={{ color: X.td, fontSize: 11, marginTop: 2 }}>
+                    {paidCount}/{totalM} taksit ödendi • {d.remainingMonths} ay kaldı
+                  </div>
                 </div>
-                <div style={{ color: X.td, fontSize: 11, marginTop: 2 }}>
-                  {paidCount}/{totalM} taksit ödendi • {d.remainingMonths} ay kaldı
+                <div style={{ display: "flex", gap: 6 }}>
+                  <button onClick={() => editing === d.id ? cancel() : startEdit(d)} style={{ background: X.bd, border: `1px solid ${X.b}`, borderRadius: 6, padding: "4px 10px", color: X.b, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{editing === d.id ? "▲" : "✎"}</button>
+                  <button onClick={() => rm(d.id)} style={{ background: X.rd, border: `1px solid ${X.r}`, borderRadius: 6, padding: "4px 10px", color: X.r, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>✕</button>
                 </div>
-              </div>
-              <div style={{ display: "flex", gap: 6 }}>
-                <button onClick={() => startEdit(d)} style={{ background: X.bd, border: `1px solid ${X.b}`, borderRadius: 6, padding: "4px 10px", color: X.b, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>✎</button>
-                <button onClick={() => rm(d.id)} style={{ background: X.rd, border: `1px solid ${X.r}`, borderRadius: 6, padding: "4px 10px", color: X.r, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>✕</button>
-              </div>
-            </div>
-          </Card>
-        );
-      })}
-      {editing && (
-        <Card s={{ border: `1px solid ${X.w}`, marginTop: 12 }}>
-          <div style={{ color: X.w, fontSize: 13, fontWeight: 700, marginBottom: 10 }}>{editing === "new" ? "Yeni Borç" : "Düzenle"}</div>
-          <Inp label="Ad" value={n} onChange={sn} placeholder="Örn: Ahmet Abi" />
-          <Sel label="Birim" value={c} onChange={sc} options={[{ v: "TRY", l: "₺ Türk Lirası" }, { v: "USD", l: "$ Dolar" }, { v: "EUR", l: "€ Euro" }, { v: "XAU", l: "🪙 Altın (gram)" }]} />
-          {(c === "XAU" || c === "USD" || c === "EUR") && (
-            <div style={{ marginBottom: 12 }}>
-              <a href={c === "XAU" ? HAREMALTIN_XAU : c === "USD" ? HAREMALTIN_USD : HAREMALTIN_EUR} target="_blank" rel="noopener noreferrer" style={{ display: "inline-block", background: X.wd, border: `1px solid ${X.w}`, borderRadius: 6, padding: "6px 12px", color: X.w, fontSize: 12, fontWeight: 700, textDecoration: "none" }}>🔗 Haremaltin'den fiyat kontrol</a>
-            </div>
-          )}
-          <Inp label="Toplam Borç" type="number" value={total} onChange={setTotal} suffix={debtCurSymbol(c)} placeholder="Örn: 24" />
-          <Inp label="Geri Ödeme Süresi (ay)" type="number" value={months} onChange={setMonths} placeholder="Örn: 12" />
-          {totalNum > 0 && monthsNum > 0 && (
-            <Card s={{ background: X.wd, border: `1px solid ${X.w}`, marginBottom: 12, padding: "10px 14px" }}>
-              <div style={{ color: X.tm, fontSize: 11, fontWeight: 700, marginBottom: 4 }}>HESAPLANAN AYLIK TAKSİT</div>
-              <div style={{ color: X.w, fontSize: 18, fontWeight: 800, fontFamily: fm }}>
-                {monthlyCalc.toFixed(2)} {debtCurSymbol(c)}
-                {c !== "TRY" && data.liveRates && (
-                  <span style={{ color: X.td, fontSize: 12, marginLeft: 6 }}>
-                    ({c === "USD" && data.liveRates.USD ? C(monthlyCalc * data.liveRates.USD) : ""}
-                    {c === "EUR" && data.liveRates.EUR ? C(monthlyCalc * data.liveRates.EUR) : ""}
-                    {c === "XAU" && data.liveRates.XAU ? C(monthlyCalc * data.liveRates.XAU) : ""})
-                  </span>
-                )}
               </div>
             </Card>
-          )}
-          <div style={{ display: "flex", gap: 8 }}>
-            <Btn onClick={save} c={X.w} s={{ flex: 1 }} disabled={!n || !totalNum || !monthsNum}>Kaydet</Btn>
-            <Btn onClick={cancel} v="outline" c={X.td} s={{ flex: 1 }}>İptal</Btn>
+            {editing === d.id && <div style={{ marginBottom: 8 }}>{editForm}</div>}
           </div>
-        </Card>
-      )}
+        );
+      })}
     </div>
   );
 }
@@ -2882,6 +3256,7 @@ export default function App() {
       </div>
       {tab === "home" && <Dashboard data={data} mk={mk} gmd={gmd} setMonthField={smf} setData={setData} />}
       {tab === "report" && <AnalysisScreen data={data} setData={setData} mk={mk} />}
+      {tab === "plan" && <PlanningScreen data={data} setData={setData} mk={mk} />}
       {tab === "settings" && <Settings data={data} setData={setData} />}
       <TabBar tab={tab} setTab={setTab} />
       {pendingCloseMk && <MonthCloseRitual data={data} setData={setData} prevMk={pendingCloseMk} onClose={() => { }} />}
