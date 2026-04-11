@@ -233,11 +233,18 @@ function calcMonth(data, m, extraInst) {
 
   // Değişken zorunlu giderler: gelecek aylarda beklenen tutarları ekle
   const hasActualSpending = ccSingleTotal > 0 || cardLoaded > 0 || Object.keys(md.variableEntries || {}).length > 0;
-  const expectedVariable = hasActualSpending ? 0 : (data.settings.variableExpenses || []).reduce((s, ve) => s + (ve.expectedAmount || 0), 0);
+  const expectedVariableBase = (data.settings.variableExpenses || []).reduce((s, ve) => s + (ve.expectedAmount || 0), 0);
+  const expectedVariable = hasActualSpending ? 0 : expectedVariableBase;
 
   // Card load limits
   const cardLoadMaxPerTx = Math.floor(baseBudget * CARD_LOAD_PER_TX_PCT);
-  const cardLoadMaxTotal = Math.floor(baseBudget * CARD_LOAD_TOTAL_PCT);
+  const cardLoadPctMax = Math.floor(baseBudget * CARD_LOAD_TOTAL_PCT);
+
+  // Gerçek kart yükleme kapasitesi: bütçe - sabit - taksit - borç - beklenen değişken giderler
+  // %10 sapma payı ile (en kötü senaryo)
+  const committedExpenses = fixedTotal + installmentTotal + debtTotal + Math.ceil(expectedVariableBase * 1.10);
+  const availableForCard = Math.max(0, effectiveBudget - committedExpenses);
+  const cardLoadMaxTotal = Math.min(cardLoadPctMax, availableForCard);
   const cardLoadRemaining = Math.max(0, cardLoadMaxTotal - cardLoaded);
 
   // Total spent and remaining
@@ -254,7 +261,7 @@ function calcMonth(data, m, extraInst) {
   // CC transfer needed
   const ccTransferNeeded = fixedCC + variableCC + ccSingleTotal + installmentTotal;
 
-  return { effectiveBudget, baseBudget, carryoverDeficit, fixedTotal, variableTotal, ccSingleTotal, installmentTotal, debtTotal, cardLoaded, cardLoadMaxPerTx, cardLoadMaxTotal, cardLoadRemaining, totalSpent, remaining, savingsTarget, expectedCCSingle, ccTransferNeeded, expectedVariable, pendingVariable };
+  return { effectiveBudget, baseBudget, carryoverDeficit, fixedTotal, variableTotal, ccSingleTotal, installmentTotal, debtTotal, cardLoaded, cardLoadMaxPerTx, cardLoadMaxTotal, cardLoadRemaining, availableForCard, totalSpent, remaining, savingsTarget, expectedCCSingle, ccTransferNeeded, expectedVariable, pendingVariable };
 }
 function calcFlat(data, m, extraInst) {
   const md = data.months[m] || DM();
@@ -292,7 +299,7 @@ function calcRisk(data, mk) {
    *
    * F1: Likidite Oranı (25p) — Bu ayın kalan bütçe yüzdesi
    * F2: Sürdürülebilirlik (25p) — Gelecek 12 ay projeksiyon
-   * F3: Günlük Harcama Kapasitesi (20p) — 40.000₺ alt limit kontrolü
+   * F3: Genel Harcama Kartı Kapasitesi (20p) — aylık serbest bütçe kontrolü
    * F4: Harcama Trendi (15p) — Son 3 ayın karşılaştırması
    * F5: Yapısal Riskler (15p) — Yaklaşan maliyet artışları
    */
@@ -332,28 +339,27 @@ function calcRisk(data, mk) {
   score += f2;
   details.push({ label: "Sürdürülebilirlik (12 ay projeksiyon)", score: f2, max: 25, desc: mudm > 12 ? "12 ay içinde açık yok" : `${mudm} ay sonra açık oluşabilir` });
 
-  // F3: Günlük Harcama Kapasitesi (20 puan)
-  // İlke: Zorunlu değişken giderler (market, akaryakıt, fatura) için yeterli
-  // harcanabilir gelir kalmalı. Alt limit: 40.000₺ (kullanıcı tanımlı)
+  // F3: Genel Harcama Kartı Kapasitesi (20 puan)
+  // İlke: Tüm zorunlu giderler (sabit + değişken + borç + taksit) düşüldükten
+  // sonra genel harcama kartına yüklenebilir tutar. Alt limit: 40.000₺
   let f3 = 0;
-  const cardCapacity = c.cardLoadRemaining;
-  // Gelecek ayların da kapasitesini kontrol et (en kötü ayı bul)
-  let worstCapacity = cardCapacity;
+  const currentCardAvail = c.availableForCard;
+  // Gelecek 6 ayın en kötü durumunu da kontrol et
+  let worstCardAvail = currentCardAvail;
   let wm = nmk(mk);
   for (let i = 0; i < 6; i++) {
     const fc = calcMonth(data, wm, null);
-    const futureCapacity = fc.remaining; // gelecek ayda kalan = harcanabilir kapasite
-    if (futureCapacity < worstCapacity) worstCapacity = futureCapacity;
+    if (fc.availableForCard < worstCardAvail) worstCardAvail = fc.availableForCard;
     wm = nmk(wm);
   }
-  const effectiveCapacity = Math.min(cardCapacity, worstCapacity);
-  if (effectiveCapacity < 0) f3 = 20;
-  else if (effectiveCapacity < CARD_LOAD_MIN * 0.5) f3 = 17; // < 20k
-  else if (effectiveCapacity < CARD_LOAD_MIN * 0.75) f3 = 13; // < 30k
-  else if (effectiveCapacity < CARD_LOAD_MIN) f3 = 8; // < 40k
-  else if (effectiveCapacity < CARD_LOAD_MIN * 1.25) f3 = 3; // < 50k
+  const effectiveCardAvail = Math.min(currentCardAvail, worstCardAvail);
+  if (effectiveCardAvail < 0) f3 = 20;
+  else if (effectiveCardAvail < CARD_LOAD_MIN * 0.5) f3 = 17; // < 20k
+  else if (effectiveCardAvail < CARD_LOAD_MIN * 0.75) f3 = 13; // < 30k
+  else if (effectiveCardAvail < CARD_LOAD_MIN) f3 = 8; // < 40k
+  else if (effectiveCardAvail < CARD_LOAD_MIN * 1.25) f3 = 3; // < 50k
   score += f3;
-  details.push({ label: "Günlük harcama kapasitesi", score: f3, max: 20, desc: `${C(effectiveCapacity)} (alt limit: ${C(CARD_LOAD_MIN)})` });
+  details.push({ label: "Genel harcama kartı kapasitesi", score: f3, max: 20, desc: `${C(effectiveCardAvail)} (alt limit: ${C(CARD_LOAD_MIN)})` });
 
   // F4: Harcama Trendi (15 puan)
   // İlke: Son 3 ayın harcama ortalamasına göre bu ayın trendi.
@@ -420,13 +426,13 @@ function genWarnings(data, mk) {
 const INFO = {
   ccSingle: { title: "Kredi Kartı Tek Çekim", text: "Kredi kartınızla tek seferde yaptığınız harcamaları buraya kaydedersiniz. Bu tutar anında bütçenizden düşer ve aynı zamanda ay sonunda kredi kartı hesabınıza aktarmanız gereken tutara eklenir.\n\nÖrnek: Marketten 500 ₺'lik bir alışveriş yaptınız, kredi kartıyla tek çekim ödediyseniz buraya 500 ₺ girersiniz." },
   ccInstall: { title: "Kredi Kartı Taksitli", text: "Kredi kartıyla taksitli yaptığınız harcamalarınızın toplam aylık taksit yükünü gösterir. Yeni bir taksitli alışveriş eklediğinizde, ilk taksit gelecek aydan itibaren bütçenize otomatik yansır.\n\nÖrnek: 30.000 ₺ × 6 taksit alırsanız, 6 ay boyunca her ay 5.000 ₺ bütçenizden düşülür." },
-  cardLoad: { title: "Genel Harcama Kartı", text: "Günlük harcamalar için kullandığınız banka kartı. Restoran, kıyafet, çocuk harcamaları, ufak tefek alımlar gibi zorunlu olmayan ev dışı harcamalar buradan yapılır.\n\nKuralı: Tek seferde toplam bütçenin en fazla %10'u, ay toplamında en fazla %15'i bu karta yüklenebilir. Bu kuralın amacı, hesabınızda kredi kartı ödemeleri için tampon bırakmak.\n\nÖrnek: 450.000 ₺ bütçede tek seferde en fazla 45.000 ₺, ay toplamında en fazla 67.500 ₺." },
+  cardLoad: { title: "Genel Harcama Kartı", text: "Aylık zorunlu olmayan harcamalar için kullandığınız banka kartı. Restoran, kıyafet, çocuk harcamaları, ufak tefek alımlar gibi zorunlu olmayan ev dışı harcamalar buradan yapılır.\n\nKuralı: Tek seferde toplam bütçenin en fazla %10'u, ay toplamında en fazla %15'i bu karta yüklenebilir. Bu kuralın amacı, hesabınızda kredi kartı ödemeleri için tampon bırakmak.\n\nÖrnek: 450.000 ₺ bütçede tek seferde en fazla 45.000 ₺, ay toplamında en fazla 67.500 ₺." },
   debt: { title: "Borç Ödemeleri", text: "Aktif borçlarınızın bu ay ödemeniz gereken toplam tutarını gösterir. Türk Lirası, dolar veya altın bazlı borçlarınız olabilir. Dolar ve altın borçları için güncel kur kullanılır.\n\nHer borç ödemesi yaptığınızda 'Ödedim' butonuna basarak teyit edersiniz, kalan taksit sayısı azalır." },
   simulate: { title: "Taksit Simülasyonu", text: "Yeni bir taksitli alım yapmadan önce 'şu kadar X taksitle alırsam bütçem nasıl etkilenir' sorusunu test etmek için kullanılır.\n\nTutar ve taksit sayısını girin, 'Simüle Et' deyin. Uygulama gelecek 6-8 ayın bütçenizin durumunu hem mevcut hem de bu taksitli alımla birlikte gösterir. Güvenliyse 'Onayla ve Kaydet' diyerek doğrudan kredi kartı taksitli kısmına ekleyebilirsiniz." },
   savings: { title: "Birikim", text: "Bugüne kadar bu ay biriktirebildiğiniz para ile bu ayın birikim hedefini gösterir.\n\nBirikim Hedefi şöyle hesaplanır:\nKalan Para − Beklenen Kredi Kartı Tek Çekim (son 3 ay ortalaması) − Henüz Yüklenmemiş Kart Rezervi (toplam %15'in kalan kısmı)\n\nYani sistem size 'eğer beklenen harcamalarını yaparsan ay sonunda bu kadar birikim yapmış olursun' diyor. Hedefe ne kadar yakınsanız o kadar başarılı bir aydır." },
   fixed: { title: "Sabit Zorunlu Giderler", text: "Her ay sabit ve zorunlu olarak ödenen giderler. Kira, aidat, ev yardımcısı, burslar, sabit destek tutarları gibi.\n\nBu giderlerin tutarları belirli ve değişmez. Artış tarihleri tanımlanmışsa uygulama o tarih yaklaştığında uyarı verir. Her birini ödediğinizde 'Ödedim' butonuyla teyit edersiniz." },
   variable: { title: "Değişken Zorunlu Giderler", text: "Her ay ödemek zorunda olduğunuz ama tutarı değişen giderler. Elektrik, su, doğalgaz, internet, telefon, akaryakıt, yemek kartı yüklemesi gibi.\n\nHer kalem için bir 'beklenen tutar' belirlersiniz. Eğer girdiğiniz tutar beklenen tutarın %10'undan fazla aşarsa uygulama uyarı verir — böylece anormal faturaları erken yakalarsınız." },
-  risk: { title: "Risk Skoru", text: "0-100 arası bir puan. 0 en güvenli, 100 en kritik durum.\n\nBeş faktöre bakılarak hesaplanır:\n\n1. Likidite Oranı (25 puan): Bu ayın kalan bütçesinin toplam bütçeye oranı. Acil ödeme kapasitesini gösterir. %50 üstü güvenli, %10 altı kritik.\n\n2. Sürdürülebilirlik (25 puan): Mevcut harcama düzeniyle gelecek 12 ay içinde bütçe açığı oluşup oluşmayacağını hesaplar. Değişken gider tahminlerini de içerir.\n\n3. Günlük Harcama Kapasitesi (20 puan): Genel harcama kartına yüklenebilir tutarın 40.000 ₺ alt limitine göre durumu. Market, akaryakıt, fatura gibi zorunlu değişken giderleri karşılayabilme gücünü ölçer. Gelecek 6 ayın en kötü durumunu da hesaba katar.\n\n4. Harcama Trendi (15 puan): Son 3 ayın harcama ortalamasına göre bu ayın artış/azalış yönünü analiz eder. Sürekli artan harcama trendi sürdürülebilirliği tehdit eder.\n\n5. Yapısal Riskler (15 puan): Önümüzdeki 6 ay içinde bilinen sabit gider artışlarını ve bunların bütçeye toplam etkisini değerlendirir.\n\nSeviyeler: 0-14 GÜVENLİ, 15-29 DÜŞÜK, 30-49 ORTA, 50-69 YÜKSEK, 70-100 KRİTİK." },
+  risk: { title: "Risk Skoru", text: "0-100 arası bir puan. 0 en güvenli, 100 en kritik durum.\n\nBeş faktöre bakılarak hesaplanır:\n\n1. Likidite Oranı (25 puan): Bu ayın kalan bütçesinin toplam bütçeye oranı. Acil ödeme kapasitesini gösterir. %50 üstü güvenli, %10 altı kritik.\n\n2. Sürdürülebilirlik (25 puan): Mevcut harcama düzeniyle gelecek 12 ay içinde bütçe açığı oluşup oluşmayacağını hesaplar. Değişken gider tahminlerini de içerir.\n\n3. Genel Harcama Kartı Kapasitesi (20 puan): Tüm zorunlu çıkışlar (sabit giderler, borçlar, taksitler, değişken giderler) düşüldükten sonra genel harcama kartına yüklenebilecek aylık serbest tutarı ölçer. Alt limit: 40.000 ₺. Gelecek 6 ayın en kötü durumunu da hesaba katar.\n\n4. Harcama Trendi (15 puan): Son 3 ayın harcama ortalamasına göre bu ayın artış/azalış yönünü analiz eder. Sürekli artan harcama trendi sürdürülebilirliği tehdit eder.\n\n5. Yapısal Riskler (15 puan): Önümüzdeki 6 ay içinde bilinen sabit gider artışlarını ve bunların bütçeye toplam etkisini değerlendirir.\n\nSeviyeler: 0-14 GÜVENLİ, 15-29 DÜŞÜK, 30-49 ORTA, 50-69 YÜKSEK, 70-100 KRİTİK." },
   ccTransfer: { title: "Kredi Kartına Aktarılacak Tutar", text: "Bu ay kredi kartından yapılan tüm ödemelerin (sabit, değişken, tek çekim, taksitler) toplamıdır. Ay sonunda bu tutarı bankada kredi kartı hesabınıza aktarmanız gerekiyor — böylece kredi kartı borcunuz hesabınızdaki kullanılabilir bakiyeyi yanıltmaz." },
 };
 
@@ -1012,9 +1018,9 @@ function CCInstallModal({ data, mk, cards, variableExpenses, onClose, onSave, on
               return <div style={{ color: X.r, fontSize: 13, fontWeight: 600, marginBottom: 10, lineHeight: 1.5 }}>🚨 Bu taksitli işlem bütçenizi zorlar. {ml(sim.deficit)} ayında {C(Math.abs(defMonth?.remaining || 0))} açık oluşuyor. İşlemi onaylamadan önce o ayın giderlerini gözden geçirin.</div>;
             }
             if (cardLoadTight) {
-              return <div style={{ color: cardLoadHard ? X.r : X.w, fontSize: 13, fontWeight: 600, marginBottom: 10, lineHeight: 1.5 }}>⚠️ Bu taksitli işlem günlük harcama bütçenizi daraltır. {ml(minMonth.mk)} ayında kalan bütçe {C(minMonth.remaining)} olacak — genel harcama kartına yükleyebileceğiniz tutar {C(CARD_LOAD_MIN)} alt limitinin altına düşüyor. Günlük ihtiyaçlarınızı (market, akaryakıt, fatura) karşılamakta zorlanabilirsiniz.</div>;
+              return <div style={{ color: cardLoadHard ? X.r : X.w, fontSize: 13, fontWeight: 600, marginBottom: 10, lineHeight: 1.5 }}>⚠️ Bu taksitli işlem aylık serbest bütçenizi daraltır. {ml(minMonth.mk)} ayında kalan bütçe {C(minMonth.remaining)} olacak — genel harcama kartına yükleyebileceğiniz tutar {C(CARD_LOAD_MIN)} alt limitinin altına düşüyor. Genel harcama kartına yükleyebileceğiniz tutar alt limitin altına düşüyor.</div>;
             }
-            return <div style={{ color: X.g, fontSize: 13, fontWeight: 600, marginBottom: 10, lineHeight: 1.5 }}>✅ Bu taksitli işlemi yapabilirsiniz. Taksit sonrası en düşük aylık birikim: {C(minMonth.remaining)} ({ml(minMonth.mk)}). Hiçbir ayda bütçe açığı veya günlük harcama sıkışması oluşmuyor.</div>;
+            return <div style={{ color: X.g, fontSize: 13, fontWeight: 600, marginBottom: 10, lineHeight: 1.5 }}>✅ Bu taksitli işlemi yapabilirsiniz. Taksit sonrası en düşük aylık birikim: {C(minMonth.remaining)} ({ml(minMonth.mk)}). Hiçbir ayda bütçe açığı veya serbest bütçe sıkışması oluşmuyor.</div>;
           })()}
           <div style={{ display: "flex", gap: 8 }}>
             <Btn onClick={save} c={X.g} s={{ flex: 1 }} disabled={!cardId}>✓ Taksiti Onayla ve Kaydet</Btn>
@@ -1469,7 +1475,7 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
     });
   };
   const forecast = useMemo(() => { const ms = []; let m = nmk(mk); for (let i = 0; i < 6; i++) { const cm = calcMonth(data, m, null); const incs = data.settings.fixedExpenses.filter(f => f.increaseDate && f.increaseDate.startsWith(m)); ms.push({ mk: m, ...cm, increases: incs }); m = nmk(m); } return ms; }, [data, mk]);
-  const debtEnds = data.debts.filter(d => d.remainingMonths > 0).map(d => { let m = mk; for (let i = 0; i < d.remainingMonths; i++) m = nmk(m); return { name: d.name, endMonth: m, monthly: d.monthlyPayment }; });
+  const debtEnds = data.debts.filter(d => d.remainingMonths > 0).map(d => { let m = mk; for (let i = 0; i < d.remainingMonths; i++) m = nmk(m); return { name: d.name, endMonth: m, monthly: d.monthlyPayment, currency: d.currency, monthlyTL: debtTLValue(d, data, mk) }; });
 
   const guidance = useMemo(() => {
     const tips = [];
@@ -1565,9 +1571,11 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
       const nearest = debtEnds.sort((a, b) => a.endMonth.localeCompare(b.endMonth))[0];
       let monthsAway = 0; let m = mk;
       while (m < nearest.endMonth && monthsAway < 60) { m = nmk(m); monthsAway++; }
+      const sym = debtCurSymbol(nearest.currency);
+      const amtText = nearest.currency === "TRY" ? C(nearest.monthlyTL) : `${C(nearest.monthlyTL)} (${nearest.monthly} ${sym})`;
       tips.push({
         title: "🎯 Borç Bitiş Müjdesi",
-        text: `"${nearest.name}" borcunuz ${monthsAway} ay sonra (${ml(nearest.endMonth)}) bitecek. O tarihten itibaren her ay ${C(nearest.monthly)} bütçenizde rahatlama olacak. Bu rahatlamayı planlayın — birikim havuzuna ekleyebilir, yeni bir hedefe yönlendirebilir ya da başka bir borcu erken kapatmak için kullanabilirsiniz.`,
+        text: `"${nearest.name}" borcunuz ${monthsAway} ay sonra (${ml(nearest.endMonth)}) bitecek. O tarihten itibaren her ay ${amtText} bütçenizde rahatlama olacak. Bu rahatlamayı planlayın — birikim havuzuna ekleyebilir, yeni bir hedefe yönlendirebilir ya da başka bir borcu erken kapatmak için kullanabilirsiniz.`,
         color: X.g
       });
     }
@@ -1577,9 +1585,9 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
     if (cardLoadCapacity < CARD_LOAD_MIN) {
       const isHard = cardLoadCapacity < CARD_LOAD_MIN * (1 - CARD_LOAD_MIN_TOLERANCE);
       tips.push({
-        title: isHard ? "🚨 Günlük Harcama Bütçesi Yetersiz" : "⚠️ Günlük Harcama Bütçesi Azalıyor",
+        title: isHard ? "🚨 Aylık Serbest Bütçe Yetersiz" : "⚠️ Aylık Serbest Bütçe Azalıyor",
         text: isHard
-          ? `Genel harcama kartına bu ay yükleyebileceğiniz tutar ${C(cardLoadCapacity)} seviyesine düştü. Bu, ${C(CARD_LOAD_MIN)} alt limitinin altında. Günlük ihtiyaçlarınızı (market, akaryakıt, yemek) karşılamakta zorlanabilirsiniz. Kredi kartı tek çekim harcamalarınızı veya taksit yükünüzü gözden geçirin — bu kalemlerden birini azaltmadan günlük bütçeniz daralacak.`
+          ? `Genel harcama kartına bu ay yükleyebileceğiniz tutar ${C(cardLoadCapacity)} seviyesine düştü. Bu, ${C(CARD_LOAD_MIN)} alt limitinin altında. Aylık zorunlu harcamalarınız (market, akaryakıt, fatura) için yeterli alan kalmıyor. Kredi kartı tek çekim harcamalarınızı veya taksit yükünüzü gözden geçirin.`
           : `Genel harcama kartına bu ay yükleyebileceğiniz tutar ${C(cardLoadCapacity)} seviyesinde ve ${C(CARD_LOAD_MIN)} alt limitine yaklaşıyor. Yeni tek çekim veya taksitli işlem yapmadan önce bu dengeyi göz önünde bulundurun.`,
         color: isHard ? X.r : X.w
       });
