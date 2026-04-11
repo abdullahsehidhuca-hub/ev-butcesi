@@ -13,6 +13,8 @@ const PM = [{ id: "account", label: "Hesaptan", icon: "🏦" }, { id: "cc", labe
 
 const CARD_LOAD_PER_TX_PCT = 0.10; // tek seferde %10
 const CARD_LOAD_TOTAL_PCT = 0.15; // ay toplamı %15
+const CARD_LOAD_MIN = 40000; // kart yükleme kapasitesi bu tutarın altına düşmemeli
+const CARD_LOAD_MIN_TOLERANCE = 0.05; // %5 tolerans
 
 const DD = { settings: { monthlyBudget: 450000, fixedExpenses: [], variableExpenses: [], cards: [], emergencyFundTarget: null }, months: {}, installmentPlans: [], debts: [], merchantMap: {}, goldRates: {}, usdRates: {}, eurRates: {}, liveRates: { USD: null, EUR: null, XAU: null, fetchedAt: null }, savings: { TRY: [], USD: [], EUR: [], XAU: [] }, lastClosedMonth: null, lastBackup: null };
 const DM = () => ({ budget: null, fixedPaid: {}, variableEntries: {}, ccSingle: [], cardLoaded: 0, debtPayments: {}, ccTransferred: {}, csvByCard: {}, finalSavings: null });
@@ -274,7 +276,7 @@ function calcRisk(data, mk) {
   details.push({ label: "Yaklaşan artışlar (6 ay)", score: f4, max: 15, desc: incCount > 0 ? `${incCount} kalem artacak` : "Artış yok" });
   return { score: Math.min(100, score), details, monthsUntilDeficit: mudm, trendPct };
 }
-function getRiskInfo(score) { if (score >= 70) return { label: "KRİTİK", sub: "Acil müdahale gerekli", color: X.r }; if (score >= 50) return { label: "YÜKSEK", sub: "Gözden geçirin", color: "#FF6B35" }; if (score >= 30) return { label: "ORTA", sub: "Dikkatli olun", color: X.w }; if (score >= 15) return { label: "DÜŞÜK", sub: "Kontrol altında", color: "#84CC16" }; return { label: "GÜVENLİ", sub: "Sağlıklı", color: X.g }; }
+function getRiskInfo(score) { if (score >= 70) return { label: "KRİTİK", sub: "Harcamalar derhal kısılmalı", color: X.r }; if (score >= 50) return { label: "YÜKSEK", sub: "Harcamalarınızı gözden geçirin", color: "#FF6B35" }; if (score >= 30) return { label: "ORTA", sub: "Dikkatli olun", color: X.w }; if (score >= 15) return { label: "DÜŞÜK", sub: "Kontrol altında", color: "#84CC16" }; return { label: "GÜVENLİ", sub: "Bütçeniz sağlıklı", color: X.g }; }
 
 function genWarnings(data, mk) {
   const w = []; const up3 = [nmk(mk), nmk(nmk(mk)), nmk(nmk(nmk(mk)))];
@@ -283,6 +285,10 @@ function genWarnings(data, mk) {
   const c = calcMonth(data, mk, null); if (c.remaining < 0) w.push({ icon: "🚨", msg: `Bu ay ${C(Math.abs(c.remaining))} açık!`, color: X.r }); else if (c.remaining < c.effectiveBudget * 0.1) w.push({ icon: "⚠️", msg: "Kalan bütçe %10'un altında.", color: X.w });
   const md = data.months[mk] || DM(); Object.values(md.variableEntries || {}).forEach(entry => { const ve = data.settings.variableExpenses.find(v => v.id === entry.expenseId); if (ve && ve.expectedAmount > 0 && entry.amount > ve.expectedAmount * 1.1) w.push({ icon: "⚠️", msg: `${ve.name}: ${C(entry.amount)} (beklenen ${C(ve.expectedAmount)})`, color: X.w }); });
   if (c.carryoverDeficit > 0) w.push({ icon: "📉", msg: `Geçen aydan ${C(c.carryoverDeficit)} devir.`, color: X.o });
+  if (c.cardLoadRemaining < CARD_LOAD_MIN) {
+    const isHard = c.cardLoadRemaining < CARD_LOAD_MIN * (1 - CARD_LOAD_MIN_TOLERANCE);
+    w.push({ icon: isHard ? "🚨" : "⚠️", msg: `Genel harcama kartına yüklenebilir tutar ${C(c.cardLoadRemaining)} — ${C(CARD_LOAD_MIN)} limitinin ${isHard ? "altında" : "sınırında"}.`, color: isHard ? X.r : X.w });
+  }
   return w;
 }
 
@@ -290,7 +296,7 @@ function genWarnings(data, mk) {
 const INFO = {
   ccSingle: { title: "Kredi Kartı Tek Çekim", text: "Kredi kartınızla tek seferde yaptığınız harcamaları buraya kaydedersiniz. Bu tutar anında bütçenizden düşer ve aynı zamanda ay sonunda kredi kartı hesabınıza aktarmanız gereken tutara eklenir.\n\nÖrnek: Marketten 500 ₺'lik bir alışveriş yaptınız, kredi kartıyla tek çekim ödediyseniz buraya 500 ₺ girersiniz." },
   ccInstall: { title: "Kredi Kartı Taksitli", text: "Kredi kartıyla taksitli yaptığınız harcamalarınızın toplam aylık taksit yükünü gösterir. Yeni bir taksitli alışveriş eklediğinizde, ilk taksit gelecek aydan itibaren bütçenize otomatik yansır.\n\nÖrnek: 30.000 ₺ × 6 taksit alırsanız, 6 ay boyunca her ay 5.000 ₺ bütçenizden düşülür." },
-  cardLoad: { title: "Genel Harcama Kartı", text: "Eve dair zorunlu olmayan tüm harcamalar için kullandığımız ek banka kartı. Restoran, kıyafet, çocuk harcamaları, ufak tefek alımlar gibi günlük harcamalar buradan yapılır.\n\nKuralı: Tek seferde toplam bütçenin en fazla %10'u, ay toplamında en fazla %15'i bu karta yüklenebilir. Bu kuralın amacı, hesabınızda kredi kartı tek çekim harcamaları için tampon bırakmak.\n\nÖrnek: 450.000 ₺ bütçede tek seferde 45.000 ₺, ay toplamında 67.500 ₺." },
+  cardLoad: { title: "Genel Harcama Kartı", text: "Günlük harcamalar için kullandığınız banka kartı. Restoran, kıyafet, çocuk harcamaları, ufak tefek alımlar gibi zorunlu olmayan ev dışı harcamalar buradan yapılır.\n\nKuralı: Tek seferde toplam bütçenin en fazla %10'u, ay toplamında en fazla %15'i bu karta yüklenebilir. Bu kuralın amacı, hesabınızda kredi kartı ödemeleri için tampon bırakmak.\n\nÖrnek: 450.000 ₺ bütçede tek seferde en fazla 45.000 ₺, ay toplamında en fazla 67.500 ₺." },
   debt: { title: "Borç Ödemeleri", text: "Aktif borçlarınızın bu ay ödemeniz gereken toplam tutarını gösterir. Türk Lirası, dolar veya altın bazlı borçlarınız olabilir. Dolar ve altın borçları için güncel kur kullanılır.\n\nHer borç ödemesi yaptığınızda 'Ödedim' butonuna basarak teyit edersiniz, kalan taksit sayısı azalır." },
   simulate: { title: "Taksit Simülasyonu", text: "Yeni bir taksitli alım yapmadan önce 'şu kadar X taksitle alırsam bütçem nasıl etkilenir' sorusunu test etmek için kullanılır.\n\nTutar ve taksit sayısını girin, 'Simüle Et' deyin. Uygulama gelecek 6-8 ayın bütçenizin durumunu hem mevcut hem de bu taksitli alımla birlikte gösterir. Güvenliyse 'Onayla ve Kaydet' diyerek doğrudan kredi kartı taksitli kısmına ekleyebilirsiniz." },
   savings: { title: "Birikim", text: "Bugüne kadar bu ay biriktirebildiğiniz para ile bu ayın birikim hedefini gösterir.\n\nBirikim Hedefi şöyle hesaplanır:\nKalan Para − Beklenen Kredi Kartı Tek Çekim (son 3 ay ortalaması) − Henüz Yüklenmemiş Kart Rezervi (toplam %15'in kalan kısmı)\n\nYani sistem size 'eğer beklenen harcamalarını yaparsan ay sonunda bu kadar birikim yapmış olursun' diyor. Hedefe ne kadar yakınsanız o kadar başarılı bir aydır." },
@@ -321,7 +327,7 @@ function RiskBar({ score, onInfo }) {
 }
 
 /* ═══ TABS ═══ */
-const TABS = [{ id: "home", label: "Özet", icon: "◉" }, { id: "report", label: "Analiz", icon: "▤" }, { id: "settings", label: "Ayar", icon: "⚙" }];
+const TABS = [{ id: "home", label: "Özet", icon: "◉" }, { id: "report", label: "Analiz", icon: "▤" }, { id: "settings", label: "Ayarlar", icon: "⚙" }];
 function TabBar({ tab, setTab }) { return (<div style={{ position: "fixed", bottom: 0, left: 0, right: 0, ...glassSolid, borderRadius: "16px 16px 0 0", display: "flex", justifyContent: "space-around", padding: "6px 0 env(safe-area-inset-bottom, 8px)", zIndex: 100, boxShadow: "0 -4px 16px rgba(0,0,0,0.06)" }}>{TABS.map(t => (<button key={t.id} onClick={() => setTab(t.id)} style={{ background: "none", border: "none", display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "6px 20px", cursor: "pointer", color: tab === t.id ? X.g : X.td, fontFamily: ff }}><span style={{ fontSize: 20, lineHeight: 1 }}>{t.icon}</span><span style={{ fontSize: 10, fontWeight: 600 }}>{t.label}</span></button>))}</div>); }
 
 /* ═══ MODALS ═══ */
@@ -348,8 +354,8 @@ function CCSingleModal({ cards, variableExpenses, onClose, onSave }) {
         <Sel label="Hangi Kart" value={cardId} onChange={setCardId} options={cards.map(c => ({ v: c.id, l: c.name }))} />
       )}
       <Inp label="Tutar" type="number" value={a} onChange={sa} suffix="₺" />
-      <Inp label="Harcama Adı" value={n} onChange={sn} placeholder="Örn: Shell Çumra" />
-      <Inp label="Ekstrede Görünen İsim" value={mn} onChange={smn} placeholder="Opsiyonel" />
+      <Inp label="Harcama Açıklaması" value={n} onChange={sn} placeholder="Örn: Shell Çumra" />
+      <Inp label="Banka Ekstresindeki Adı (isteğe bağlı)" value={mn} onChange={smn} placeholder="Opsiyonel" />
       {(variableExpenses || []).length > 0 && (
         <Sel label="Kategori" value={categoryId} onChange={handleCategoryChange} options={[{ v: "", l: "— Otomatik / Kategorisiz —" }, ...(variableExpenses || []).map(ve => ({ v: ve.id, l: (ve.icon || "📋") + " " + ve.name }))]} />
       )}
@@ -371,8 +377,8 @@ function CardLoadModal({ currentLoaded, maxPerTx, maxTotal, onClose, onSave, onE
   return (
     <Modal title="🛒 Kart Yükleme" onClose={onClose}>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
-        <div><div style={{ color: X.tm, fontSize: 11 }}>Yüklenen</div><div style={{ color: X.t, fontSize: 22, fontWeight: 800, fontFamily: fm }}>{C(currentLoaded)}</div></div>
-        <div style={{ textAlign: "right" }}><div style={{ color: X.tm, fontSize: 11 }}>Ay Maks (%15)</div><div style={{ color: X.td, fontSize: 22, fontWeight: 800, fontFamily: fm }}>{C(maxTotal)}</div></div>
+        <div><div style={{ color: X.tm, fontSize: 11 }}>Bu Ay Yüklenen</div><div style={{ color: X.t, fontSize: 22, fontWeight: 800, fontFamily: fm }}>{C(currentLoaded)}</div></div>
+        <div style={{ textAlign: "right" }}><div style={{ color: X.tm, fontSize: 11 }}>Aylık Yükleme Limiti</div><div style={{ color: X.td, fontSize: 22, fontWeight: 800, fontFamily: fm }}>{C(maxTotal)}</div></div>
       </div>
       <div style={{ height: 4, borderRadius: 2, background: X.border, marginBottom: 8 }}><div style={{ height: "100%", borderRadius: 2, background: X.g, width: `${maxTotal > 0 ? Math.min((currentLoaded / maxTotal) * 100, 100) : 0}%` }} /></div>
       <div style={{ color: X.tm, fontSize: 11, marginBottom: 12 }}>Tek seferde maks: {C(maxPerTx)} • Bu ay yüklenebilir: {C(remaining)}</div>
@@ -411,7 +417,7 @@ function DebtPayModal({ debts, debtPayments, data, mk, onClose, onPay, onUndo })
                 <div style={{ color: X.tm, fontSize: 12 }}>
                   <span style={{ fontFamily: fm }}>{debt.monthlyPayment} {sym}</span>
                   {debt.currency !== "TRY" && <span style={{ color: X.td }}> ({C(tlVal)})</span>}
-                  <span> /ay • {debt.remainingMonths} ay</span>
+                  <span> aylık · {debt.remainingMonths} taksit kaldı</span>
                 </div>
               </div>
               {paid ? <button onClick={() => onUndo(debt.id)} style={{ background: "none", border: `1px solid ${X.td}`, borderRadius: 8, padding: "6px 12px", color: X.td, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>↩ Geri Al</button> : <Btn onClick={() => onPay(debt.id)} s={{ width: "auto", padding: "8px 16px", fontSize: 13 }}>Ödedim</Btn>}
@@ -724,7 +730,7 @@ function WeeklyBackupRitual({ data, setData }) {
         </Card>
 
         <Card s={{ marginBottom: 12 }}>
-          <div style={{ color: X.tm, fontSize: 12, fontWeight: 700, marginBottom: 10 }}>1. DOSYA OLARAK İNDİR (ZORUNLU)</div>
+          <div style={{ color: X.tm, fontSize: 12, fontWeight: 700, marginBottom: 10 }}>1. YEDEK DOSYASINI İNDİRİN</div>
           <p style={{ color: X.td, fontSize: 11, marginBottom: 10 }}>Yedek dosyası telefonunuza indirilecek. Dosya adı: <span style={{ fontFamily: fm, color: X.tm }}>ev-butcesi-{new Date().toISOString().slice(0, 10).replace(/-/g, ".")}.json</span></p>
           <Btn onClick={doDownload} c={downloaded ? X.g : X.w}>
             {downloaded ? "✓ İndirildi" : "📥 İndir"}
@@ -732,7 +738,7 @@ function WeeklyBackupRitual({ data, setData }) {
         </Card>
 
         <Card s={{ marginBottom: 12 }}>
-          <div style={{ color: X.tm, fontSize: 12, fontWeight: 700, marginBottom: 10 }}>2. KENDİNE MAIL AT (ÖNERİLEN)</div>
+          <div style={{ color: X.tm, fontSize: 12, fontWeight: 700, marginBottom: 10 }}>2. E-POSTA İLE KENDİNİZE GÖNDERİN</div>
           <p style={{ color: X.td, fontSize: 11, marginBottom: 10 }}>Mail uygulaması açılır, alıcı ve konu dolu gelir. İndirdiğiniz yedek dosyasını maile <strong>ek olarak sürükleyin</strong>, sonra "Gönder" tuşuna basın.</p>
           <Btn onClick={doOpenMail} v="outline" c={X.b} s={{ marginBottom: 8 }}>
             {shared ? "✓ Mail Açıldı" : "📧 Mail'de Aç"}
@@ -794,8 +800,8 @@ function CCInstallModal({ data, mk, cards, variableExpenses, onClose, onSave, st
       <Inp label="Toplam Tutar" type="number" value={a} onChange={v2 => { sa(v2); setSim(null); }} suffix="₺" placeholder="0" />
       <Inp label="Taksit Sayısı" type="number" value={mo} onChange={v2 => { smo(v2); setSim(null); }} />
       {t > 0 && m2 > 0 && <div style={{ color: X.tm, fontSize: 13, marginBottom: 12 }}>Aylık taksit: <span style={{ color: X.p, fontWeight: 800, fontFamily: fm, fontSize: 16 }}>{C(mp)}</span> × {m2} ay</div>}
-      <Inp label="Harcama Adı" value={n} onChange={sn} placeholder="Örn: Salon Mobilyası" />
-      <Inp label="Ekstrede Görünen İsim" value={mn} onChange={smn} placeholder="Opsiyonel" />
+      <Inp label="Harcama Açıklaması" value={n} onChange={sn} placeholder="Örn: Salon Mobilyası" />
+      <Inp label="Banka Ekstresindeki Adı (isteğe bağlı)" value={mn} onChange={smn} placeholder="Opsiyonel" />
       {(variableExpenses || []).length > 0 && (
         <Sel label="Kategori" value={categoryId} onChange={handleCategoryChange} options={[{ v: "", l: "— Otomatik / Kategorisiz —" }, ...(variableExpenses || []).map(ve => ({ v: ve.id, l: (ve.icon || "📋") + " " + ve.name }))]} />
       )}
@@ -803,14 +809,14 @@ function CCInstallModal({ data, mk, cards, variableExpenses, onClose, onSave, st
       {!sim && (
         <div style={{ display: "flex", gap: 8 }}>
           {!startInSim && <Btn onClick={save} c={X.p} s={{ flex: 1 }} disabled={!cardId}>📅 Direkt Kaydet</Btn>}
-          <Btn onClick={doSim} v={startInSim ? "filled" : "outline"} c={X.p} s={{ flex: 1 }}>🔮 Simüle Et</Btn>
+          <Btn onClick={doSim} v={startInSim ? "filled" : "outline"} c={X.p} s={{ flex: 1 }}>🔮 Hesapla</Btn>
         </div>
       )}
       {sim && (
         <>
           <Card s={{ marginBottom: 10, background: "rgba(200,218,212,0.45)", border: `1px solid ${X.border}` }}>
             <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 4, fontSize: 11, marginBottom: 4 }}>
-              <span style={{ color: X.td }}>Ay</span><span style={{ color: X.td, textAlign: "right" }}>Şimdi</span><span style={{ color: X.p, textAlign: "right" }}>Taksitle</span>
+              <span style={{ color: X.td }}>Ay</span><span style={{ color: X.td, textAlign: "right" }}>Şu Anki Kalan</span><span style={{ color: X.p, textAlign: "right" }}>Taksit Sonrası Kalan</span>
             </div>
             {sim.withS.map((ws, i) => { const wo = sim.without[i]; return (
               <div key={ws.mk} style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 4, padding: "5px 0", borderBottom: `1px solid ${X.border}`, fontSize: 12 }}>
@@ -820,10 +826,10 @@ function CCInstallModal({ data, mk, cards, variableExpenses, onClose, onSave, st
               </div>); })}
           </Card>
           {sim.deficit
-            ? <div style={{ color: X.r, fontSize: 13, fontWeight: 700, marginBottom: 10 }}>🚨 {ml(sim.deficit)} ayında açık oluşur!</div>
-            : <div style={{ color: X.g, fontSize: 13, fontWeight: 700, marginBottom: 10 }}>✅ Bütçeyi sarsmaz.</div>}
+            ? (() => { const defMonth = sim.withS.find(ws => ws.remaining < 0); return <div style={{ color: X.r, fontSize: 13, fontWeight: 600, marginBottom: 10, lineHeight: 1.5 }}>⚠️ Bu taksitli işlem bütçenizi zorlar. {ml(sim.deficit)} ayında {C(Math.abs(defMonth?.remaining || 0))} açık oluşuyor. İşlemi onaylamadan önce o ayın giderlerini gözden geçirin.</div>; })()
+            : (() => { const minMonth = sim.withS.reduce((min, ws) => ws.remaining < min.remaining ? ws : min, sim.withS[0]); return <div style={{ color: X.g, fontSize: 13, fontWeight: 600, marginBottom: 10, lineHeight: 1.5 }}>✅ Bu taksitli işlemi yapabilirsiniz. Taksit sonrası en düşük aylık birikim: {C(minMonth.remaining)} ({ml(minMonth.mk)}). Hiçbir ayda bütçe açığı oluşmuyor.</div>; })()}
           <div style={{ display: "flex", gap: 8 }}>
-            <Btn onClick={save} c={X.g} s={{ flex: 1 }} disabled={!cardId}>✓ Onayla ve Kaydet</Btn>
+            <Btn onClick={save} c={X.g} s={{ flex: 1 }} disabled={!cardId}>✓ Taksiti Onayla ve Kaydet</Btn>
             <Btn onClick={() => setSim(null)} v="outline" c={X.td} s={{ flex: 1 }}>Geri</Btn>
           </div>
         </>
@@ -1015,7 +1021,7 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
       {msg && <div style={{ background: X.gd, border: `1px solid ${X.g}`, borderRadius: 10, padding: 10, marginBottom: 10, color: X.g, fontSize: 14, fontWeight: 600, textAlign: "center" }}>{msg}</div>}
 
       <div style={{ margin: "8px 0 12px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: X.tm, marginBottom: 4 }}><span>{C(c.totalSpent)} harcandı</span><span>%{Math.min(Math.round(pct), 999)}</span></div>
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: X.tm, marginBottom: 4 }}><span>{C(c.totalSpent)} harcandı · {C(c.remaining)} kalan</span><span>%{Math.min(Math.round(pct), 999)}</span></div>
         <div style={{ height: 6, borderRadius: 3, background: X.border, overflow: "hidden" }}><div style={{ height: "100%", borderRadius: 3, background: pct > 100 ? X.r : pct > 80 ? X.w : X.g, width: `${Math.min(pct, 100)}%`, transition: "width 0.5s" }} /></div>
       </div>
 
@@ -1378,6 +1384,19 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
       });
     }
 
+    // Kart yükleme kapasitesi kontrolü
+    const cardLoadCapacity = c.cardLoadMaxTotal - (data.months[mk]?.cardLoaded || 0);
+    if (cardLoadCapacity < CARD_LOAD_MIN) {
+      const isHard = cardLoadCapacity < CARD_LOAD_MIN * (1 - CARD_LOAD_MIN_TOLERANCE);
+      tips.push({
+        title: isHard ? "🚨 Günlük Harcama Bütçesi Yetersiz" : "⚠️ Günlük Harcama Bütçesi Azalıyor",
+        text: isHard
+          ? `Genel harcama kartına bu ay yükleyebileceğiniz tutar ${C(cardLoadCapacity)} seviyesine düştü. Bu, ${C(CARD_LOAD_MIN)} alt limitinin altında. Günlük ihtiyaçlarınızı (market, akaryakıt, yemek) karşılamakta zorlanabilirsiniz. Kredi kartı tek çekim harcamalarınızı veya taksit yükünüzü gözden geçirin — bu kalemlerden birini azaltmadan günlük bütçeniz daralacak.`
+          : `Genel harcama kartına bu ay yükleyebileceğiniz tutar ${C(cardLoadCapacity)} seviyesinde ve ${C(CARD_LOAD_MIN)} alt limitine yaklaşıyor. Yeni tek çekim veya taksitli işlem yapmadan önce bu dengeyi göz önünde bulundurun.`,
+        color: isHard ? X.r : X.w
+      });
+    }
+
     return tips;
   }, [risk, data, c, debtEnds, mk]);
 
@@ -1398,10 +1417,10 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 16 }}>
         {[
           { id: "risk", l: "Risk", i: "⚠️" },
-          { id: "variable", l: "Kategoriler", i: "🔄" },
+          { id: "variable", l: "Harcama Kategorileri", i: "🔄" },
           { id: "debts", l: "Borçlar", i: "📌" },
           { id: "savings", l: "Birikim", i: "💰" },
-          { id: "csv", l: "Ekstre Dökümleri", i: "🧾" },
+          { id: "csv", l: "Banka Ekstresi Analizi", i: "🧾" },
           { id: "forecast", l: "Projeksiyon", i: "🔮" }
         ].map(t => (
           <button key={t.id} onClick={() => setView(t.id)} style={{ background: view === t.id ? X.gd : X.bg, border: `1px solid ${view === t.id ? X.g : X.border}`, borderRadius: 10, padding: "12px 6px", color: view === t.id ? X.g : X.tm, fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: ff, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, lineHeight: 1.2 }}>
@@ -1453,7 +1472,7 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
           <>
             <Card s={{ marginBottom: 12, background: "rgba(22,163,74,0.12)", border: "1px solid rgba(22,163,74,0.15)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div><div style={{ color: X.g, fontSize: 14, fontWeight: 800 }}>💰 Birikim Havuzu</div><div style={{ color: X.tm, fontSize: 11, marginTop: 2 }}>Anlık toplam TL değeri</div></div>
+                <div><div style={{ color: X.g, fontSize: 14, fontWeight: 800 }}>💰 Birikim Havuzu</div><div style={{ color: X.tm, fontSize: 11, marginTop: 2 }}>Tüm varlıklarınızın güncel TL karşılığı</div></div>
                 <span style={{ color: X.g, fontSize: 24, fontWeight: 800, fontFamily: fm }}>{C(totalSavings)}</span>
               </div>
             </Card>
@@ -1597,7 +1616,7 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
                 <>
                   <Sel label="Hangi Kartın Ekstresi?" value={csvCardId} onChange={setCsvCardId} options={[{ v: "", l: "— Seçin —" }, ...cards.map(c => ({ v: c.id, l: c.name }))]} />
                   <label style={{ display: "block", textAlign: "center" }}>
-                    <span style={{ display: "inline-block", background: csvCardId ? X.g : X.td, color: "#000", borderRadius: 10, padding: "12px 24px", fontSize: 14, fontWeight: 700, cursor: csvCardId ? "pointer" : "not-allowed" }}>📂 Ekstre Yükle</span>
+                    <span style={{ display: "inline-block", background: csvCardId ? X.g : X.td, color: "#000", borderRadius: 10, padding: "12px 24px", fontSize: 14, fontWeight: 700, cursor: csvCardId ? "pointer" : "not-allowed" }}>📂 CSV Dosyası Yükle</span>
                     <input type="file" accept=".csv" onChange={handleCSV} disabled={!csvCardId} style={{ display: "none" }} />
                   </label>
                 </>
@@ -1913,7 +1932,7 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
 /* ═══ SETTINGS ═══ */
 function Settings({ data, setData }) {
   const [sec, setSec] = useState(null); const [form, setForm] = useState({}); const mk = cmk();
-  const secs = [{ id: "budget", l: "Varsayılan Bütçe", i: "💰", d: C(data.settings.monthlyBudget) }, { id: "cards", l: "Kartlarım", i: "💳", d: `${(data.settings.cards || []).length} kart` }, { id: "fixed", l: "Sabit Zorunlu", i: "🔒", d: `${data.settings.fixedExpenses.length} kalem` }, { id: "variable", l: "Kategoriler", i: "🔄", d: `${data.settings.variableExpenses.length} kategori` }, { id: "debts", l: "Borçlar", i: "📌", d: `${data.debts.filter(d => d.remainingMonths > 0).length} aktif` }, { id: "emergency", l: "Acil Durum Fonu", i: "🛡️", d: data.settings.emergencyFundTarget ? C(data.settings.emergencyFundTarget) : "Hedef yok" }, { id: "rates", l: "Döviz & Altın Kuru", i: "💱", d: data.liveRates?.USD ? `$${data.liveRates.USD.toFixed(2)}` : "Manuel" }, { id: "backup", l: "Yedekleme", i: "💾", d: "Dışa/İçe aktarma" }, { id: "reset", l: "Sıfırla", i: "🗑️", d: "Geri alınamaz" }];
+  const secs = [{ id: "budget", l: "Aylık Bütçe", i: "💰", d: C(data.settings.monthlyBudget) }, { id: "cards", l: "Kartlarım", i: "💳", d: `${(data.settings.cards || []).length} kart` }, { id: "fixed", l: "Sabit Giderler", i: "🔒", d: `${data.settings.fixedExpenses.length} kalem` }, { id: "variable", l: "Harcama Kategorileri", i: "🔄", d: `${data.settings.variableExpenses.length} kategori` }, { id: "debts", l: "Borçlar", i: "📌", d: `${data.debts.filter(d => d.remainingMonths > 0).length} aktif` }, { id: "emergency", l: "Acil Durum Fonu", i: "🛡️", d: data.settings.emergencyFundTarget ? C(data.settings.emergencyFundTarget) : "Henüz belirlenmedi" }, { id: "rates", l: "Güncel Kurlar", i: "💱", d: data.liveRates?.USD ? `$${data.liveRates.USD.toFixed(2)}` : "Henüz girilmedi" }, { id: "backup", l: "Yedekleme", i: "💾", d: "Yedek Al / Geri Yükle" }, { id: "reset", l: "Sıfırla", i: "🗑️", d: "Geri alınamaz" }];
   const BackBtn = () => <button onClick={() => setSec(null)} style={{ background: "none", border: "none", color: X.g, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff, padding: 0, marginBottom: 16 }}>← Geri</button>;
   if (!sec) return (<div style={{ padding: "20px 16px 100px" }}><h2 style={{ color: X.t, fontSize: 20, margin: "0 0 16px", fontFamily: ff }}>Ayarlar</h2><div style={{ display: "flex", flexDirection: "column", gap: 8 }}>{secs.map(s => (<Card key={s.id} onClick={() => { setSec(s.id); setForm({}); }} s={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 14 }}><span style={{ fontSize: 24 }}>{s.i}</span><div style={{ flex: 1 }}><div style={{ color: X.t, fontWeight: 700, fontSize: 15 }}>{s.l}</div><div style={{ color: X.td, fontSize: 12 }}>{s.d}</div></div><span style={{ color: X.td }}>›</span></Card>))}</div></div>);
   if (sec === "budget") return (<div style={{ padding: "20px 16px 100px" }}><BackBtn /><Inp label="Varsayılan (₺)" type="number" value={form.b ?? data.settings.monthlyBudget} onChange={v => setForm({ b: v })} suffix="₺" /><Btn onClick={() => { setData(d => ({ ...d, settings: { ...d.settings, monthlyBudget: parseFloat(form.b) || 0 } })); setSec(null); }}>Kaydet</Btn></div>);
@@ -2467,7 +2486,7 @@ export default function App() {
       <div style={{ ...glassSolid, borderBottom: "none", borderRadius: "0 0 18px 18px", padding: "calc(12px + env(safe-area-inset-top)) 20px 12px", display: "flex", justifyContent: "space-between", alignItems: "center", position: "sticky", top: 0, zIndex: 50, boxShadow: "0 4px 16px rgba(0,0,0,0.06)" }}>
         <div><div style={{ fontSize: 15, fontWeight: 800, letterSpacing: "-0.3px", color: X.t }}>EV BÜTÇESİ</div><div style={{ fontSize: 11, color: X.td }}>{ml(mk)}</div></div>
         <div style={{ textAlign: "right" }}>
-          <div style={{ fontSize: 10, color: X.tm, letterSpacing: 0.5 }}>BÜTÇE / KALAN</div>
+          <div style={{ fontSize: 10, color: X.tm, letterSpacing: 0.5 }}>BÜTÇE · KALAN</div>
           <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
             <span style={{ fontSize: 14, fontWeight: 600, color: X.td, fontFamily: fm }}>{C(c.effectiveBudget)}</span>
             <span style={{ color: X.td }}>/</span>
