@@ -1,5 +1,22 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import * as Papa from "papaparse";
+import { initializeApp } from "firebase/app";
+import { getDatabase, ref, set, get, onValue } from "firebase/database";
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from "firebase/auth";
+
+// Firebase Config
+const firebaseConfig = {
+  apiKey: "AIzaSyBFpSgazGkMfFYN2APXgaujt6Dw1ZgrOIY",
+  authDomain: "ev-butcesi-388b9.firebaseapp.com",
+  databaseURL: "https://ev-butcesi-96167-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "ev-butcesi-388b9",
+  storageBucket: "ev-butcesi-388b9.firebasestorage.app",
+  messagingSenderId: "338793899975",
+  appId: "1:338793899975:web:79603853c5d6b671bbdbe2"
+};
+const fbApp = initializeApp(firebaseConfig);
+const rtdb = getDatabase(fbApp);
+const auth = getAuth(fbApp);
 
 const C = n => new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n);
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -21,47 +38,39 @@ const DM = () => ({ budget: null, fixedPaid: {}, variableEntries: {}, ccSingle: 
 
 const STORAGE_KEY = "ev-butce-v11";
 
-async function loadDB() {
-  // 1. Önce Claude window.storage dene (artifact ortamı)
+async function loadDB(uid) {
+  // 1. Realtime Database'den oku
   try {
-    if (typeof window !== "undefined" && window.storage?.get) {
-      const r = await window.storage.get(STORAGE_KEY);
-      if (r) return JSON.parse(r.value);
+    if (uid) {
+      const snap = await get(ref(rtdb, `budgets/${uid}`));
+      if (snap.exists()) {
+        const data = snap.val();
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch {}
+        return data;
+      }
     }
-  } catch { }
-  // 2. localStorage fallback (Vercel/GitHub/bağımsız deployment)
+  } catch (e) { console.warn("Firebase okuma hatası:", e); }
+  // 2. localStorage fallback
   try {
-    if (typeof localStorage !== "undefined") {
-      const r = localStorage.getItem(STORAGE_KEY);
-      if (r) return JSON.parse(r);
-    }
-  } catch { }
+    const r = localStorage.getItem(STORAGE_KEY);
+    if (r) return JSON.parse(r);
+  } catch {}
   return null;
 }
 
-async function saveDB(d) {
-  const json = JSON.stringify(d);
-  let saved = false;
-  // 1. Claude window.storage dene
+async function saveDB(d, uid) {
+  const clean = JSON.parse(JSON.stringify(d)); // undefined değerleri temizle
+  // 1. Firebase'e kaydet
   try {
-    if (typeof window !== "undefined" && window.storage?.set) {
-      await window.storage.set(STORAGE_KEY, json);
-      saved = true;
-    }
-  } catch { }
-  // 2. localStorage yedek (her zaman yedek olarak)
-  try {
-    if (typeof localStorage !== "undefined") {
-      localStorage.setItem(STORAGE_KEY, json);
-      saved = true;
-    }
-  } catch { }
-  return saved;
+    if (uid) await set(ref(rtdb, `budgets/${uid}`), clean);
+  } catch (e) { console.warn("Firebase kayıt hatası:", e); }
+  // 2. localStorage yedek
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); } catch {}
 }
 
-async function deleteDB() {
-  try { if (window.storage?.delete) await window.storage.delete(STORAGE_KEY); } catch { }
-  try { localStorage.removeItem(STORAGE_KEY); } catch { }
+async function deleteDB(uid) {
+  try { if (uid) await set(ref(rtdb, `budgets/${uid}`), null); } catch {}
+  try { localStorage.removeItem(STORAGE_KEY); } catch {}
 }
 
 /* ═══ KUR SİSTEMİ (sadece manuel) ═══ */
@@ -2213,7 +2222,7 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
 /* ═══ SETTINGS ═══ */
 function Settings({ data, setData }) {
   const [sec, setSec] = useState(null); const [form, setForm] = useState({}); const mk = cmk();
-  const secs = [{ id: "budget", l: "Aylık Bütçe", i: "💰", d: C(data.settings.monthlyBudget) }, { id: "cards", l: "Kartlarım", i: "💳", d: `${(data.settings.cards || []).length} kart` }, { id: "fixed", l: "Sabit Giderler", i: "🔒", d: `${data.settings.fixedExpenses.length} kalem` }, { id: "variable", l: "Harcama Kategorileri", i: "🔄", d: `${data.settings.variableExpenses.length} kategori` }, { id: "debts", l: "Borçlar", i: "📌", d: `${data.debts.filter(d => d.remainingMonths > 0).length} aktif` }, { id: "emergency", l: "Acil Durum Fonu", i: "🛡️", d: data.settings.emergencyFundTarget ? C(data.settings.emergencyFundTarget) : "Henüz belirlenmedi" }, { id: "rates", l: "Güncel Kurlar", i: "💱", d: data.liveRates?.USD ? `$${data.liveRates.USD.toFixed(2)}` : "Henüz girilmedi" }, { id: "backup", l: "Yedekleme", i: "💾", d: "Yedek Al / Geri Yükle" }, { id: "reset", l: "Sıfırla", i: "🗑️", d: "Geri alınamaz" }];
+  const secs = [{ id: "budget", l: "Aylık Bütçe", i: "💰", d: C(data.settings.monthlyBudget) }, { id: "cards", l: "Kartlarım", i: "💳", d: `${(data.settings.cards || []).length} kart` }, { id: "fixed", l: "Sabit Giderler", i: "🔒", d: `${data.settings.fixedExpenses.length} kalem` }, { id: "variable", l: "Harcama Kategorileri", i: "🔄", d: `${data.settings.variableExpenses.length} kategori` }, { id: "debts", l: "Borçlar", i: "📌", d: `${data.debts.filter(d => d.remainingMonths > 0).length} aktif` }, { id: "emergency", l: "Acil Durum Fonu", i: "🛡️", d: data.settings.emergencyFundTarget ? C(data.settings.emergencyFundTarget) : "Henüz belirlenmedi" }, { id: "rates", l: "Güncel Kurlar", i: "💱", d: data.liveRates?.USD ? `$${data.liveRates.USD.toFixed(2)}` : "Henüz girilmedi" }, { id: "backup", l: "Yedekleme", i: "💾", d: "Yedek Al / Geri Yükle" }, { id: "reset", l: "Sıfırla", i: "🗑️", d: "Geri alınamaz" }, { id: "logout", l: "Çıkış Yap", i: "🚪", d: auth.currentUser?.email || "" }];
   const BackBtn = () => <button onClick={() => setSec(null)} style={{ background: "none", border: "none", color: X.g, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff, padding: 0, marginBottom: 16 }}>← Geri</button>;
   if (!sec) return (<div style={{ padding: "20px 16px 100px" }}><h2 style={{ color: X.t, fontSize: 20, margin: "0 0 16px", fontFamily: ff }}>Ayarlar</h2><div style={{ display: "flex", flexDirection: "column", gap: 8 }}>{secs.map(s => (<Card key={s.id} onClick={() => { setSec(s.id); setForm({}); }} s={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 14 }}><span style={{ fontSize: 24 }}>{s.i}</span><div style={{ flex: 1 }}><div style={{ color: X.t, fontWeight: 700, fontSize: 15 }}>{s.l}</div><div style={{ color: X.td, fontSize: 12 }}>{s.d}</div></div><span style={{ color: X.td }}>›</span></Card>))}</div></div>);
   if (sec === "budget") return (<div style={{ padding: "20px 16px 100px" }}><BackBtn /><Inp label="Varsayılan (₺)" type="number" value={form.b ?? data.settings.monthlyBudget} onChange={v => setForm({ b: v })} suffix="₺" /><Btn onClick={() => { setData(d => ({ ...d, settings: { ...d.settings, monthlyBudget: parseFloat(form.b) || 0 } })); setSec(null); }}>Kaydet</Btn></div>);
@@ -2224,7 +2233,8 @@ function Settings({ data, setData }) {
   if (sec === "emergency") return <EmergencyFundSettings data={data} setData={setData} onBack={() => setSec(null)} />;
   if (sec === "rates") return <RatesSettings data={data} setData={setData} onBack={() => setSec(null)} />;
   if (sec === "backup") return <BackupSettings data={data} setData={setData} onBack={() => setSec(null)} />;
-  if (sec === "reset") return (<div style={{ padding: "20px 16px 100px" }}><BackBtn /><Card s={{ border: `1px solid ${X.r}`, background: X.rd, textAlign: "center", padding: 24 }}><div style={{ fontSize: 36, marginBottom: 8 }}>⚠️</div><Btn c={X.r} onClick={async () => { await deleteDB(); setData({ ...DD }); setSec(null); }}>Tüm Verileri Sil</Btn></Card></div>);
+  if (sec === "reset") return (<div style={{ padding: "20px 16px 100px" }}><BackBtn /><Card s={{ border: `1px solid ${X.r}`, background: X.rd, textAlign: "center", padding: 24 }}><div style={{ fontSize: 36, marginBottom: 8 }}>⚠️</div><Btn c={X.r} onClick={async () => { await deleteDB(auth.currentUser?.uid); setData({ ...DD }); setSec(null); }}>Tüm Verileri Sil</Btn></Card></div>);
+  if (sec === "logout") return (<div style={{ padding: "20px 16px 100px" }}><BackBtn /><Card s={{ textAlign: "center", padding: 24 }}><div style={{ fontSize: 36, marginBottom: 8 }}>🚪</div><div style={{ color: X.t, fontSize: 14, marginBottom: 8 }}>Giriş yapan: <strong>{auth.currentUser?.email}</strong></div><div style={{ color: X.tm, fontSize: 12, marginBottom: 16 }}>Çıkış yaptığınızda verileriniz bulutta güvende kalır. Tekrar aynı hesapla giriş yapabilirsiniz.</div><Btn c={X.r} onClick={() => signOut(auth)}>Çıkış Yap</Btn></Card></div>);
   return null;
 }
 function FixedSettings({ data, setData, onBack }) {
@@ -2730,31 +2740,116 @@ function MonthCloseRitual({ data, setData, prevMk, onClose }) {
 }
 
 /* ═══ MAIN ═══ */
+function LoginScreen() {
+  const [email, setEmail] = useState("");
+  const [pass, setPass] = useState("");
+  const [isRegister, setIsRegister] = useState(false);
+  const [err, setErr] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!email || !pass) { setErr("E-posta ve şifre gerekli"); return; }
+    if (pass.length < 6) { setErr("Şifre en az 6 karakter olmalı"); return; }
+    setLoading(true); setErr("");
+    try {
+      if (isRegister) {
+        await createUserWithEmailAndPassword(auth, email, pass);
+      } else {
+        await signInWithEmailAndPassword(auth, email, pass);
+      }
+    } catch (e) {
+      if (e.code === "auth/user-not-found") setErr("Bu e-posta ile kayıtlı hesap yok. Kayıt olun.");
+      else if (e.code === "auth/wrong-password" || e.code === "auth/invalid-credential") setErr("Şifre yanlış.");
+      else if (e.code === "auth/email-already-in-use") setErr("Bu e-posta zaten kayıtlı. Giriş yapın.");
+      else if (e.code === "auth/invalid-email") setErr("Geçersiz e-posta adresi.");
+      else setErr(e.message);
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div style={{ background: "linear-gradient(160deg, #E4E9F2 0%, #D8DFE8 40%, #E8ECF4 100%)", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: ff, padding: 16 }}>
+      <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700;800&family=JetBrains+Mono:wght@400;700;800&display=swap" rel="stylesheet" />
+      <div style={{ ...glassSolid, borderRadius: 20, width: "100%", maxWidth: 380, padding: 28, boxShadow: neu }}>
+        <div style={{ textAlign: "center", marginBottom: 24 }}>
+          <div style={{ fontSize: 40, marginBottom: 8 }}>💰</div>
+          <div style={{ color: X.t, fontSize: 22, fontWeight: 800 }}>EV BÜTÇESİ</div>
+          <div style={{ color: X.tm, fontSize: 13, marginTop: 4 }}>{isRegister ? "Yeni hesap oluştur" : "Giriş yap"}</div>
+        </div>
+        {err && <div style={{ background: X.rd, border: `1px solid ${X.r}`, borderRadius: 10, padding: "8px 12px", marginBottom: 12, color: X.r, fontSize: 12, fontWeight: 600 }}>{err}</div>}
+        <Inp label="E-posta" value={email} onChange={setEmail} placeholder="ornek@gmail.com" />
+        <Inp label="Şifre" type="password" value={pass} onChange={setPass} placeholder="••••••" />
+        <Btn onClick={handleSubmit} disabled={loading}>{loading ? "Yükleniyor..." : isRegister ? "Kayıt Ol" : "Giriş Yap"}</Btn>
+        <div style={{ textAlign: "center", marginTop: 16 }}>
+          <button onClick={() => { setIsRegister(!isRegister); setErr(""); }} style={{ background: "none", border: "none", color: X.b, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: ff }}>
+            {isRegister ? "Zaten hesabım var → Giriş Yap" : "Hesabım yok → Kayıt Ol"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
-  const [data, setData] = useState(DD); const [loaded, setLoaded] = useState(false); const [tab, setTab] = useState("home"); const mk = cmk();
-  useEffect(() => { loadDB().then(d => { if (d) setData({ ...DD, ...d, settings: { ...DD.settings, ...(d.settings || {}) }, liveRates: d.liveRates || DD.liveRates, savings: { ...DD.savings, ...(d.savings || {}) }, lastClosedMonth: d.lastClosedMonth || null, lastBackup: d.lastBackup || null }); setLoaded(true); }); }, []);
-  useEffect(() => { if (loaded) saveDB(data); }, [data, loaded]);
+  const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [data, setData] = useState(DD);
+  const [loaded, setLoaded] = useState(false);
+  const [tab, setTab] = useState("home");
+  const mk = cmk();
+
+  // Auth state listener
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, u => { setUser(u); setAuthLoading(false); });
+    return unsub;
+  }, []);
+
+  // Realtime Database'den veri yükle + realtime sync
+  useEffect(() => {
+    if (!user) { setLoaded(false); return; }
+    let unsubValue = null;
+
+    loadDB(user.uid).then(d => {
+      if (d) setData({ ...DD, ...d, settings: { ...DD.settings, ...(d.settings || {}) }, liveRates: d.liveRates || DD.liveRates, savings: { ...DD.savings, ...(d.savings || {}) }, lastClosedMonth: d.lastClosedMonth || null, lastBackup: d.lastBackup || null });
+      setLoaded(true);
+
+      // Realtime sync: diğer cihazdan değişiklik geldiğinde güncelle
+      unsubValue = onValue(ref(rtdb, `budgets/${user.uid}`), snap => {
+        if (snap.exists()) {
+          const r = snap.val();
+          setData(prev => {
+            if (JSON.stringify(r) !== JSON.stringify(prev)) {
+              return { ...DD, ...r, settings: { ...DD.settings, ...(r.settings || {}) }, liveRates: r.liveRates || DD.liveRates, savings: { ...DD.savings, ...(r.savings || {}) }, lastClosedMonth: r.lastClosedMonth || null, lastBackup: r.lastBackup || null };
+            }
+            return prev;
+          });
+        }
+      }, err => console.warn("Sync hatası:", err));
+    });
+
+    return () => { if (unsubValue) unsubValue(); };
+  }, [user]);
+
+  // Veri değiştiğinde kaydet
+  useEffect(() => { if (loaded && user) saveDB(data, user.uid); }, [data, loaded, user]);
 
   const gmd = useCallback(m => data.months[m] || DM(), [data.months]);
   const smf = useCallback((m, f, v) => { setData(d => { const ms = { ...d.months }; const md = { ...(ms[m] || DM()) }; md[f] = v; ms[m] = md; return { ...d, months: ms }; }); }, []);
 
-  // Ay kapatma: Hangi önceki ay kapatılması gerekiyor?
   const pendingCloseMk = useMemo(() => {
     if (!loaded) return null;
     const last = data.lastClosedMonth;
-    const prev = pmk(mk); // bu aydan önceki ay
-    // Hiç kapatılmamışsa: sadece önceki ayda bir veri varsa kapat, yoksa işaretleme
-    if (!last) {
-      if (data.months[prev]) return prev;
-      return null;
-    }
-    // Bir sonraki kapatılması gereken ay
+    const prev = pmk(mk);
+    if (!last) { if (data.months[prev]) return prev; return null; }
     const nextToClose = nmk(last);
     if (nextToClose < mk) return nextToClose;
     return null;
   }, [loaded, data.lastClosedMonth, data.months, mk]);
 
-  if (!loaded) return <div style={{ background: "rgba(200,218,212,0.45)", height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: X.g, fontFamily: ff }}>Yükleniyor...</div>;
+  if (authLoading) return <div style={{ background: "linear-gradient(160deg, #E4E9F2, #D8DFE8, #E8ECF4)", height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: X.g, fontFamily: ff, fontSize: 16 }}>Yükleniyor...</div>;
+  if (!user) return <LoginScreen />;
+  if (!loaded) return <div style={{ background: "linear-gradient(160deg, #E4E9F2, #D8DFE8, #E8ECF4)", height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: X.g, fontFamily: ff, fontSize: 16 }}>Veriler yükleniyor...</div>;
+
   const c = calcMonth(data, mk, null);
 
   return (
