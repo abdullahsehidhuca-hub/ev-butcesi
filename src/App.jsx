@@ -6,13 +6,13 @@ import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, on
 
 // Firebase Config
 const firebaseConfig = {
-  apiKey: "AIzaSyBFpSgazGkMfFYN2APXgaujt6Dw1ZgrOIY",
-  authDomain: "ev-butcesi-388b9.firebaseapp.com",
+  apiKey: "AIzaSyCeOj-MRauM6QwKk56xSb3B9woKAnEA71Y",
+  authDomain: "ev-butcesi-96167.firebaseapp.com",
   databaseURL: "https://ev-butcesi-96167-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "ev-butcesi-388b9",
-  storageBucket: "ev-butcesi-388b9.firebasestorage.app",
-  messagingSenderId: "338793899975",
-  appId: "1:338793899975:web:79603853c5d6b671bbdbe2"
+  projectId: "ev-butcesi-96167",
+  storageBucket: "ev-butcesi-96167.firebasestorage.app",
+  messagingSenderId: "743390678681",
+  appId: "1:743390678681:web:cc31aba583a2be5ca73208"
 };
 const fbApp = initializeApp(firebaseConfig);
 const rtdb = getDatabase(fbApp);
