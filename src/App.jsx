@@ -2313,13 +2313,26 @@ function PlanningScreen({ data, setData, mk }) {
   const assets = ["TRY", "XAU", "USD", "EUR"];
   const totalSavings = getTotalSavingsTL(data);
 
-  // 12 Ay Haritası verileri
+  // 12 Ay Haritası verileri (artış simülasyonu entegre)
+  const expensesWithIncrease = data.settings.fixedExpenses.filter(e => e.increaseDate);
+
   const yearMap = useMemo(() => {
     const months = [];
     let m = mk;
     for (let i = 0; i < 12; i++) {
       const mc = calcMonth(data, m, null);
       const events = [];
+
+      // Artış simülasyonu: bu ay veya öncesinde artış olan giderlerin ek yükünü hesapla
+      let incImpact = 0;
+      expensesWithIncrease.forEach(exp => {
+        const pct = parseFloat(incSim[exp.id]) || 0;
+        if (pct > 0 && exp.increaseDate && exp.increaseDate <= m) {
+          const impact = Math.round(exp.amount * pct / 100);
+          incImpact += impact;
+        }
+      });
+
       // Taksit başlama/bitiş
       data.installmentPlans.forEach(p => {
         if (p.startMonth === m) events.push({ icon: "📅", text: `Taksit başladı: ${p.note || "Taksitli işlem"}`, color: X.p });
@@ -2332,31 +2345,32 @@ function PlanningScreen({ data, setData, mk }) {
         let em = mk;
         for (let j = 0; j < d.remainingMonths; j++) em = nmk(em);
         if (pmk(em) === m) {
-          const sym = debtCurSymbol(d.currency);
           const tlVal = debtTLValue(d, data, mk);
           events.push({ icon: "🎯", text: `Borç bitti: ${d.name} (+${C(tlVal)}/ay)`, color: X.g });
         }
       });
-      // Artışlar
+      // Artışlar (simülasyonla zenginleştirilmiş)
       data.settings.fixedExpenses.forEach(exp => {
         if (exp.increaseDate && exp.increaseDate.startsWith(m)) {
-          events.push({ icon: "📈", text: `Artış: ${exp.name} (şu an ${C(exp.amount)})`, color: X.o });
+          const pct = parseFloat(incSim[exp.id]) || 0;
+          if (pct > 0) {
+            const newAmt = exp.amount + Math.round(exp.amount * pct / 100);
+            events.push({ icon: "📈", text: `${exp.name}: ${C(exp.amount)} → ${C(newAmt)} (%${pct})`, color: X.o });
+          } else {
+            events.push({ icon: "📈", text: `Artış: ${exp.name} (şu an ${C(exp.amount)}) — oran girilmedi`, color: X.td });
+          }
         }
       });
-      months.push({ mk: m, ...mc, events });
+
+      // Artış etkisini düş
+      const adjustedRemaining = mc.remaining - incImpact;
+      const adjustedTotalSpent = mc.totalSpent + incImpact;
+
+      months.push({ mk: m, ...mc, remaining: adjustedRemaining, totalSpent: adjustedTotalSpent, incImpact, events });
       m = nmk(m);
     }
     return months;
-  }, [data, mk]);
-
-  // Artış simülasyonu
-  const expensesWithIncrease = data.settings.fixedExpenses.filter(e => e.increaseDate);
-  const incSimTotal = useMemo(() => {
-    return expensesWithIncrease.reduce((s, e) => {
-      const pct = parseFloat(incSim[e.id]) || 0;
-      return s + Math.round(e.amount * pct / 100);
-    }, 0);
-  }, [incSim, expensesWithIncrease]);
+  }, [data, mk, incSim]);
 
   // Borç bitiş verileri
   const debtEnds = data.debts.filter(d => d.remainingMonths > 0).map(d => {
@@ -2367,7 +2381,6 @@ function PlanningScreen({ data, setData, mk }) {
 
   const views = [
     { id: "map", l: "12 Ay Haritası", i: "🗺️" },
-    { id: "increases", l: "Artış Simülasyonu", i: "📈" },
     { id: "debts", l: "Borçlar", i: "📌" },
     { id: "savings", l: "Birikim", i: "💰" },
   ];
@@ -2386,17 +2399,45 @@ function PlanningScreen({ data, setData, mk }) {
       {/* 12 AY HARİTASI */}
       {view === "map" && (
         <>
+          {/* ARTIŞ TAHMİNLERİ */}
+          {expensesWithIncrease.length > 0 && (
+            <Card s={{ marginBottom: 12, border: `1px solid ${X.o}40` }}>
+              <div style={{ color: X.o, fontSize: 12, fontWeight: 700, marginBottom: 8 }}>📈 ARTIŞ TAHMİNLERİ</div>
+              <div style={{ color: X.td, fontSize: 10, marginBottom: 10 }}>Tahmini artış oranlarını girin — harita otomatik güncellenir.</div>
+              {expensesWithIncrease.map(exp => {
+                const pct = incSim[exp.id] || "";
+                const impact = Math.round(exp.amount * (parseFloat(pct) || 0) / 100);
+                return (
+                  <div key={exp.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 0", borderBottom: "1px solid rgba(0,0,0,0.04)" }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ color: X.t, fontSize: 12, fontWeight: 600 }}>{exp.name}</div>
+                      <div style={{ color: X.td, fontSize: 10 }}>{C(exp.amount)} · {ml(exp.increaseDate)}</div>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                      <span style={{ color: X.tm, fontSize: 11 }}>%</span>
+                      <input type="number" value={pct} onChange={e => setIncSim(s => ({ ...s, [exp.id]: e.target.value }))} placeholder="0" style={{ width: 48, background: "rgba(220,235,230,0.6)", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 6, padding: "4px 6px", color: X.t, fontSize: 13, fontFamily: fm, outline: "none", textAlign: "center" }} />
+                    </div>
+                    {impact > 0 && <div style={{ color: X.o, fontSize: 11, fontWeight: 700, fontFamily: fm, flexShrink: 0 }}>+{C(impact)}</div>}
+                  </div>
+                );
+              })}
+            </Card>
+          )}
+
+          {/* AY AY HARİTA */}
           <Card s={{ marginBottom: 12 }}>
             <div style={{ color: X.tm, fontSize: 13, fontWeight: 700, marginBottom: 12 }}>GELECEK 12 AY</div>
             {yearMap.map((m2, i) => {
               const showBreakdown = () => {
                 const bd = getMonthBreakdown(data, m2.mk);
+                const rows = [...bd.rows];
+                if (m2.incImpact > 0) rows.push({ label: "Tahmini artış etkisi", value: m2.incImpact, sign: "−", color: X.o });
                 setDetail({
                   title: `${ml(m2.mk)} — Bütçe Dökümü`,
-                  rows: bd.rows,
-                  total: bd.mc.remaining,
-                  totalLabel: "Serbest bütçe",
-                  totalColor: bd.mc.remaining >= CARD_LOAD_MIN ? X.g : bd.mc.remaining >= 0 ? X.w : X.r
+                  rows,
+                  total: m2.remaining,
+                  totalLabel: "Kullanılabilir genel harcama limiti",
+                  totalColor: m2.remaining >= CARD_LOAD_MIN ? X.g : m2.remaining >= 0 ? X.w : X.r
                 });
               };
               return (
@@ -2405,14 +2446,14 @@ function PlanningScreen({ data, setData, mk }) {
                   <div style={{ flex: 1 }}>
                     <div style={{ color: X.t, fontSize: 14, fontWeight: i === 0 ? 800 : 600 }}>{ml(m2.mk)}{i === 0 ? " (bu ay)" : ""}</div>
                     <TapAmt onTap={showBreakdown} color={X.td}>
-                      <span style={{ color: X.td, fontSize: 10 }}>Aylık yükümlülük: {C(m2.totalSpent)}</span>
+                      <span style={{ color: X.td, fontSize: 10 }}>Tahmini zorunlu gider: {C(m2.totalSpent)}</span>
                     </TapAmt>
                   </div>
                   <div style={{ textAlign: "right" }}>
                     <TapAmt onTap={showBreakdown} color={m2.remaining >= CARD_LOAD_MIN ? X.g : m2.remaining >= 0 ? X.w : X.r}>
                       <span style={{ color: m2.remaining >= CARD_LOAD_MIN ? X.g : m2.remaining >= 0 ? X.w : X.r, fontWeight: 800, fontFamily: fm, fontSize: 16 }}>{C(m2.remaining)}</span>
                     </TapAmt>
-                    <div style={{ color: X.td, fontSize: 9 }}>serbest</div>
+                    <div style={{ color: X.td, fontSize: 8 }}>kullanılabilir limit</div>
                   </div>
                 </div>
                 {m2.events.length > 0 && (
@@ -2447,72 +2488,6 @@ function PlanningScreen({ data, setData, mk }) {
               <span style={{ color: yearMap.filter(m2 => m2.remaining < CARD_LOAD_MIN).length > 0 ? X.w : X.g, fontFamily: fm, fontWeight: 700 }}>{yearMap.filter(m2 => m2.remaining < CARD_LOAD_MIN).length} ay</span>
             </div>
           </Card>
-        </>
-      )}
-
-      {/* ARTIŞ SİMÜLASYONU */}
-      {view === "increases" && (
-        <>
-          {expensesWithIncrease.length === 0 ? (
-            <Card s={{ textAlign: "center", padding: 24 }}>
-              <div style={{ color: X.tm, fontSize: 13 }}>Artış tarihi tanımlanmış sabit gider yok. Ayarlar → Sabit Giderler'den artış tarihi ekleyebilirsiniz.</div>
-            </Card>
-          ) : (
-            <>
-              <Card s={{ marginBottom: 12 }}>
-                <div style={{ color: X.tm, fontSize: 13, fontWeight: 700, marginBottom: 12 }}>TAHMİNİ ARTIŞ ORANLARI</div>
-                <div style={{ color: X.td, fontSize: 11, marginBottom: 12 }}>Her sabit gider için tahmini artış yüzdesini girin. Bütçeye toplam etkiyi göreceksiniz.</div>
-                {expensesWithIncrease.map(exp => {
-                  const pct = incSim[exp.id] || "";
-                  const impact = Math.round(exp.amount * (parseFloat(pct) || 0) / 100);
-                  return (
-                    <div key={exp.id} style={{ padding: "10px 0", borderBottom: `1px solid rgba(0,0,0,0.06)` }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                        <div>
-                          <div style={{ color: X.t, fontSize: 13, fontWeight: 700 }}>{exp.name}</div>
-                          <div style={{ color: X.td, fontSize: 11 }}>Şu an: {C(exp.amount)} · Artış: {ml(exp.increaseDate)}</div>
-                        </div>
-                      </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <span style={{ color: X.tm, fontSize: 12 }}>%</span>
-                        <input type="number" value={pct} onChange={e => setIncSim(s => ({ ...s, [exp.id]: e.target.value }))} placeholder="0" style={{ width: 60, background: "rgba(220,235,230,0.6)", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 8, padding: "6px 10px", color: X.t, fontSize: 14, fontFamily: fm, outline: "none", textAlign: "center" }} />
-                        {impact > 0 && (
-                          <div style={{ flex: 1, textAlign: "right" }}>
-                            <span style={{ color: X.t, fontSize: 13, fontFamily: fm, fontWeight: 700 }}>→ {C(exp.amount + impact)}</span>
-                            <span style={{ color: X.r, fontSize: 11, marginLeft: 4 }}>+{C(impact)}</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </Card>
-
-              {incSimTotal > 0 && (
-                <Card s={{ marginBottom: 12, background: incSimTotal > c.remaining * 0.5 ? X.rd : X.wd, border: `1px solid ${incSimTotal > c.remaining * 0.5 ? X.r : X.w}` }}>
-                  <div style={{ color: incSimTotal > c.remaining * 0.5 ? X.r : X.w, fontSize: 13, fontWeight: 700, marginBottom: 8 }}>TOPLAM ETKİ</div>
-                  <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: 13 }}>
-                    <span style={{ color: X.tm }}>Aylık ek yük</span>
-                    <span style={{ color: X.r, fontFamily: fm, fontWeight: 800 }}>+{C(incSimTotal)}</span>
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: 13 }}>
-                    <span style={{ color: X.tm }}>Şu anki serbest bütçe</span>
-                    <span style={{ color: X.g, fontFamily: fm, fontWeight: 700 }}>{C(c.remaining)}</span>
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: 13, borderTop: `1px solid rgba(0,0,0,0.08)`, marginTop: 4, paddingTop: 8 }}>
-                    <span style={{ color: X.t, fontWeight: 700 }}>Artış sonrası serbest</span>
-                    <span style={{ color: c.remaining - incSimTotal >= CARD_LOAD_MIN ? X.g : c.remaining - incSimTotal >= 0 ? X.w : X.r, fontFamily: fm, fontWeight: 800 }}>{C(c.remaining - incSimTotal)}</span>
-                  </div>
-                  {c.remaining - incSimTotal < CARD_LOAD_MIN && (
-                    <div style={{ color: X.r, fontSize: 11, fontWeight: 600, marginTop: 8 }}>
-                      ⚠️ Artışlar sonrası serbest bütçe {C(CARD_LOAD_MIN)} alt limitinin altına düşüyor.
-                      {debtEnds.length > 0 && ` ${ml(debtEnds[0].endMonth)}'da borç bitiyor (+${C(debtEnds[0].monthlyTL)}), artışlara o zamana kadar dayanmanız gerekiyor.`}
-                    </div>
-                  )}
-                </Card>
-              )}
-            </>
-          )}
         </>
       )}
 
