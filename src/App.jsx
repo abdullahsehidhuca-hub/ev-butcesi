@@ -387,14 +387,14 @@ function calcRisk(data, mk) {
    * Kişisel finans ve işletme bütçeleme ilkelerine dayalı.
    * Toplam: 100 puan (0 = en güvenli, 100 = en kritik)
    *
-   * F1: Likidite Oranı (25p) — Bu ayın kalan bütçe yüzdesi
-   * F2: Sürdürülebilirlik (25p) — Gelecek 12 ay projeksiyon
+   * F1: Bu Ay Kalan Bütçe Oranı (25p) — Bu ayın kalan bütçe yüzdesi
+   * F2: 12 Aylık Sürdürülebilirlik (25p) — Gelecek 12 ay projeksiyon
    * F3: Genel Harcama Kartı Kapasitesi (20p) — aylık serbest bütçe kontrolü
-   * F4: Harcama Trendi (15p) — Son 3 ayın karşılaştırması
-   * F5: Yapısal Riskler (15p) — Yaklaşan maliyet artışları
+   * F4: Harcama Eğilimi (15p) — Son 3 ayın karşılaştırması
+   * F5: Yaklaşan Gider Artışları (15p) — Yaklaşan maliyet artışları
    */
 
-  // F1: Likidite Oranı (25 puan)
+  // F1: Bu Ay Kalan Bütçe Oranı (25 puan)
   // İlke: Kalan bütçenin toplam bütçeye oranı, acil ödeme kapasitesini gösterir
   let f1 = 0;
   if (c.effectiveBudget > 0) {
@@ -408,9 +408,9 @@ function calcRisk(data, mk) {
   }
   score += f1;
   const remainPct = c.effectiveBudget > 0 ? Math.round((c.remaining / c.effectiveBudget) * 100) : 0;
-  details.push({ label: "Likidite oranı (kalan bütçe)", score: f1, max: 25, desc: c.effectiveBudget > 0 ? `%${remainPct} kaldı` : "Bütçe tanımsız" });
+  details.push({ label: "Bu ay kalan bütçe oranı", score: f1, max: 25, desc: c.effectiveBudget > 0 ? `Bütçenin %${remainPct}'i kullanılabilir` : "Bütçe tanımsız" });
 
-  // F2: Sürdürülebilirlik Projeksiyonu (25 puan)
+  // F2: 12 Aylık Sürdürülebilirlik (25 puan)
   // İlke: İşletme sürekliliği — mevcut gider yapısı kaç ay sürdürülebilir
   let f2 = 0, mudm = 99;
   let m = nmk(mk);
@@ -427,7 +427,7 @@ function calcRisk(data, mk) {
   else if (mudm <= 9) f2 = 4;
   else if (mudm <= 12) f2 = 1;
   score += f2;
-  details.push({ label: "Sürdürülebilirlik (12 ay projeksiyon)", score: f2, max: 25, desc: mudm > 12 ? "12 ay içinde açık yok" : `${mudm} ay sonra açık oluşabilir` });
+  details.push({ label: "12 aylık sürdürülebilirlik durumu", score: f2, max: 25, desc: mudm > 12 ? "Önümüzdeki 12 ay bütçe aşımı yok" : `${mudm} ay sonra bütçe aşımı oluşabilir` });
 
   // F3: Genel Harcama Kartı Kapasitesi (20 puan)
   // İlke: Tüm zorunlu giderler (sabit + değişken + borç + taksit) düşüldükten
@@ -451,7 +451,7 @@ function calcRisk(data, mk) {
   score += f3;
   details.push({ label: "Genel harcama kartı kapasitesi", score: f3, max: 20, desc: `${C(effectiveCardAvail)} (alt limit: ${C(CARD_LOAD_MIN)})` });
 
-  // F4: Harcama Trendi (15 puan)
+  // F4: Harcama Eğilimi (15 puan)
   // İlke: Son 3 ayın harcama ortalamasına göre bu ayın trendi.
   // Artan harcama trendi sürdürülebilirliği tehdit eder.
   let f4 = 0;
@@ -469,9 +469,9 @@ function calcRisk(data, mk) {
     }
   }
   score += f4;
-  details.push({ label: "Harcama trendi (3 aylık)", score: f4, max: 15, desc: trendPct > 0 ? `%${trendPct} artış` : "Stabil veya azalıyor" });
+  details.push({ label: "Harcama eğilimi (son 3 ay)", score: f4, max: 15, desc: trendPct > 0 ? `%${trendPct} artış` : "Harcamalar artış göstermiyor" });
 
-  // F5: Yapısal Riskler — Yaklaşan Maliyet Artışları (15 puan)
+  // F5: Yaklaşan Gider Artışları (15 puan)
   // İlke: Bilinen gelecek yükümlülükler (sabit gider artışları) bütçe
   // planlamasında proaktif risk oluşturur
   let f5 = 0, incCount = 0, incTotal = 0;
@@ -492,7 +492,7 @@ function calcRisk(data, mk) {
   else if (incCount >= 2) f5 = 6;
   else if (incCount >= 1) f5 = 3;
   score += f5;
-  details.push({ label: "Yapısal risk (yaklaşan artışlar)", score: f5, max: 15, desc: incCount > 0 ? `${incCount} kalem, tahmini etki: ${C(incTotal)}/ay` : "Yaklaşan artış yok" });
+  details.push({ label: "Yaklaşan gider artışları", score: f5, max: 15, desc: incCount > 0 ? `${incCount} kalem, tahmini etki: ${C(incTotal)}/ay` : "Artış beklenen gider yok" });
 
   return { score: Math.min(100, score), details, monthsUntilDeficit: mudm, trendPct };
 }
@@ -522,7 +522,7 @@ const INFO = {
   savings: { title: "Birikim", text: "Bugüne kadar bu ay biriktirebildiğiniz para ile bu ayın birikim hedefini gösterir.\n\nBirikim Hedefi şöyle hesaplanır:\nKalan Para − Beklenen Kredi Kartı Tek Çekim (son 3 ay ortalaması) − Henüz Yüklenmemiş Kart Rezervi (toplam %15'in kalan kısmı)\n\nYani sistem size 'eğer beklenen harcamalarını yaparsan ay sonunda bu kadar birikim yapmış olursun' diyor. Hedefe ne kadar yakınsanız o kadar başarılı bir aydır." },
   fixed: { title: "Sabit Zorunlu Giderler", text: "Her ay sabit ve zorunlu olarak ödenen giderler. Kira, aidat, ev yardımcısı, burslar, sabit destek tutarları gibi.\n\nBu giderlerin tutarları belirli ve değişmez. Artış tarihleri tanımlanmışsa uygulama o tarih yaklaştığında uyarı verir. Her birini ödediğinizde 'Ödedim' butonuyla teyit edersiniz." },
   variable: { title: "Değişken Zorunlu Giderler", text: "Her ay ödemek zorunda olduğunuz ama tutarı değişen giderler. Elektrik, su, doğalgaz, internet, telefon, akaryakıt, yemek kartı yüklemesi gibi.\n\nHer kalem için bir 'beklenen tutar' belirlersiniz. Eğer girdiğiniz tutar beklenen tutarın %10'undan fazla aşarsa uygulama uyarı verir — böylece anormal faturaları erken yakalarsınız." },
-  risk: { title: "Risk Skoru", text: "0-100 arası bir puan. 0 en güvenli, 100 en kritik durum.\n\nBeş faktöre bakılarak hesaplanır:\n\n1. Likidite Oranı (25 puan): Bu ayın kalan bütçesinin toplam bütçeye oranı. Acil ödeme kapasitesini gösterir. %50 üstü güvenli, %10 altı kritik.\n\n2. Sürdürülebilirlik (25 puan): Mevcut harcama düzeniyle gelecek 12 ay içinde bütçe açığı oluşup oluşmayacağını hesaplar. Değişken gider tahminlerini de içerir.\n\n3. Genel Harcama Kartı Kapasitesi (20 puan): Tüm zorunlu çıkışlar (sabit giderler, borçlar, taksitler, değişken giderler) düşüldükten sonra genel harcama kartına yüklenebilecek aylık serbest tutarı ölçer. Alt limit: 40.000 ₺. Gelecek 6 ayın en kötü durumunu da hesaba katar.\n\n4. Harcama Trendi (15 puan): Son 3 ayın harcama ortalamasına göre bu ayın artış/azalış yönünü analiz eder. Sürekli artan harcama trendi sürdürülebilirliği tehdit eder.\n\n5. Yapısal Riskler (15 puan): Önümüzdeki 6 ay içinde bilinen sabit gider artışlarını ve bunların bütçeye toplam etkisini değerlendirir.\n\nSeviyeler: 0-14 GÜVENLİ, 15-29 DÜŞÜK, 30-49 ORTA, 50-69 YÜKSEK, 70-100 KRİTİK." },
+  risk: { title: "Risk Skoru", text: "0-100 arası bir puan. 0 en güvenli, 100 en kritik durum.\n\nBeş faktöre bakılarak hesaplanır:\n\n1. Bu Ay Kalan Bütçe Oranı (25 puan): Bu ayın kalan bütçesinin toplam bütçeye oranı. Beklenmedik harcamalara karşı tampon gücünüzü gösterir. %50 üstü güvenli, %10 altı kritik.\n\n2. 12 Aylık Sürdürülebilirlik Durumu (25 puan): Mevcut harcama düzeniyle gelecek 12 ay içinde bütçe aşımı oluşup oluşmayacağını hesaplar. Değişken gider tahminlerini de içerir.\n\n3. Genel Harcama Kartı Kapasitesi (20 puan): Tüm zorunlu çıkışlar düşüldükten sonra genel harcama kartına yüklenebilecek aylık tutarı ölçer. Alt limit: 40.000 ₺. Gelecek 6 ayın en kötü durumunu da hesaba katar.\n\n4. Harcama Eğilimi (15 puan): Son 3 ayın harcama ortalamasına göre bu ayın artış/azalış yönünü analiz eder. Sürekli artan harcama eğilimi bütçeyi tehdit eder.\n\n5. Yaklaşan Gider Artışları (15 puan): Önümüzdeki 6 ay içinde bilinen sabit gider artışlarını ve bunların bütçeye toplam etkisini değerlendirir.\n\nSeviyeler: 0-14 GÜVENLİ, 15-29 DÜŞÜK, 30-49 ORTA, 50-69 YÜKSEK, 70-100 KRİTİK." },
   ccTransfer: { title: "Kredi Kartına Aktarılacak Tutar", text: "Bu ay kredi kartından yapılan tüm ödemelerin (sabit, değişken, tek çekim, taksitler) toplamıdır. Ay sonunda bu tutarı bankada kredi kartı hesabınıza aktarmanız gerekiyor — böylece kredi kartı borcunuz hesabınızdaki kullanılabilir bakiyeyi yanıltmaz." },
 };
 
