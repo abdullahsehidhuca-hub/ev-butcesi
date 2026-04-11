@@ -240,18 +240,22 @@ function calcMonth(data, m, extraInst) {
   }, 0);
   const cardLoaded = md.cardLoaded || 0;
 
-  // Değişken zorunlu giderler: gelecek aylarda beklenen tutarları ekle
+  // Değişken zorunlu giderler: geçmiş 3 ay ortalaması varsa onu kullan, yoksa beklenen tutarları kullan
   const hasActualSpending = ccSingleTotal > 0 || cardLoaded > 0 || Object.keys(md.variableEntries || {}).length > 0;
   const expectedVariableBase = (data.settings.variableExpenses || []).reduce((s, ve) => s + (ve.expectedAmount || 0), 0);
-  const expectedVariable = hasActualSpending ? 0 : expectedVariableBase;
+  // Son 3 ayın gerçek değişken harcama ortalaması (CC tek çekim + kart yükleme)
+  const past3 = [pmk(pmk(pmk(m))), pmk(pmk(m)), pmk(m)]
+    .map(pm => { const pmd = data.months[pm] || DM(); return (pmd.ccSingle || []).reduce((s2, e) => s2 + e.amount, 0) + (pmd.cardLoaded || 0); })
+    .filter(t => t > 0);
+  const variableEstimate = past3.length >= 2 ? Math.round(past3.reduce((s, t) => s + t, 0) / past3.length) : expectedVariableBase;
+  const expectedVariable = hasActualSpending ? 0 : variableEstimate;
 
   // Card load limits
   const cardLoadMaxPerTx = Math.floor(baseBudget * CARD_LOAD_PER_TX_PCT);
   const cardLoadPctMax = Math.floor(baseBudget * CARD_LOAD_TOTAL_PCT);
 
-  // Gerçek kart yükleme kapasitesi: bütçe - sabit - taksit - borç - beklenen değişken giderler
-  // %10 sapma payı ile (en kötü senaryo)
-  const committedExpenses = fixedTotal + installmentTotal + debtTotal + Math.ceil(expectedVariableBase * 1.10);
+  // Gerçek kart yükleme kapasitesi: bütçe - sabit - taksit - borç - değişken gider tahmini
+  const committedExpenses = fixedTotal + installmentTotal + debtTotal + variableEstimate;
   const availableForCard = Math.max(0, effectiveBudget - committedExpenses);
   const cardLoadMaxTotal = Math.min(cardLoadPctMax, availableForCard);
   const cardLoadRemaining = Math.max(0, cardLoadMaxTotal - cardLoaded);
@@ -261,7 +265,7 @@ function calcMonth(data, m, extraInst) {
   const remaining = effectiveBudget - totalSpent;
 
   // Mevcut ay için: henüz yapılmamış değişken gider tahmini (birikim hedefi hesabı)
-  const pendingVariable = hasActualSpending ? Math.max(0, (data.settings.variableExpenses || []).reduce((s, ve) => s + (ve.expectedAmount || 0), 0) - ccSingleTotal - cardLoaded) : 0;
+  const pendingVariable = hasActualSpending ? Math.max(0, variableEstimate - ccSingleTotal - cardLoaded) : 0;
 
   // Savings target = remaining - pending variable expenses - expected future CC singles
   const expectedCCSingle = hasActualSpending ? getCCSingleAvg(data, m) : 0;
@@ -270,7 +274,7 @@ function calcMonth(data, m, extraInst) {
   // CC transfer needed
   const ccTransferNeeded = fixedCC + variableCC + ccSingleTotal + installmentTotal;
 
-  return { effectiveBudget, baseBudget, carryoverDeficit, fixedTotal, variableTotal, ccSingleTotal, installmentTotal, debtTotal, cardLoaded, cardLoadMaxPerTx, cardLoadMaxTotal, cardLoadRemaining, availableForCard, totalSpent, remaining, savingsTarget, expectedCCSingle, ccTransferNeeded, expectedVariable, pendingVariable };
+  return { effectiveBudget, baseBudget, carryoverDeficit, fixedTotal, variableTotal, ccSingleTotal, installmentTotal, debtTotal, cardLoaded, cardLoadMaxPerTx, cardLoadMaxTotal, cardLoadRemaining, availableForCard, totalSpent, remaining, savingsTarget, expectedCCSingle, ccTransferNeeded, expectedVariable, pendingVariable, variableEstimate };
 }
 function calcFlat(data, m, extraInst) {
   const md = data.months[m] || DM();
@@ -287,9 +291,14 @@ function calcFlat(data, m, extraInst) {
     return s;
   }, 0);
   const cl = md.cardLoaded || 0;
-  // Değişken zorunlu giderler (fatura, akaryakıt, market vs.) — gelecek ay projeksiyonlarında beklenen tutarları ekle
-  const hasActualData = cc > 0 || cl > 0; // bu ayda gerçek veri varsa beklenen tutarı ekleme (çift sayma)
-  const expectedVariable = hasActualData ? 0 : (data.settings.variableExpenses || []).reduce((s, ve) => s + (ve.expectedAmount || 0), 0);
+  // Değişken giderler: 3 ay ortalaması varsa onu kullan, yoksa beklenen tutarları kullan
+  const hasActualData = cc > 0 || cl > 0;
+  const expectedVariableBase = (data.settings.variableExpenses || []).reduce((s, ve) => s + (ve.expectedAmount || 0), 0);
+  const past3 = [pmk(pmk(pmk(m))), pmk(pmk(m)), pmk(m)]
+    .map(pm => { const pmd = data.months[pm] || DM(); return (pmd.ccSingle || []).reduce((s2, e) => s2 + e.amount, 0) + (pmd.cardLoaded || 0); })
+    .filter(t => t > 0);
+  const variableEstimate = past3.length >= 2 ? Math.round(past3.reduce((s, t) => s + t, 0) / past3.length) : expectedVariableBase;
+  const expectedVariable = hasActualData ? 0 : variableEstimate;
   const totalSpent = ft + cc + inst + dt + cl + expectedVariable;
   return { remaining: b - totalSpent, totalSpent };
 }
@@ -1380,9 +1389,10 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
                 ...c.debtTotal > 0 ? [{ label: "Borç ödemeleri", value: c.debtTotal, sign: "−" }] : [],
                 ...c.installmentTotal > 0 ? [{ label: "Taksitler", value: c.installmentTotal, sign: "−" }] : [],
                 ...(() => {
-                  const veTotal = (data.settings.variableExpenses || []).reduce((s, ve) => s + (ve.expectedAmount || 0), 0);
-                  const veTotalWithMargin = Math.ceil(veTotal * 1.10);
-                  return veTotal > 0 ? [{ label: `Değişken giderler ×1.10 (${C(veTotal)} + %10 sapma)`, value: veTotalWithMargin, sign: "−" }] : [];
+                  const veTotal = c.variableEstimate || (data.settings.variableExpenses || []).reduce((s, ve) => s + (ve.expectedAmount || 0), 0);
+                  const past3Count = [pmk(pmk(pmk(mk))), pmk(pmk(mk)), pmk(mk)].map(pm => { const pmd = data.months[pm] || DM(); return (pmd.ccSingle || []).reduce((s2, e) => s2 + e.amount, 0) + (pmd.cardLoaded || 0); }).filter(t => t > 0).length;
+                  const label = past3Count >= 2 ? `Değişken giderler (son ${past3Count} ay ortalaması)` : "Değişken giderler (tahmini)";
+                  return veTotal > 0 ? [{ label, value: veTotal, sign: "−" }] : [];
                 })(),
               ].map((row, i) => (
                 <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderBottom: i === 0 ? `1px solid rgba(0,0,0,0.06)` : "none", fontSize: 13 }}>
