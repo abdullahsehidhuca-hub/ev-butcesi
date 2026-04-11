@@ -2335,10 +2335,10 @@ function PlanningScreen({ data, setData, mk }) {
 
       // Taksit başlama/bitiş
       data.installmentPlans.forEach(p => {
-        if (p.startMonth === m) events.push({ icon: "📅", text: `Taksit başladı: ${p.note || "Taksitli işlem"}`, color: X.p });
+        if (p.startMonth === m) events.push({ icon: "📅", text: `Taksit başlangıcı: "${p.note || "Taksitli işlem"}"`, color: X.p });
         let cur = p.startMonth;
         for (let j = 0; j < p.months; j++) cur = nmk(cur);
-        if (pmk(cur) === m || cur === m) events.push({ icon: "✅", text: `Taksit bitti: ${p.note || "Taksitli işlem"} (+${C(p.monthlyPayment)}/ay)`, color: X.g });
+        if (pmk(cur) === m || cur === m) events.push({ icon: "✅", text: `Taksit son ayı: "${p.note || "Taksitli işlem"}"`, sub: `Sonraki ay kullanılabilir limit artışı: +${C(p.monthlyPayment)}`, color: X.g });
       });
       // Borç bitiş
       data.debts.filter(d => d.remainingMonths > 0).forEach(d => {
@@ -2355,9 +2355,9 @@ function PlanningScreen({ data, setData, mk }) {
           const pct = parseFloat(incSim[exp.id]) || 0;
           if (pct > 0) {
             const newAmt = exp.amount + Math.round(exp.amount * pct / 100);
-            events.push({ icon: "📈", text: `${exp.name}: ${C(exp.amount)} → ${C(newAmt)} (%${pct})`, color: X.o });
+            events.push({ icon: "📈", text: `${exp.name}: ${C(exp.amount)} → ${C(newAmt)} (%${pct})`, color: "#B8860B" });
           } else {
-            events.push({ icon: "📈", text: `Artış: ${exp.name} (şu an ${C(exp.amount)}) — oran girilmedi`, color: X.td });
+            events.push({ icon: "📈", text: `Artış bekleniyor: ${exp.name} (şu an ${C(exp.amount)})`, sub: "Tahmini artış oranı girilmedi", color: "#B8860B" });
           }
         }
       });
@@ -2459,7 +2459,10 @@ function PlanningScreen({ data, setData, mk }) {
                 {m2.events.length > 0 && (
                   <div style={{ marginTop: 6 }}>
                     {m2.events.map((ev, j) => (
-                      <div key={j} style={{ color: ev.color, fontSize: 11, fontWeight: 600, padding: "2px 0" }}>{ev.icon} {ev.text}</div>
+                      <div key={j} style={{ padding: "2px 0" }}>
+                        <div style={{ color: ev.color, fontSize: 11, fontWeight: 600 }}>{ev.icon} {ev.text}</div>
+                        {ev.sub && <div style={{ color: ev.color, fontSize: 10, fontWeight: 500, marginLeft: 20, opacity: 0.85 }}>{ev.sub}</div>}
+                      </div>
                     ))}
                   </div>
                 )}
@@ -2480,7 +2483,7 @@ function PlanningScreen({ data, setData, mk }) {
               <span style={{ color: X.g, fontFamily: fm, fontWeight: 700 }}>{C(Math.max(...yearMap.map(m2 => m2.remaining)))} ({ml(yearMap.reduce((max, m2) => m2.remaining > max.remaining ? m2 : max, yearMap[0]).mk)})</span>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: 12 }}>
-              <span style={{ color: X.tm }}>Açık olan ay sayısı</span>
+              <span style={{ color: X.tm }}>Bütçe aşımı olan ay</span>
               <span style={{ color: yearMap.filter(m2 => m2.remaining < 0).length > 0 ? X.r : X.g, fontFamily: fm, fontWeight: 700 }}>{yearMap.filter(m2 => m2.remaining < 0).length} ay</span>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: 12 }}>
