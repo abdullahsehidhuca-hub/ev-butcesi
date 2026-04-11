@@ -249,31 +249,148 @@ function calcMonth(data, m, extraInst) {
 
   return { effectiveBudget, baseBudget, carryoverDeficit, fixedTotal, variableTotal, ccSingleTotal, installmentTotal, debtTotal, cardLoaded, cardLoadMaxPerTx, cardLoadMaxTotal, cardLoadRemaining, totalSpent, remaining, savingsTarget, expectedCCSingle, ccTransferNeeded };
 }
-function calcFlat(data, m, extraInst) { const md = data.months[m] || DM(); const b = md.budget || data.settings.monthlyBudget; const ft = data.settings.fixedExpenses.reduce((s, e) => s + e.amount, 0); const cc = (md.ccSingle || []).reduce((s, e) => s + e.amount, 0); let inst = data.installmentPlans.reduce((s, p) => { let c = p.startMonth; for (let i = 0; i < p.months; i++) { if (c === m) return s + p.monthlyPayment; c = nmk(c); } return s; }, 0); if (extraInst) { let c = extraInst.startMonth; for (let i = 0; i < extraInst.months; i++) { if (c === m) { inst += extraInst.monthlyPayment; break; } c = nmk(c); } } const dt = data.debts.filter(d => d.remainingMonths > 0).reduce((s, d) => { if (d.currency === "TRY") return s + d.monthlyPayment; if (d.currency === "USD") return s + d.monthlyPayment * (data.liveRates?.USD || data.usdRates?.[m] || 0); if (d.currency === "EUR") return s + d.monthlyPayment * (data.liveRates?.EUR || data.eurRates?.[m] || 0); if (d.currency === "XAU") return s + d.monthlyPayment * (data.liveRates?.XAU || data.goldRates?.[m] || data.goldRates?.[cmk()] || 0); return s; }, 0); const cl = md.cardLoaded || 0; return { remaining: b - (ft + cc + inst + dt + cl), totalSpent: ft + cc + inst + dt + cl }; }
+function calcFlat(data, m, extraInst) {
+  const md = data.months[m] || DM();
+  const b = md.budget || data.settings.monthlyBudget;
+  const ft = data.settings.fixedExpenses.reduce((s, e) => s + e.amount, 0);
+  const cc = (md.ccSingle || []).reduce((s, e) => s + e.amount, 0);
+  let inst = data.installmentPlans.reduce((s, p) => { let c = p.startMonth; for (let i = 0; i < p.months; i++) { if (c === m) return s + p.monthlyPayment; c = nmk(c); } return s; }, 0);
+  if (extraInst) { let c = extraInst.startMonth; for (let i = 0; i < extraInst.months; i++) { if (c === m) { inst += extraInst.monthlyPayment; break; } c = nmk(c); } }
+  const dt = data.debts.filter(d => d.remainingMonths > 0).reduce((s, d) => {
+    if (d.currency === "TRY") return s + d.monthlyPayment;
+    if (d.currency === "USD") return s + d.monthlyPayment * (data.liveRates?.USD || data.usdRates?.[m] || 0);
+    if (d.currency === "EUR") return s + d.monthlyPayment * (data.liveRates?.EUR || data.eurRates?.[m] || 0);
+    if (d.currency === "XAU") return s + d.monthlyPayment * (data.liveRates?.XAU || data.goldRates?.[m] || data.goldRates?.[cmk()] || 0);
+    return s;
+  }, 0);
+  const cl = md.cardLoaded || 0;
+  // Değişken zorunlu giderler (fatura, akaryakıt, market vs.) — gelecek ay projeksiyonlarında beklenen tutarları ekle
+  const hasActualData = cc > 0 || cl > 0; // bu ayda gerçek veri varsa beklenen tutarı ekleme (çift sayma)
+  const expectedVariable = hasActualData ? 0 : (data.settings.variableExpenses || []).reduce((s, ve) => s + (ve.expectedAmount || 0), 0);
+  const totalSpent = ft + cc + inst + dt + cl + expectedVariable;
+  return { remaining: b - totalSpent, totalSpent };
+}
 
 /* ═══ RISK ═══ */
 function calcRisk(data, mk) {
-  let score = 0; const c = calcMonth(data, mk, null); const details = [];
+  const c = calcMonth(data, mk, null);
+  const md = data.months[mk] || DM();
+  let score = 0;
+  const details = [];
+
+  /*
+   * 5 FAKTÖRLÜ RİSK MODELİ
+   * Kişisel finans ve işletme bütçeleme ilkelerine dayalı.
+   * Toplam: 100 puan (0 = en güvenli, 100 = en kritik)
+   *
+   * F1: Likidite Oranı (25p) — Bu ayın kalan bütçe yüzdesi
+   * F2: Sürdürülebilirlik (25p) — Gelecek 12 ay projeksiyon
+   * F3: Günlük Harcama Kapasitesi (20p) — 40.000₺ alt limit kontrolü
+   * F4: Harcama Trendi (15p) — Son 3 ayın karşılaştırması
+   * F5: Yapısal Riskler (15p) — Yaklaşan maliyet artışları
+   */
+
+  // F1: Likidite Oranı (25 puan)
+  // İlke: Kalan bütçenin toplam bütçeye oranı, acil ödeme kapasitesini gösterir
   let f1 = 0;
-  if (c.effectiveBudget > 0) { const rp = c.remaining / c.effectiveBudget; if (rp < 0) f1 = 35; else if (rp < 0.05) f1 = 30; else if (rp < 0.1) f1 = 22; else if (rp < 0.2) f1 = 14; else if (rp < 0.35) f1 = 7; }
+  if (c.effectiveBudget > 0) {
+    const ratio = c.remaining / c.effectiveBudget;
+    if (ratio < 0) f1 = 25;
+    else if (ratio < 0.05) f1 = 22;
+    else if (ratio < 0.10) f1 = 18;
+    else if (ratio < 0.20) f1 = 12;
+    else if (ratio < 0.35) f1 = 6;
+    else if (ratio < 0.50) f1 = 2;
+  }
   score += f1;
-  details.push({ label: "Bu ay kalan bütçe oranı", score: f1, max: 35, desc: c.effectiveBudget > 0 ? `%${Math.round((c.remaining / c.effectiveBudget) * 100)} kaldı` : "Bütçe yok" });
-  let f2 = 0, mudm = 99; let m = nmk(mk);
-  for (let i = 0; i < 12; i++) { const fc = calcMonth(data, m, null); if (fc.remaining < 0) { mudm = i + 1; break; } m = nmk(m); }
-  if (mudm <= 1) f2 = 35; else if (mudm <= 2) f2 = 28; else if (mudm <= 3) f2 = 22; else if (mudm <= 4) f2 = 16; else if (mudm <= 6) f2 = 10; else if (mudm <= 9) f2 = 5;
+  const remainPct = c.effectiveBudget > 0 ? Math.round((c.remaining / c.effectiveBudget) * 100) : 0;
+  details.push({ label: "Likidite oranı (kalan bütçe)", score: f1, max: 25, desc: c.effectiveBudget > 0 ? `%${remainPct} kaldı` : "Bütçe tanımsız" });
+
+  // F2: Sürdürülebilirlik Projeksiyonu (25 puan)
+  // İlke: İşletme sürekliliği — mevcut gider yapısı kaç ay sürdürülebilir
+  let f2 = 0, mudm = 99;
+  let m = nmk(mk);
+  for (let i = 0; i < 12; i++) {
+    const fc = calcMonth(data, m, null);
+    if (fc.remaining < 0) { mudm = i + 1; break; }
+    m = nmk(m);
+  }
+  if (mudm <= 1) f2 = 25;
+  else if (mudm <= 2) f2 = 22;
+  else if (mudm <= 3) f2 = 18;
+  else if (mudm <= 4) f2 = 14;
+  else if (mudm <= 6) f2 = 9;
+  else if (mudm <= 9) f2 = 4;
+  else if (mudm <= 12) f2 = 1;
   score += f2;
-  details.push({ label: "Gelecek projeksiyon", score: f2, max: 35, desc: mudm > 12 ? "12 ay içinde açık yok" : `${mudm} ay sonra açık oluşabilir` });
+  details.push({ label: "Sürdürülebilirlik (12 ay projeksiyon)", score: f2, max: 25, desc: mudm > 12 ? "12 ay içinde açık yok" : `${mudm} ay sonra açık oluşabilir` });
+
+  // F3: Günlük Harcama Kapasitesi (20 puan)
+  // İlke: Zorunlu değişken giderler (market, akaryakıt, fatura) için yeterli
+  // harcanabilir gelir kalmalı. Alt limit: 40.000₺ (kullanıcı tanımlı)
   let f3 = 0;
+  const cardCapacity = c.cardLoadRemaining;
+  // Gelecek ayların da kapasitesini kontrol et (en kötü ayı bul)
+  let worstCapacity = cardCapacity;
+  let wm = nmk(mk);
+  for (let i = 0; i < 6; i++) {
+    const fc = calcMonth(data, wm, null);
+    const futureCapacity = fc.remaining; // gelecek ayda kalan = harcanabilir kapasite
+    if (futureCapacity < worstCapacity) worstCapacity = futureCapacity;
+    wm = nmk(wm);
+  }
+  const effectiveCapacity = Math.min(cardCapacity, worstCapacity);
+  if (effectiveCapacity < 0) f3 = 20;
+  else if (effectiveCapacity < CARD_LOAD_MIN * 0.5) f3 = 17; // < 20k
+  else if (effectiveCapacity < CARD_LOAD_MIN * 0.75) f3 = 13; // < 30k
+  else if (effectiveCapacity < CARD_LOAD_MIN) f3 = 8; // < 40k
+  else if (effectiveCapacity < CARD_LOAD_MIN * 1.25) f3 = 3; // < 50k
+  score += f3;
+  details.push({ label: "Günlük harcama kapasitesi", score: f3, max: 20, desc: `${C(effectiveCapacity)} (alt limit: ${C(CARD_LOAD_MIN)})` });
+
+  // F4: Harcama Trendi (15 puan)
+  // İlke: Son 3 ayın harcama ortalamasına göre bu ayın trendi.
+  // Artan harcama trendi sürdürülebilirliği tehdit eder.
+  let f4 = 0;
   const p3 = [pmk(pmk(mk)), pmk(mk), mk].map(m2 => calcMonth(data, m2, null).totalSpent).filter(t => t > 0);
   let trendPct = 0;
-  if (p3.length >= 3) { const avg = (p3[0] + p3[1]) / 2; if (avg > 0) { trendPct = Math.round(((p3[2] - avg) / avg) * 100); if (trendPct > 25) f3 = 15; else if (trendPct > 15) f3 = 10; else if (trendPct > 8) f3 = 5; } }
-  score += f3;
-  details.push({ label: "Harcama trendi (3 ay)", score: f3, max: 15, desc: trendPct > 0 ? `%${trendPct} artış` : "Stabil veya azalıyor" });
-  let f4 = 0, incCount = 0; let um = nmk(mk);
-  for (let i = 0; i < 6; i++) { data.settings.fixedExpenses.forEach(exp => { if (exp.increaseDate && exp.increaseDate.startsWith(um)) incCount++; }); um = nmk(um); }
-  if (incCount >= 3) f4 = 15; else if (incCount >= 2) f4 = 10; else if (incCount >= 1) f4 = 5;
+  if (p3.length >= 2) {
+    const prev = p3.length >= 3 ? (p3[0] + p3[1]) / 2 : p3[0];
+    const current = p3[p3.length - 1];
+    if (prev > 0) {
+      trendPct = Math.round(((current - prev) / prev) * 100);
+      if (trendPct > 25) f4 = 15;
+      else if (trendPct > 15) f4 = 11;
+      else if (trendPct > 8) f4 = 7;
+      else if (trendPct > 3) f4 = 3;
+    }
+  }
   score += f4;
-  details.push({ label: "Yaklaşan artışlar (6 ay)", score: f4, max: 15, desc: incCount > 0 ? `${incCount} kalem artacak` : "Artış yok" });
+  details.push({ label: "Harcama trendi (3 aylık)", score: f4, max: 15, desc: trendPct > 0 ? `%${trendPct} artış` : "Stabil veya azalıyor" });
+
+  // F5: Yapısal Riskler — Yaklaşan Maliyet Artışları (15 puan)
+  // İlke: Bilinen gelecek yükümlülükler (sabit gider artışları) bütçe
+  // planlamasında proaktif risk oluşturur
+  let f5 = 0, incCount = 0, incTotal = 0;
+  let um = nmk(mk);
+  for (let i = 0; i < 6; i++) {
+    data.settings.fixedExpenses.forEach(exp => {
+      if (exp.increaseDate && exp.increaseDate.startsWith(um)) {
+        incCount++;
+        incTotal += exp.amount * 0.20; // tahmini %20 artış etkisi
+      }
+    });
+    um = nmk(um);
+  }
+  const incImpactPct = c.effectiveBudget > 0 ? (incTotal / c.effectiveBudget) * 100 : 0;
+  if (incImpactPct > 15) f5 = 15;
+  else if (incImpactPct > 8) f5 = 11;
+  else if (incCount >= 3) f5 = 9;
+  else if (incCount >= 2) f5 = 6;
+  else if (incCount >= 1) f5 = 3;
+  score += f5;
+  details.push({ label: "Yapısal risk (yaklaşan artışlar)", score: f5, max: 15, desc: incCount > 0 ? `${incCount} kalem, tahmini etki: ${C(incTotal)}/ay` : "Yaklaşan artış yok" });
+
   return { score: Math.min(100, score), details, monthsUntilDeficit: mudm, trendPct };
 }
 function getRiskInfo(score) { if (score >= 70) return { label: "KRİTİK", sub: "Harcamalar derhal kısılmalı", color: X.r }; if (score >= 50) return { label: "YÜKSEK", sub: "Harcamalarınızı gözden geçirin", color: "#FF6B35" }; if (score >= 30) return { label: "ORTA", sub: "Dikkatli olun", color: X.w }; if (score >= 15) return { label: "DÜŞÜK", sub: "Kontrol altında", color: "#84CC16" }; return { label: "GÜVENLİ", sub: "Bütçeniz sağlıklı", color: X.g }; }
@@ -302,7 +419,7 @@ const INFO = {
   savings: { title: "Birikim", text: "Bugüne kadar bu ay biriktirebildiğiniz para ile bu ayın birikim hedefini gösterir.\n\nBirikim Hedefi şöyle hesaplanır:\nKalan Para − Beklenen Kredi Kartı Tek Çekim (son 3 ay ortalaması) − Henüz Yüklenmemiş Kart Rezervi (toplam %15'in kalan kısmı)\n\nYani sistem size 'eğer beklenen harcamalarını yaparsan ay sonunda bu kadar birikim yapmış olursun' diyor. Hedefe ne kadar yakınsanız o kadar başarılı bir aydır." },
   fixed: { title: "Sabit Zorunlu Giderler", text: "Her ay sabit ve zorunlu olarak ödenen giderler. Kira, aidat, ev yardımcısı, burslar, sabit destek tutarları gibi.\n\nBu giderlerin tutarları belirli ve değişmez. Artış tarihleri tanımlanmışsa uygulama o tarih yaklaştığında uyarı verir. Her birini ödediğinizde 'Ödedim' butonuyla teyit edersiniz." },
   variable: { title: "Değişken Zorunlu Giderler", text: "Her ay ödemek zorunda olduğunuz ama tutarı değişen giderler. Elektrik, su, doğalgaz, internet, telefon, akaryakıt, yemek kartı yüklemesi gibi.\n\nHer kalem için bir 'beklenen tutar' belirlersiniz. Eğer girdiğiniz tutar beklenen tutarın %10'undan fazla aşarsa uygulama uyarı verir — böylece anormal faturaları erken yakalarsınız." },
-  risk: { title: "Risk Skoru", text: "0-100 arası bir puan. 0 en güvenli, 100 en kritik durum. Dört faktöre bakarak hesaplanır:\n\n1. Bu ayın kalan bütçesinin yüzdesi (35 puan)\n2. Gelecek projeksiyon — kaç ay sonra açık oluşur (35 puan)\n3. Harcama trendi — son 3 ayda artıyor mu (15 puan)\n4. Yaklaşan sabit gider artışları (15 puan)\n\nSeviyeler: 0-14 GÜVENLİ, 15-29 DÜŞÜK, 30-49 ORTA, 50-69 YÜKSEK, 70-100 KRİTİK. Yeşilden kırmızıya gittikçe harcamalarınızı kısmanız ve önlem almanız gerekir." },
+  risk: { title: "Risk Skoru", text: "0-100 arası bir puan. 0 en güvenli, 100 en kritik durum.\n\nBeş faktöre bakılarak hesaplanır:\n\n1. Likidite Oranı (25 puan): Bu ayın kalan bütçesinin toplam bütçeye oranı. Acil ödeme kapasitesini gösterir. %50 üstü güvenli, %10 altı kritik.\n\n2. Sürdürülebilirlik (25 puan): Mevcut harcama düzeniyle gelecek 12 ay içinde bütçe açığı oluşup oluşmayacağını hesaplar. Değişken gider tahminlerini de içerir.\n\n3. Günlük Harcama Kapasitesi (20 puan): Genel harcama kartına yüklenebilir tutarın 40.000 ₺ alt limitine göre durumu. Market, akaryakıt, fatura gibi zorunlu değişken giderleri karşılayabilme gücünü ölçer. Gelecek 6 ayın en kötü durumunu da hesaba katar.\n\n4. Harcama Trendi (15 puan): Son 3 ayın harcama ortalamasına göre bu ayın artış/azalış yönünü analiz eder. Sürekli artan harcama trendi sürdürülebilirliği tehdit eder.\n\n5. Yapısal Riskler (15 puan): Önümüzdeki 6 ay içinde bilinen sabit gider artışlarını ve bunların bütçeye toplam etkisini değerlendirir.\n\nSeviyeler: 0-14 GÜVENLİ, 15-29 DÜŞÜK, 30-49 ORTA, 50-69 YÜKSEK, 70-100 KRİTİK." },
   ccTransfer: { title: "Kredi Kartına Aktarılacak Tutar", text: "Bu ay kredi kartından yapılan tüm ödemelerin (sabit, değişken, tek çekim, taksitler) toplamıdır. Ay sonunda bu tutarı bankada kredi kartı hesabınıza aktarmanız gerekiyor — böylece kredi kartı borcunuz hesabınızdaki kullanılabilir bakiyeyi yanıltmaz." },
 };
 
@@ -825,9 +942,21 @@ function CCInstallModal({ data, mk, cards, variableExpenses, onClose, onSave, st
                 <span style={{ color: ws.remaining >= 0 ? X.g : X.r, textAlign: "right", fontFamily: fm, fontWeight: 700 }}>{C(ws.remaining)}</span>
               </div>); })}
           </Card>
-          {sim.deficit
-            ? (() => { const defMonth = sim.withS.find(ws => ws.remaining < 0); return <div style={{ color: X.r, fontSize: 13, fontWeight: 600, marginBottom: 10, lineHeight: 1.5 }}>⚠️ Bu taksitli işlem bütçenizi zorlar. {ml(sim.deficit)} ayında {C(Math.abs(defMonth?.remaining || 0))} açık oluşuyor. İşlemi onaylamadan önce o ayın giderlerini gözden geçirin.</div>; })()
-            : (() => { const minMonth = sim.withS.reduce((min, ws) => ws.remaining < min.remaining ? ws : min, sim.withS[0]); return <div style={{ color: X.g, fontSize: 13, fontWeight: 600, marginBottom: 10, lineHeight: 1.5 }}>✅ Bu taksitli işlemi yapabilirsiniz. Taksit sonrası en düşük aylık birikim: {C(minMonth.remaining)} ({ml(minMonth.mk)}). Hiçbir ayda bütçe açığı oluşmuyor.</div>; })()}
+          {(() => {
+            const minMonth = sim.withS.reduce((min, ws) => ws.remaining < min.remaining ? ws : min, sim.withS[0]);
+            const hasDeficit = sim.deficit;
+            const cardLoadTight = !hasDeficit && minMonth.remaining < CARD_LOAD_MIN;
+            const cardLoadHard = cardLoadTight && minMonth.remaining < CARD_LOAD_MIN * (1 - CARD_LOAD_MIN_TOLERANCE);
+
+            if (hasDeficit) {
+              const defMonth = sim.withS.find(ws => ws.remaining < 0);
+              return <div style={{ color: X.r, fontSize: 13, fontWeight: 600, marginBottom: 10, lineHeight: 1.5 }}>🚨 Bu taksitli işlem bütçenizi zorlar. {ml(sim.deficit)} ayında {C(Math.abs(defMonth?.remaining || 0))} açık oluşuyor. İşlemi onaylamadan önce o ayın giderlerini gözden geçirin.</div>;
+            }
+            if (cardLoadTight) {
+              return <div style={{ color: cardLoadHard ? X.r : X.w, fontSize: 13, fontWeight: 600, marginBottom: 10, lineHeight: 1.5 }}>⚠️ Bu taksitli işlem günlük harcama bütçenizi daraltır. {ml(minMonth.mk)} ayında kalan bütçe {C(minMonth.remaining)} olacak — genel harcama kartına yükleyebileceğiniz tutar {C(CARD_LOAD_MIN)} alt limitinin altına düşüyor. Günlük ihtiyaçlarınızı (market, akaryakıt, fatura) karşılamakta zorlanabilirsiniz.</div>;
+            }
+            return <div style={{ color: X.g, fontSize: 13, fontWeight: 600, marginBottom: 10, lineHeight: 1.5 }}>✅ Bu taksitli işlemi yapabilirsiniz. Taksit sonrası en düşük aylık birikim: {C(minMonth.remaining)} ({ml(minMonth.mk)}). Hiçbir ayda bütçe açığı veya günlük harcama sıkışması oluşmuyor.</div>;
+          })()}
           <div style={{ display: "flex", gap: 8 }}>
             <Btn onClick={save} c={X.g} s={{ flex: 1 }} disabled={!cardId}>✓ Taksiti Onayla ve Kaydet</Btn>
             <Btn onClick={() => setSim(null)} v="outline" c={X.td} s={{ flex: 1 }}>Geri</Btn>
