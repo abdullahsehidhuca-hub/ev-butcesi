@@ -93,7 +93,7 @@ function InfoModal({ title, text, onClose }) {
 function CatButton({ icon, label, total, color, dimColor, expanded, onToggle, children, onInfo }) {
   return (<div style={{ marginBottom: 8 }}><div onClick={onToggle} style={{ display: "flex", alignItems: "center", gap: 12, ...glass, borderRadius: expanded ? "14px 14px 0 0" : 14, padding: "14px 16px", cursor: "pointer", position: "relative", border: `1px solid ${expanded ? color + "40" : "rgba(255,255,255,0.55)"}` }}><span style={{ fontSize: 28, lineHeight: 1 }}>{icon}</span><div style={{ flex: 1 }}><div style={{ color: X.t, fontWeight: 700, fontSize: 14, fontFamily: ff }}>{label}</div></div><div style={{ textAlign: "right", marginRight: 4 }}><div style={{ color, fontWeight: 800, fontSize: 17, fontFamily: fm }}>{C(total)}</div></div><span style={{ color: X.td, fontSize: 11, transform: expanded ? "rotate(180deg)" : "rotate(0)", transition: "0.2s" }}>▼</span>{onInfo && <InfoBtn onClick={onInfo} />}</div>{expanded && <div style={{ background: "rgba(200,218,212,0.45)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", borderTop: `1px solid rgba(0,0,0,0.05)`, borderRadius: "0 0 14px 14px", padding: "8px 16px 14px", boxShadow: "0 4px 10px rgba(0,0,0,0.04)" }}>{children}</div>}</div>);
 }
-function ItemRow({ label, value, sub, color = X.t, onAction, actionLabel }) { return (<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid rgba(0,0,0,0.06)" }}><div style={{ flex: 1, minWidth: 0 }}><div style={{ color: X.t, fontSize: 13, fontWeight: 600 }}>{label}</div>{sub && <div style={{ color: X.td, fontSize: 11 }}>{sub}</div>}</div><div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}><span style={{ color, fontWeight: 700, fontFamily: fm, fontSize: 14 }}>{typeof value === "number" ? C(value) : value}</span>{onAction && <button onClick={e => { e.stopPropagation(); onAction(); }} style={{ background: "rgba(22,163,74,0.1)", border: "none", borderRadius: 8, padding: "5px 10px", color: X.g, fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: ff }}>{actionLabel || "✓"}</button>}</div></div>); }
+function ItemRow({ label, value, sub, color = X.t, onAction, actionLabel, onEdit, onDelete }) { return (<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid rgba(0,0,0,0.06)" }}><div style={{ flex: 1, minWidth: 0 }}><div style={{ color: X.t, fontSize: 13, fontWeight: 600 }}>{label}</div>{sub && <div style={{ color: X.td, fontSize: 11 }}>{sub}</div>}</div><div style={{ display: "flex", alignItems: "center", gap: 5, flexShrink: 0 }}><span style={{ color, fontWeight: 700, fontFamily: fm, fontSize: 14 }}>{typeof value === "number" ? C(value) : value}</span>{onEdit && <button onClick={e => { e.stopPropagation(); onEdit(); }} style={{ background: "none", border: "none", color: X.b, fontSize: 14, cursor: "pointer", padding: "2px 4px" }}>✎</button>}{onDelete && <button onClick={e => { e.stopPropagation(); if(confirm("Bu kaydı silmek istediğinize emin misiniz?")) onDelete(); }} style={{ background: "none", border: "none", color: X.r, fontSize: 14, cursor: "pointer", padding: "2px 4px" }}>✕</button>}{onAction && <button onClick={e => { e.stopPropagation(); onAction(); }} style={{ background: "rgba(22,163,74,0.1)", border: "none", borderRadius: 8, padding: "5px 10px", color: X.g, fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: ff }}>{actionLabel || "✓"}</button>}</div></div>); }
 
 /* ═══ ENGINE ═══ */
 /* ═══ BİRİKİM HELPER ═══ */
@@ -360,7 +360,7 @@ function CCSingleModal({ cards, variableExpenses, onClose, onSave }) {
   );
 }
 
-function CardLoadModal({ currentLoaded, maxPerTx, maxTotal, onClose, onSave }) {
+function CardLoadModal({ currentLoaded, maxPerTx, maxTotal, onClose, onSave, onEdit }) {
   const [a, sa] = useState("");
   const amt = parseFloat(a) || 0;
   const remaining = Math.max(0, maxTotal - currentLoaded);
@@ -380,6 +380,7 @@ function CardLoadModal({ currentLoaded, maxPerTx, maxTotal, onClose, onSave }) {
       {wouldExceedTx && <div style={{ color: X.r, fontSize: 12, marginBottom: 8 }}>⚠️ Tek seferde maksimum {C(maxPerTx)} yükleyebilirsiniz</div>}
       {!wouldExceedTx && wouldExceedTotal && <div style={{ color: X.r, fontSize: 12, marginBottom: 8 }}>⚠️ Bu ay toplam {C(maxTotal)} sınırını aşıyor</div>}
       <Btn onClick={() => { if (!canSave) return; onSave(amt); onClose(); }} disabled={!canSave}>🛒 Yükle</Btn>
+      {currentLoaded > 0 && onEdit && <div style={{ marginTop: 10 }}><Btn v="outline" c={X.td} onClick={() => { onEdit(); onClose(); }}>✎ Toplam Tutarı Düzelt</Btn></div>}
     </Modal>
   );
 }
@@ -393,8 +394,8 @@ function debtTLValue(debt, data, m) {
   return 0;
 }
 
-function DebtPayModal({ debts, debtPayments, data, mk, onClose, onPay }) {
-  const active = debts.filter(d => d.remainingMonths > 0);
+function DebtPayModal({ debts, debtPayments, data, mk, onClose, onPay, onUndo }) {
+  const active = debts.filter(d => d.remainingMonths > 0 || debtPayments?.[d.id]);
   return (
     <Modal title="📌 Borç Ödemesi" onClose={onClose}>
       {active.length === 0 && <p style={{ color: X.tm }}>Aktif borç yok.</p>}
@@ -403,7 +404,7 @@ function DebtPayModal({ debts, debtPayments, data, mk, onClose, onPay }) {
         const sym = debtCurSymbol(debt.currency);
         const tlVal = debtTLValue(debt, data, mk);
         return (
-          <Card key={debt.id} s={{ marginBottom: 8, opacity: paid ? .5 : 1 }}>
+          <Card key={debt.id} s={{ marginBottom: 8, opacity: paid ? .6 : 1 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ color: X.t, fontWeight: 700 }}>{debt.name}</div>
@@ -413,7 +414,7 @@ function DebtPayModal({ debts, debtPayments, data, mk, onClose, onPay }) {
                   <span> /ay • {debt.remainingMonths} ay</span>
                 </div>
               </div>
-              {paid ? <span style={{ color: X.g, fontWeight: 700 }}>✓</span> : <Btn onClick={() => onPay(debt.id)} s={{ width: "auto", padding: "8px 16px", fontSize: 13 }}>Ödedim</Btn>}
+              {paid ? <button onClick={() => onUndo(debt.id)} style={{ background: "none", border: `1px solid ${X.td}`, borderRadius: 8, padding: "6px 12px", color: X.td, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>↩ Geri Al</button> : <Btn onClick={() => onPay(debt.id)} s={{ width: "auto", padding: "8px 16px", fontSize: 13 }}>Ödedim</Btn>}
             </div>
           </Card>
         );
@@ -934,31 +935,57 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
   const warnings = useMemo(() => genWarnings(data, mk), [data, mk]);
 
   const handleFixedPay = expId => { setMonthField(mk, "fixedPaid", { ...md.fixedPaid, [expId]: { paid: true, date: td() } }); };
+  const handleFixedUnpay = expId => { const fp = { ...md.fixedPaid }; delete fp[expId]; setMonthField(mk, "fixedPaid", fp); };
   const handleCCSingle = entry => { setMonthField(mk, "ccSingle", [...md.ccSingle, entry]); flash("✓"); };
+  const deleteCCSingle = id => { setMonthField(mk, "ccSingle", (md.ccSingle || []).filter(e => e.id !== id)); };
+  const editCCSingle = id => {
+    const entry = (md.ccSingle || []).find(e => e.id === id); if (!entry) return;
+    const newAmt = prompt("Tutar:", String(entry.amount)); if (newAmt === null) return;
+    const newNote = prompt("Açıklama:", entry.note || entry.merchantName || "");
+    setMonthField(mk, "ccSingle", (md.ccSingle || []).map(e => e.id === id ? { ...e, amount: parseFloat(newAmt) || e.amount, note: newNote !== null ? newNote : e.note } : e));
+  };
   const handleCardLoad = amt => { setMonthField(mk, "cardLoaded", (md.cardLoaded || 0) + amt); flash("✓"); };
+  const editCardLoad = () => {
+    const newVal = prompt("Toplam yüklenen tutar:", String(md.cardLoaded || 0)); if (newVal === null) return;
+    setMonthField(mk, "cardLoaded", parseFloat(newVal) || 0);
+  };
   const handleDebtPay = debtId => { setMonthField(mk, "debtPayments", { ...md.debtPayments, [debtId]: { paid: true, date: td() } }); setData(d => ({ ...d, debts: d.debts.map(db => db.id === debtId ? { ...db, remainingMonths: Math.max(0, db.remainingMonths - 1) } : db) })); flash("✓"); };
+  const undoDebtPay = debtId => { const dp = { ...md.debtPayments }; delete dp[debtId]; setMonthField(mk, "debtPayments", dp); setData(d => ({ ...d, debts: d.debts.map(db => db.id === debtId ? { ...db, remainingMonths: db.remainingMonths + 1 } : db) })); };
   const handleInstSave = plan => { setData(d => ({ ...d, installmentPlans: [...d.installmentPlans, plan] })); flash("✓ Taksit kaydedildi"); };
+  const deleteInstallment = id => { setData(d => ({ ...d, installmentPlans: d.installmentPlans.filter(p => p.id !== id) })); };
+  const editInstallment = id => {
+    const plan = data.installmentPlans.find(p => p.id === id); if (!plan) return;
+    const newNote = prompt("Açıklama:", plan.note || ""); if (newNote === null) return;
+    const newAmt = prompt("Aylık taksit tutarı:", String(plan.monthlyPayment));
+    setData(d => ({ ...d, installmentPlans: d.installmentPlans.map(p => p.id === id ? { ...p, note: newNote, monthlyPayment: parseFloat(newAmt) || p.monthlyPayment } : p) }));
+  };
   const handleCCTransfer = itemKey => { setMonthField(mk, "ccTransferred", { ...(md.ccTransferred || {}), [itemKey]: { transferred: true, date: td() } }); };
+  const undoCCTransfer = itemKey => { const ct = { ...(md.ccTransferred || {}) }; delete ct[itemKey]; setMonthField(mk, "ccTransferred", ct); };
 
   // CC Hesabına Aktarılacak Kalemlerin Listesi
   const ccTransferItems = useMemo(() => {
     const items = [];
+    const cards = data.settings.cards || [];
     // 1. Sabit zorunlu giderler (CC ile ödenenler)
     data.settings.fixedExpenses.filter(e => e.paymentMethod === "cc").forEach(e => {
-      items.push({ key: `fixed-${e.id}`, label: e.name, sub: "Sabit zorunlu", amount: e.amount });
+      const cid = e.cardId || cards[0]?.id;
+      const cardName = cards.find(c2 => c2.id === cid)?.name;
+      items.push({ key: `fixed-${e.id}`, label: e.name, sub: `Sabit zorunlu${cardName ? " • " + cardName : ""}`, amount: e.amount, cardId: cid });
     });
     // 2. CC tek çekim harcamaları
     (md.ccSingle || []).forEach(e => {
-      const cardName = (data.settings.cards || []).find(c2 => c2.id === e.cardId)?.name;
-      items.push({ key: `single-${e.id}`, label: e.note || e.merchantName || "Tek çekim", sub: `${e.date || ""}${cardName ? " • " + cardName : ""}`, amount: e.amount });
+      const cid = e.cardId || cards[0]?.id;
+      const cardName = cards.find(c2 => c2.id === cid)?.name;
+      items.push({ key: `single-${e.id}`, label: e.note || e.merchantName || "Tek çekim", sub: `${e.date || ""}${cardName ? " • " + cardName : ""}`, amount: e.amount, cardId: cid });
     });
     // 3. Bu ay aktif taksitler
     data.installmentPlans.forEach(p => {
       let cur = p.startMonth;
       for (let i = 0; i < p.months; i++) {
         if (cur === mk) {
-          const cardName = (data.settings.cards || []).find(c2 => c2.id === p.cardId)?.name;
-          items.push({ key: `inst-${p.id}`, label: p.note || "Taksit", sub: `${p.monthlyPayment > 0 ? `Taksit ${i + 1}/${p.months}` : ""}${cardName ? " • " + cardName : ""}`, amount: p.monthlyPayment });
+          const cid = p.cardId || cards[0]?.id;
+          const cardName = cards.find(c2 => c2.id === cid)?.name;
+          items.push({ key: `inst-${p.id}`, label: p.note || "Taksit", sub: `${p.monthlyPayment > 0 ? `Taksit ${i + 1}/${p.months}` : ""}${cardName ? " • " + cardName : ""}`, amount: p.monthlyPayment, cardId: cid });
           break;
         }
         cur = nmk(cur);
@@ -968,6 +995,17 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
   }, [data, md, mk]);
   const ccTransferTotal = ccTransferItems.reduce((s, i) => s + i.amount, 0);
   const ccTransferredCount = ccTransferItems.filter(i => md.ccTransferred?.[i.key]?.transferred).length;
+  // Kart bazlı toplam
+  const ccTransferByCard = useMemo(() => {
+    const cards = data.settings.cards || [];
+    const byCard = {};
+    ccTransferItems.forEach(item => {
+      const cid = item.cardId || "unknown";
+      if (!byCard[cid]) byCard[cid] = { name: cards.find(c2 => c2.id === cid)?.name || "Bilinmeyen Kart", total: 0 };
+      byCard[cid].total += item.amount;
+    });
+    return Object.values(byCard).sort((a, b) => b.total - a.total);
+  }, [ccTransferItems, data.settings.cards]);
 
   // Savings progress
   const savingsProgress = c.savingsTarget > 0 ? Math.min((c.remaining / c.savingsTarget) * 100, 100) : 0;
@@ -1051,9 +1089,28 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
           <div style={{ color: X.td, fontSize: 11, marginBottom: 8 }}>
             {ccTransferredCount}/{ccTransferItems.length} kalem aktarıldı
           </div>
+          {/* Kart bazlı özet */}
+          {ccTransferByCard.length > 0 && (
+            <div style={{ marginBottom: 10, padding: "8px 10px", borderRadius: 10, background: "rgba(37,99,235,0.06)", border: "1px solid rgba(37,99,235,0.12)" }}>
+              {ccTransferByCard.map((card, i) => (
+                <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 0", borderBottom: i < ccTransferByCard.length - 1 ? "1px solid rgba(37,99,235,0.08)" : "none" }}>
+                  <span style={{ color: X.b, fontSize: 12, fontWeight: 700 }}>💳 {card.name}</span>
+                  <span style={{ color: X.b, fontSize: 14, fontWeight: 800, fontFamily: fm }}>{C(card.total)}</span>
+                </div>
+              ))}
+            </div>
+          )}
           {ccTransferItems.map(item => {
             const transferred = md.ccTransferred?.[item.key]?.transferred;
-            return <ItemRow key={item.key} label={item.label} sub={item.sub} value={item.amount} color={transferred ? X.g : X.t} onAction={!transferred ? () => handleCCTransfer(item.key) : null} actionLabel="Aktardım" />;
+            const isSingle = item.key.startsWith("single-");
+            const isInst = item.key.startsWith("inst-");
+            const sourceId = item.key.split("-").slice(1).join("-");
+            return <ItemRow key={item.key} label={item.label} sub={item.sub} value={item.amount} color={transferred ? X.g : X.t}
+              onAction={!transferred ? () => handleCCTransfer(item.key) : () => undoCCTransfer(item.key)}
+              actionLabel={transferred ? "↩ Geri Al" : "Aktardım"}
+              onEdit={isSingle ? () => editCCSingle(sourceId) : isInst ? () => editInstallment(sourceId) : null}
+              onDelete={isSingle ? () => deleteCCSingle(sourceId) : isInst ? () => deleteInstallment(sourceId) : null}
+            />;
           })}
         </CatButton>
       )}
@@ -1061,14 +1118,14 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
       {/* CATEGORIES */}
       <CatButton icon="🔒" label="Sabit Zorunlu Giderler" total={c.fixedTotal} color={X.w} dimColor={X.wd} expanded={expanded === "fixed"} onToggle={() => toggle("fixed")} onInfo={() => setInfo("fixed")}>
         {data.settings.fixedExpenses.length === 0 && <div style={{ color: X.td, fontSize: 12, padding: 8 }}>Ayarlar'dan ekleyin</div>}
-        {data.settings.fixedExpenses.map(exp => { const paid = md.fixedPaid?.[exp.id]; return <ItemRow key={exp.id} label={exp.name} sub={`${exp.paymentMethod === "cc" ? "💳" : "🏦"}${exp.increaseDate ? " • Artış: " + exp.increaseDate : ""}`} value={exp.amount} color={paid ? X.g : X.t} onAction={!paid ? () => handleFixedPay(exp.id) : null} actionLabel="Ödedim" />; })}
+        {data.settings.fixedExpenses.map(exp => { const paid = md.fixedPaid?.[exp.id]; return <ItemRow key={exp.id} label={exp.name} sub={`${exp.paymentMethod === "cc" ? "💳" : "🏦"}${exp.increaseDate ? " • Artış: " + exp.increaseDate : ""}`} value={exp.amount} color={paid ? X.g : X.t} onAction={!paid ? () => handleFixedPay(exp.id) : () => handleFixedUnpay(exp.id)} actionLabel={paid ? "↩ Geri Al" : "Ödedim"} />; })}
       </CatButton>
 
       {modal === "ccSingle" && <CCSingleModal cards={data.settings.cards || []} variableExpenses={data.settings.variableExpenses || []} onClose={() => setModal(null)} onSave={handleCCSingle} />}
       {modal === "ccInstall" && <CCInstallModal data={data} mk={mk} cards={data.settings.cards || []} variableExpenses={data.settings.variableExpenses || []} onClose={() => setModal(null)} onSave={handleInstSave} />}
       {modal === "simulate" && <CCInstallModal data={data} mk={mk} cards={data.settings.cards || []} variableExpenses={data.settings.variableExpenses || []} onClose={() => setModal(null)} onSave={handleInstSave} startInSim={true} />}
-      {modal === "cardLoad" && <CardLoadModal currentLoaded={md.cardLoaded || 0} maxPerTx={c.cardLoadMaxPerTx} maxTotal={c.cardLoadMaxTotal} onClose={() => setModal(null)} onSave={handleCardLoad} />}
-      {modal === "debtPay" && <DebtPayModal debts={data.debts} debtPayments={md.debtPayments} data={data} mk={mk} onClose={() => setModal(null)} onPay={handleDebtPay} />}
+      {modal === "cardLoad" && <CardLoadModal currentLoaded={md.cardLoaded || 0} maxPerTx={c.cardLoadMaxPerTx} maxTotal={c.cardLoadMaxTotal} onClose={() => setModal(null)} onSave={handleCardLoad} onEdit={editCardLoad} />}
+      {modal === "debtPay" && <DebtPayModal debts={data.debts} debtPayments={md.debtPayments} data={data} mk={mk} onClose={() => setModal(null)} onPay={handleDebtPay} onUndo={undoDebtPay} />}
       {modal === "budget" && <BudgetModal mk={mk} cur={md.budget || data.settings.monthlyBudget} def={data.settings.monthlyBudget} onSave={v => setMonthField(mk, "budget", v)} onClose={() => setModal(null)} />}
       {info && INFO[info] && <InfoModal title={INFO[info].title} text={INFO[info].text} onClose={() => setInfo(null)} />}
     </div>
