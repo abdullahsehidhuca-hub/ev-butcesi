@@ -101,6 +101,40 @@ function InfoModal({ title, text, onClose }) {
   return <Modal title={`ℹ️ ${title}`} onClose={onClose}><div style={{ color: X.t, fontSize: 14, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{text}</div><Btn onClick={onClose} s={{ marginTop: 16 }}>Anladım</Btn></Modal>;
 }
 
+// Dinamik tutar dökümü modalı — herhangi bir tutara tıklanınca açılır
+function DetailModal({ title, rows, total, totalLabel, totalColor, note, onClose }) {
+  // rows: [{label, value, sign, color, sub}]
+  return (
+    <Modal title={title} onClose={onClose}>
+      <div style={{ borderRadius: 10, padding: "12px 14px", background: "rgba(200,218,212,0.3)" }}>
+        {rows.map((row, i) => (
+          <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderBottom: i < rows.length - 1 ? "1px solid rgba(0,0,0,0.05)" : "none", fontSize: 13 }}>
+            <span style={{ color: row.color || X.tm, flex: 1, paddingRight: 8 }}>{row.sign === "−" ? "− " : ""}{row.label}{row.sub ? ` (${row.sub})` : ""}</span>
+            <span style={{ color: row.color || X.tm, fontFamily: fm, fontWeight: 700, flexShrink: 0 }}>{row.sign === "−" ? "−" : ""}{typeof row.value === "number" ? C(row.value) : row.value}</span>
+          </div>
+        ))}
+        {total !== undefined && (
+          <div style={{ borderTop: "2px solid rgba(0,0,0,0.1)", marginTop: 6, paddingTop: 8, display: "flex", justifyContent: "space-between", fontSize: 15 }}>
+            <span style={{ color: X.t, fontWeight: 800 }}>{totalLabel || "Toplam"}</span>
+            <span style={{ color: totalColor || X.g, fontFamily: fm, fontWeight: 800 }}>{C(total)}</span>
+          </div>
+        )}
+      </div>
+      {note && <div style={{ color: X.tm, fontSize: 11, marginTop: 10, lineHeight: 1.5 }}>{note}</div>}
+      <Btn onClick={onClose} s={{ marginTop: 12 }}>Anladım</Btn>
+    </Modal>
+  );
+}
+
+// Tıklanabilir tutar — altı noktalı çizgiyle gösterilir
+function TapAmt({ children, onTap, color, style: s }) {
+  return (
+    <span onClick={e => { e.stopPropagation(); onTap(); }} style={{ cursor: "pointer", borderBottom: `1px dotted ${color || X.td}`, paddingBottom: 1, ...s }}>
+      {children}
+    </span>
+  );
+}
+
 function CatButton({ icon, label, total, color, dimColor, expanded, onToggle, children, onInfo }) {
   return (<div style={{ marginBottom: 8 }}><div onClick={onToggle} style={{ display: "flex", alignItems: "center", gap: 12, ...glass, borderRadius: expanded ? "14px 14px 0 0" : 14, padding: "14px 16px", cursor: "pointer", position: "relative", border: `1px solid ${expanded ? color + "40" : "rgba(255,255,255,0.55)"}` }}><span style={{ fontSize: 28, lineHeight: 1 }}>{icon}</span><div style={{ flex: 1 }}><div style={{ color: X.t, fontWeight: 700, fontSize: 14, fontFamily: ff }}>{label}</div></div><div style={{ textAlign: "right", marginRight: 4 }}><div style={{ color, fontWeight: 800, fontSize: 17, fontFamily: fm }}>{C(total)}</div></div><span style={{ color: X.td, fontSize: 11, transform: expanded ? "rotate(180deg)" : "rotate(0)", transition: "0.2s" }}>▼</span>{onInfo && <InfoBtn onClick={onInfo} />}</div>{expanded && <div style={{ background: "rgba(200,218,212,0.45)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", borderTop: `1px solid rgba(0,0,0,0.05)`, borderRadius: "0 0 14px 14px", padding: "8px 16px 14px", boxShadow: "0 4px 10px rgba(0,0,0,0.04)" }}>{children}</div>}</div>);
 }
@@ -301,6 +335,44 @@ function calcFlat(data, m, extraInst) {
   const expectedVariable = hasActualData ? 0 : variableEstimate;
   const totalSpent = ft + cc + inst + dt + cl + expectedVariable;
   return { remaining: b - totalSpent, totalSpent };
+}
+
+/* ═══ DÖKÜM HELPER ═══ */
+function getMonthBreakdown(data, m) {
+  const mc = calcMonth(data, m, null);
+  const md = data.months[m] || DM();
+  const rows = [];
+  rows.push({ label: "Aylık bütçe", value: mc.effectiveBudget, color: X.g });
+  if (mc.carryoverDeficit > 0) rows.push({ label: "Önceki aydan devir", value: mc.carryoverDeficit, sign: "−", color: X.o });
+  // Sabit giderler detay
+  if (mc.fixedTotal > 0) {
+    rows.push({ label: `Sabit giderler (${data.settings.fixedExpenses.length} kalem)`, value: mc.fixedTotal, sign: "−" });
+  }
+  // Taksitler detay
+  if (mc.installmentTotal > 0) {
+    const planCount = data.installmentPlans.filter(p => { let c = p.startMonth; for (let i = 0; i < p.months; i++) { if (c === m) return true; c = nmk(c); } return false; }).length;
+    rows.push({ label: `Taksitler (${planCount} plan)`, value: mc.installmentTotal, sign: "−", color: X.p });
+  }
+  // Borç ödemeleri detay
+  if (mc.debtTotal > 0) {
+    const activeDebts = data.debts.filter(d => d.remainingMonths > 0);
+    const debtNames = activeDebts.map(d => d.name).join(", ");
+    rows.push({ label: `Borç ödemeleri (${debtNames})`, value: mc.debtTotal, sign: "−", color: X.w });
+  }
+  // CC tek çekim (mevcut ay)
+  if (mc.ccSingleTotal > 0) {
+    rows.push({ label: `CC tek çekim (${(md.ccSingle || []).length} işlem)`, value: mc.ccSingleTotal, sign: "−", color: X.b });
+  }
+  // Kart yükleme
+  if (mc.cardLoaded > 0) {
+    rows.push({ label: "Genel harcama kartı", value: mc.cardLoaded, sign: "−", color: X.g });
+  }
+  // Değişken gider tahmini
+  if (mc.expectedVariable > 0) {
+    const hasAvg = mc.variableEstimate !== (data.settings.variableExpenses || []).reduce((s, ve) => s + (ve.expectedAmount || 0), 0);
+    rows.push({ label: hasAvg ? "Değişken giderler (3 ay ort.)" : "Değişken giderler (tahmini)", value: mc.expectedVariable, sign: "−" });
+  }
+  return { rows, mc };
 }
 
 /* ═══ RISK ═══ */
@@ -1151,8 +1223,10 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
   const [modal, setModal] = useState(null);
   const [info, setInfo] = useState(null);
   const [msg, setMsg] = useState(null);
+  const [detail, setDetail] = useState(null);
 
   const md = gmd(mk); const c = calcMonth(data, mk, null);
+  const showMonthDetail = () => { const bd = getMonthBreakdown(data, mk); setDetail({ title: `${ml(mk)} — Bütçe Dökümü`, rows: bd.rows, total: bd.mc.remaining, totalLabel: "Serbest bütçe", totalColor: bd.mc.remaining >= CARD_LOAD_MIN ? X.g : bd.mc.remaining >= 0 ? X.w : X.r }); };
   const risk = useMemo(() => calcRisk(data, mk), [data, mk]);
   const pct = c.effectiveBudget > 0 ? (c.totalSpent / c.effectiveBudget) * 100 : 0;
   const toggle = id => setExpanded(expanded === id ? null : id);
@@ -1270,13 +1344,13 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
           <InfoBtn onClick={() => setInfo("ccSingle")} />
           <div style={{ fontSize: 24, marginBottom: 4 }}>💳</div>
           <div style={{ color: X.b, fontSize: 12, fontWeight: 700 }}>Kredi Kartı Tek Çekim</div>
-          <div style={{ color: X.t, fontSize: 16, fontWeight: 800, fontFamily: fm, marginTop: 2 }}>{C(c.ccSingleTotal)}</div>
+          <TapAmt color={X.t} onTap={() => { setDetail({ title: "💳 CC Tek Çekim Dökümü", rows: (md.ccSingle || []).map(e => ({ label: e.note || "İşlem", value: e.amount, sign: "", sub: e.date, color: X.b })), total: c.ccSingleTotal, totalLabel: `Toplam (${(md.ccSingle || []).length} işlem)`, totalColor: X.b, note: c.ccSingleTotal === 0 ? "Bu ay henüz CC tek çekim harcaması yok." : "" }); }}><div style={{ color: X.t, fontSize: 16, fontWeight: 800, fontFamily: fm, marginTop: 2 }}>{C(c.ccSingleTotal)}</div></TapAmt>
         </div>
         <div onClick={() => setModal("ccInstall")} style={{ ...glass, borderRadius: 16, padding: "14px 12px", cursor: "pointer", textAlign: "center", position: "relative" }}>
           <InfoBtn onClick={() => setInfo("ccInstall")} />
           <div style={{ fontSize: 24, marginBottom: 4 }}>📅</div>
           <div style={{ color: X.p, fontSize: 12, fontWeight: 700 }}>Kredi Kartı Taksitli</div>
-          <div style={{ color: X.t, fontSize: 16, fontWeight: 800, fontFamily: fm, marginTop: 2 }}>Bu ay: {C(c.installmentTotal)}</div>
+          <TapAmt color={X.t} onTap={() => { setDetail({ title: "📅 CC Taksitli Dökümü", rows: activePlans.map(p => ({ label: p.note || "Taksitli işlem", value: p.monthlyPayment, sign: "", sub: `${ml(p.startMonth)}'dan · ${p.months} taksit`, color: X.p })), total: c.installmentTotal, totalLabel: "Bu ay toplam taksit", totalColor: X.p, note: activePlans.length === 0 ? "Aktif taksit planı yok." : `${activePlans.length} plan · genel toplam: ${C(totalCommitted)}` }); }}><div style={{ color: X.t, fontSize: 16, fontWeight: 800, fontFamily: fm, marginTop: 2 }}>Bu ay: {C(c.installmentTotal)}</div></TapAmt>
           {activePlans.length > 0 && (
             <div style={{ marginTop: 4 }}>
               {c.installmentTotal === 0 && nextMonthInst > 0 && (
@@ -1296,7 +1370,7 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
           <InfoBtn onClick={() => setInfo("debt")} />
           <div style={{ fontSize: 24, marginBottom: 4 }}>📌</div>
           <div style={{ color: X.w, fontSize: 12, fontWeight: 700 }}>Borç Ödemeleri</div>
-          <div style={{ color: X.t, fontSize: 16, fontWeight: 800, fontFamily: fm, marginTop: 2 }}>{C(c.debtTotal)}</div>
+          <TapAmt color={X.t} onTap={() => { const activeDebts = data.debts.filter(d2 => d2.remainingMonths > 0); setDetail({ title: "📌 Borç Ödemeleri Dökümü", rows: activeDebts.map(d2 => { const sym = debtCurSymbol(d2.currency); const tlVal = debtTLValue(d2, data, mk); return { label: d2.name, value: tlVal, sign: "", sub: d2.currency !== "TRY" ? `${d2.monthlyPayment} ${sym}/ay · ${d2.remainingMonths} ay kaldı` : `${d2.remainingMonths} ay kaldı`, color: X.w }; }), total: c.debtTotal, totalLabel: "Aylık toplam borç ödemesi", totalColor: X.w }); }}><div style={{ color: X.t, fontSize: 16, fontWeight: 800, fontFamily: fm, marginTop: 2 }}>{C(c.debtTotal)}</div></TapAmt>
         </div>
 
         {/* Simulation full width */}
@@ -1432,6 +1506,7 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
         </Modal>
       )}
       {info && info !== "cardLoad" && INFO[info] && <InfoModal title={INFO[info].title} text={INFO[info].text} onClose={() => setInfo(null)} />}
+      {detail && <DetailModal {...detail} onClose={() => setDetail(null)} />}
     </div>
   );
 }
@@ -2233,6 +2308,7 @@ function PlanningScreen({ data, setData, mk }) {
   const [expandedAsset, setExpandedAsset] = useState(null);
   const [savingsModal, setSavingsModal] = useState(null);
   const [incSim, setIncSim] = useState({});
+  const [detail, setDetail] = useState(null); // {title, rows, total, totalLabel, totalColor, note}
   const c = calcMonth(data, mk, null);
   const assets = ["TRY", "XAU", "USD", "EUR"];
   const totalSavings = getTotalSavingsTL(data);
@@ -2312,17 +2388,30 @@ function PlanningScreen({ data, setData, mk }) {
         <>
           <Card s={{ marginBottom: 12 }}>
             <div style={{ color: X.tm, fontSize: 13, fontWeight: 700, marginBottom: 12 }}>GELECEK 12 AY</div>
-            {yearMap.map((m2, i) => (
+            {yearMap.map((m2, i) => {
+              const showBreakdown = () => {
+                const bd = getMonthBreakdown(data, m2.mk);
+                setDetail({
+                  title: `${ml(m2.mk)} — Bütçe Dökümü`,
+                  rows: bd.rows,
+                  total: bd.mc.remaining,
+                  totalLabel: "Serbest bütçe",
+                  totalColor: bd.mc.remaining >= CARD_LOAD_MIN ? X.g : bd.mc.remaining >= 0 ? X.w : X.r
+                });
+              };
+              return (
               <div key={m2.mk} style={{ padding: "10px 0", borderBottom: i < 11 ? `1px solid rgba(0,0,0,0.06)` : "none" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div style={{ flex: 1 }}>
                     <div style={{ color: X.t, fontSize: 14, fontWeight: i === 0 ? 800 : 600 }}>{ml(m2.mk)}{i === 0 ? " (bu ay)" : ""}</div>
-                    <div style={{ color: X.td, fontSize: 10, marginTop: 2 }}>
-                      Harcanan: {C(m2.totalSpent)}
-                    </div>
+                    <TapAmt onTap={showBreakdown} color={X.td}>
+                      <span style={{ color: X.td, fontSize: 10 }}>Aylık yükümlülük: {C(m2.totalSpent)}</span>
+                    </TapAmt>
                   </div>
                   <div style={{ textAlign: "right" }}>
-                    <div style={{ color: m2.remaining >= CARD_LOAD_MIN ? X.g : m2.remaining >= 0 ? X.w : X.r, fontWeight: 800, fontFamily: fm, fontSize: 16 }}>{C(m2.remaining)}</div>
+                    <TapAmt onTap={showBreakdown} color={m2.remaining >= CARD_LOAD_MIN ? X.g : m2.remaining >= 0 ? X.w : X.r}>
+                      <span style={{ color: m2.remaining >= CARD_LOAD_MIN ? X.g : m2.remaining >= 0 ? X.w : X.r, fontWeight: 800, fontFamily: fm, fontSize: 16 }}>{C(m2.remaining)}</span>
+                    </TapAmt>
                     <div style={{ color: X.td, fontSize: 9 }}>serbest</div>
                   </div>
                 </div>
@@ -2334,7 +2423,8 @@ function PlanningScreen({ data, setData, mk }) {
                   </div>
                 )}
               </div>
-            ))}
+              );
+            })}
           </Card>
 
           {/* Özet bilgiler */}
@@ -2592,6 +2682,7 @@ function PlanningScreen({ data, setData, mk }) {
       {/* Savings modals */}
       {savingsModal?.type === "buy" && <BuyAssetModal asset={savingsModal.asset} data={data} onClose={() => setSavingsModal(null)} onSave={tx => { setData(d => ({ ...d, savings: { ...d.savings, [savingsModal.asset]: [...(d.savings[savingsModal.asset] || []), tx] } })); setSavingsModal(null); }} />}
       {savingsModal?.type === "sell" && <SellAssetModal asset={savingsModal.asset} data={data} onClose={() => setSavingsModal(null)} onSave={tx => { setData(d => ({ ...d, savings: { ...d.savings, [savingsModal.asset]: [...(d.savings[savingsModal.asset] || []), tx] } })); setSavingsModal(null); }} />}
+      {detail && <DetailModal {...detail} onClose={() => setDetail(null)} />}
     </div>
   );
 }
@@ -3180,6 +3271,7 @@ export default function App() {
   const [data, setData] = useState(DD);
   const [loaded, setLoaded] = useState(false);
   const [tab, setTab] = useState("home");
+  const [headerDetail, setHeaderDetail] = useState(null);
   const mk = cmk();
 
   // Auth state listener
@@ -3235,6 +3327,7 @@ export default function App() {
   if (!loaded) return <div style={{ background: "linear-gradient(160deg, #E4E9F2, #D8DFE8, #E8ECF4)", height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: X.g, fontFamily: ff, fontSize: 16 }}>Veriler yükleniyor...</div>;
 
   const c = calcMonth(data, mk, null);
+  const showHeaderDetail = () => { const bd = getMonthBreakdown(data, mk); setHeaderDetail({ title: `${ml(mk)} — Bütçe Dökümü`, rows: bd.rows, total: bd.mc.remaining, totalLabel: "Kalan bütçe", totalColor: bd.mc.remaining >= CARD_LOAD_MIN ? X.g : bd.mc.remaining >= 0 ? X.w : X.r }); };
 
   return (
     <div style={{ background: "linear-gradient(160deg, #E4E9F2 0%, #D8DFE8 40%, #E8ECF4 100%)", minHeight: "100vh", color: X.t, fontFamily: ff, maxWidth: 480, margin: "0 auto", position: "relative" }}>
@@ -3245,12 +3338,12 @@ export default function App() {
       <div style={{ position: "fixed", bottom: 250, left: 10, width: 140, height: 140, borderRadius: "50%", background: "rgba(124,58,237,0.05)", filter: "blur(45px)", pointerEvents: "none" }} />
       <div style={{ ...glassSolid, borderBottom: "none", borderRadius: "0 0 18px 18px", padding: "calc(12px + env(safe-area-inset-top)) 20px 12px", display: "flex", justifyContent: "space-between", alignItems: "center", position: "sticky", top: 0, zIndex: 50, boxShadow: "0 4px 16px rgba(0,0,0,0.06)" }}>
         <div><div style={{ fontSize: 15, fontWeight: 800, letterSpacing: "-0.3px", color: X.t }}>EV BÜTÇESİ</div><div style={{ fontSize: 11, color: X.td }}>{ml(mk)}</div></div>
-        <div style={{ textAlign: "right" }}>
+        <div style={{ textAlign: "right", cursor: "pointer" }} onClick={showHeaderDetail}>
           <div style={{ fontSize: 10, color: X.tm, letterSpacing: 0.5 }}>BÜTÇE · KALAN</div>
           <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
             <span style={{ fontSize: 14, fontWeight: 600, color: X.td, fontFamily: fm }}>{C(c.effectiveBudget)}</span>
             <span style={{ color: X.td }}>/</span>
-            <span style={{ fontSize: 16, fontWeight: 800, color: c.remaining >= 0 ? X.g : X.r, fontFamily: fm }}>{C(c.remaining)}</span>
+            <span style={{ fontSize: 16, fontWeight: 800, color: c.remaining >= 0 ? X.g : X.r, fontFamily: fm, borderBottom: "1px dotted rgba(0,0,0,0.2)", paddingBottom: 1 }}>{C(c.remaining)}</span>
           </div>
         </div>
       </div>
@@ -3261,6 +3354,7 @@ export default function App() {
       <TabBar tab={tab} setTab={setTab} />
       {pendingCloseMk && <MonthCloseRitual data={data} setData={setData} prevMk={pendingCloseMk} onClose={() => { }} />}
       {!pendingCloseMk && needsWeeklyBackup(data) && <WeeklyBackupRitual data={data} setData={setData} />}
+      {headerDetail && <DetailModal {...headerDetail} onClose={() => setHeaderDetail(null)} />}
     </div>
   );
 }
