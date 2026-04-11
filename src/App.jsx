@@ -208,7 +208,7 @@ function calcMonth(data, m, extraInst) {
   const effectiveBudget = baseBudget - carryoverDeficit;
   const fixedTotal = data.settings.fixedExpenses.reduce((s, e) => s + e.amount, 0);
   const fixedCC = data.settings.fixedExpenses.filter(e => e.paymentMethod === "cc").reduce((s, e) => s + e.amount, 0);
-  const variableTotal = getCategorizedTotal(data, m); // analiz amaçlı, totalSpent'a EKLENMEZ
+  const variableTotal = getCategorizedTotal(data, m);
   const variableCC = Object.values(md.variableEntries || {}).filter(e => e.method === "cc").reduce((s, e) => s + (e.amount || 0), 0);
   const ccSingleTotal = (md.ccSingle || []).reduce((s, e) => s + e.amount, 0);
   let installmentTotal = data.installmentPlans.reduce((s, p) => { let c = p.startMonth; for (let i = 0; i < p.months; i++) { if (c === m) return s + p.monthlyPayment; c = nmk(c); } return s; }, 0);
@@ -231,23 +231,30 @@ function calcMonth(data, m, extraInst) {
   }, 0);
   const cardLoaded = md.cardLoaded || 0;
 
+  // Değişken zorunlu giderler: gelecek aylarda beklenen tutarları ekle
+  const hasActualSpending = ccSingleTotal > 0 || cardLoaded > 0 || Object.keys(md.variableEntries || {}).length > 0;
+  const expectedVariable = hasActualSpending ? 0 : (data.settings.variableExpenses || []).reduce((s, ve) => s + (ve.expectedAmount || 0), 0);
+
   // Card load limits
   const cardLoadMaxPerTx = Math.floor(baseBudget * CARD_LOAD_PER_TX_PCT);
   const cardLoadMaxTotal = Math.floor(baseBudget * CARD_LOAD_TOTAL_PCT);
   const cardLoadRemaining = Math.max(0, cardLoadMaxTotal - cardLoaded);
 
   // Total spent and remaining
-  const totalSpent = fixedTotal + ccSingleTotal + installmentTotal + debtTotal + cardLoaded;
+  const totalSpent = fixedTotal + ccSingleTotal + installmentTotal + debtTotal + cardLoaded + expectedVariable;
   const remaining = effectiveBudget - totalSpent;
 
-  // Savings target = remaining - expected CC single - remaining card load capacity
-  const expectedCCSingle = getCCSingleAvg(data, m);
-  const savingsTarget = Math.max(0, remaining - expectedCCSingle - cardLoadRemaining);
+  // Mevcut ay için: henüz yapılmamış değişken gider tahmini (birikim hedefi hesabı)
+  const pendingVariable = hasActualSpending ? Math.max(0, (data.settings.variableExpenses || []).reduce((s, ve) => s + (ve.expectedAmount || 0), 0) - ccSingleTotal - cardLoaded) : 0;
+
+  // Savings target = remaining - pending variable expenses - expected future CC singles
+  const expectedCCSingle = hasActualSpending ? getCCSingleAvg(data, m) : 0;
+  const savingsTarget = Math.max(0, remaining - pendingVariable - expectedCCSingle - (hasActualSpending ? cardLoadRemaining : 0));
 
   // CC transfer needed
   const ccTransferNeeded = fixedCC + variableCC + ccSingleTotal + installmentTotal;
 
-  return { effectiveBudget, baseBudget, carryoverDeficit, fixedTotal, variableTotal, ccSingleTotal, installmentTotal, debtTotal, cardLoaded, cardLoadMaxPerTx, cardLoadMaxTotal, cardLoadRemaining, totalSpent, remaining, savingsTarget, expectedCCSingle, ccTransferNeeded };
+  return { effectiveBudget, baseBudget, carryoverDeficit, fixedTotal, variableTotal, ccSingleTotal, installmentTotal, debtTotal, cardLoaded, cardLoadMaxPerTx, cardLoadMaxTotal, cardLoadRemaining, totalSpent, remaining, savingsTarget, expectedCCSingle, ccTransferNeeded, expectedVariable, pendingVariable };
 }
 function calcFlat(data, m, extraInst) {
   const md = data.months[m] || DM();
@@ -880,7 +887,7 @@ function WeeklyBackupRitual({ data, setData }) {
 
 function BudgetModal({ mk: m, cur, def, onSave, onClose }) { const [v, setV] = useState(String(cur || def)); return (<Modal title={`💰 ${ml(m)} Bütçesi`} onClose={onClose}><Inp label="Bu Ayın Bütçesi" type="number" value={v} onChange={setV} suffix="₺" /><Btn onClick={() => { onSave(parseFloat(v) || def); onClose(); }}>Kaydet</Btn></Modal>); }
 
-function CCInstallModal({ data, mk, cards, variableExpenses, onClose, onSave, startInSim }) {
+function CCInstallModal({ data, mk, cards, variableExpenses, onClose, onSave, onDeletePlan, onEditPlan, startInSim }) {
   const [a, sa] = useState(""); const [mo, smo] = useState("3"); const [n, sn] = useState(""); const [mn, smn] = useState("");
   const [cardId, setCardId] = useState(cards[0]?.id || "");
   const [categoryId, setCategoryId] = useState("");
@@ -907,8 +914,60 @@ function CCInstallModal({ data, mk, cards, variableExpenses, onClose, onSave, st
 
   const save = () => { if (!t || !cardId) return; onSave({ id: uid(), totalAmount: t, monthlyPayment: mp, months: m2, rate: 0, startMonth: nmk(mk), remainingMonths: m2, note: n, merchantName: mn, cardId, categoryId: categoryId || null, createdDate: td() }); onClose(); };
 
+  // Aktif taksit planları
+  const activePlans = data.installmentPlans.filter(p => {
+    let cur = p.startMonth;
+    for (let i = 0; i < p.months; i++) {
+      if (cur >= mk) return true;
+      cur = nmk(cur);
+    }
+    return false;
+  });
+
   return (
     <Modal title={startInSim ? "🔮 Taksit Simülasyonu" : "📅 Kredi Kartı Taksitli"} onClose={onClose}>
+
+      {/* AKTİF TAKSİT PLANLARI */}
+      {activePlans.length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ color: X.tm, fontSize: 11, fontWeight: 700, marginBottom: 8 }}>AKTİF TAKSİT PLANLARI</div>
+          {activePlans.map(p => {
+            const cardName = cards.find(c2 => c2.id === p.cardId)?.name || "—";
+            // Kaç taksit ödendi hesapla
+            let paidCount = 0;
+            let cur = p.startMonth;
+            for (let i = 0; i < p.months; i++) {
+              if (cur < mk) paidCount++;
+              else break;
+              cur = nmk(cur);
+            }
+            const remainingCount = p.months - paidCount;
+            return (
+              <Card key={p.id} s={{ marginBottom: 6, padding: "10px 12px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ color: X.t, fontSize: 13, fontWeight: 700 }}>{p.note || "Taksitli işlem"}</div>
+                    {p.merchantName && <div style={{ color: X.td, fontSize: 11 }}>{p.merchantName}</div>}
+                    <div style={{ color: X.tm, fontSize: 11, marginTop: 4 }}>
+                      <span style={{ fontFamily: fm, fontWeight: 700, color: X.p }}>{C(p.monthlyPayment)}</span>/ay × {p.months} taksit · {ml(p.startMonth)}'dan
+                    </div>
+                    <div style={{ color: X.td, fontSize: 10, marginTop: 2 }}>
+                      💳 {cardName} · {paidCount}/{p.months} ödendi · {remainingCount} kaldı · Toplam: {C(p.totalAmount)}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: 4, flexShrink: 0, marginLeft: 8 }}>
+                    {onEditPlan && <button onClick={() => onEditPlan(p.id)} style={{ background: "none", border: "none", color: X.b, fontSize: 16, cursor: "pointer", padding: "2px 4px" }}>✎</button>}
+                    {onDeletePlan && <button onClick={() => { if (confirm(`"${p.note || "Bu taksit planı"}" silinecek. Emin misiniz?`)) onDeletePlan(p.id); }} style={{ background: "none", border: "none", color: X.r, fontSize: 16, cursor: "pointer", padding: "2px 4px" }}>✕</button>}
+                  </div>
+                </div>
+              </Card>
+            );
+          })}
+          <div style={{ borderBottom: `1px solid rgba(0,0,0,0.08)`, marginBottom: 12, paddingBottom: 4 }}>
+            <div style={{ color: X.tm, fontSize: 11, fontWeight: 700 }}>YENİ TAKSİTLİ İŞLEM EKLE</div>
+          </div>
+        </div>
+      )}
       {cards.length === 0 ? (
         <div style={{ color: X.w, fontSize: 13, marginBottom: 12, padding: 10, background: X.wd, borderRadius: 8 }}>⚠️ Önce Ayarlar → Kartlarım'dan en az bir kart eklemelisiniz.</div>
       ) : (
@@ -1257,8 +1316,8 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
       </CatButton>
 
       {modal === "ccSingle" && <CCSingleModal cards={data.settings.cards || []} variableExpenses={data.settings.variableExpenses || []} onClose={() => setModal(null)} onSave={handleCCSingle} />}
-      {modal === "ccInstall" && <CCInstallModal data={data} mk={mk} cards={data.settings.cards || []} variableExpenses={data.settings.variableExpenses || []} onClose={() => setModal(null)} onSave={handleInstSave} />}
-      {modal === "simulate" && <CCInstallModal data={data} mk={mk} cards={data.settings.cards || []} variableExpenses={data.settings.variableExpenses || []} onClose={() => setModal(null)} onSave={handleInstSave} startInSim={true} />}
+      {modal === "ccInstall" && <CCInstallModal data={data} mk={mk} cards={data.settings.cards || []} variableExpenses={data.settings.variableExpenses || []} onClose={() => setModal(null)} onSave={handleInstSave} onDeletePlan={deleteInstallment} onEditPlan={editInstallment} />}
+      {modal === "simulate" && <CCInstallModal data={data} mk={mk} cards={data.settings.cards || []} variableExpenses={data.settings.variableExpenses || []} onClose={() => setModal(null)} onSave={handleInstSave} onDeletePlan={deleteInstallment} onEditPlan={editInstallment} startInSim={true} />}
       {modal === "cardLoad" && <CardLoadModal currentLoaded={md.cardLoaded || 0} maxPerTx={c.cardLoadMaxPerTx} maxTotal={c.cardLoadMaxTotal} onClose={() => setModal(null)} onSave={handleCardLoad} onEdit={editCardLoad} />}
       {modal === "debtPay" && <DebtPayModal debts={data.debts} debtPayments={md.debtPayments} data={data} mk={mk} onClose={() => setModal(null)} onPay={handleDebtPay} onUndo={undoDebtPay} />}
       {modal === "budget" && <BudgetModal mk={mk} cur={md.budget || data.settings.monthlyBudget} def={data.settings.monthlyBudget} onSave={v => setMonthField(mk, "budget", v)} onClose={() => setModal(null)} />}
