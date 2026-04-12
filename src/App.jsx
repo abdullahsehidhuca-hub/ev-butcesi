@@ -38,11 +38,92 @@ const DM = () => ({ budget: null, fixedPaid: {}, variableEntries: {}, ccSingle: 
 
 const STORAGE_KEY = "ev-butce-v11";
 
-async function loadDB(uid) {
-  // 1. Realtime Database'den oku
+// İsim normalizasyonu (büyük/küçük harf duyarsız)
+const normName = n => n.toLowerCase().replace(/\s+/g, " ").trim();
+const nameKey = n => normName(n).replace(/[.#$\[\]\/]/g, "_");
+
+// Aile sistemi
+function genCode() { return String(Math.floor(100000 + Math.random() * 900000)); }
+
+// İsim → e-posta eşleştirme (giriş için)
+async function lookupName(name) {
   try {
-    if (uid) {
-      const snap = await get(ref(rtdb, `budgets/${uid}`));
+    const snap = await get(ref(rtdb, `nameIndex/${nameKey(name)}`));
+    if (snap.exists()) return snap.val(); // { email, familyId, uid }
+  } catch {}
+  return null;
+}
+async function registerName(name, email, familyId, uid2) {
+  await set(ref(rtdb, `nameIndex/${nameKey(name)}`), { email, familyId, uid: uid2 });
+}
+
+// Aile oluştur (ilk kullanıcı = yönetici)
+async function createFamily(uid2, email, name) {
+  const familyId = uid2;
+  const code = genCode();
+  await set(ref(rtdb, `families/${familyId}/admin`), uid2);
+  await set(ref(rtdb, `families/${familyId}/members/${uid2}`), { name, email, role: "admin", joinedAt: new Date().toISOString() });
+  await set(ref(rtdb, `userFamilies/${uid2}`), { familyId, code, role: "admin", name });
+  await registerName(name, email, familyId, uid2);
+  return { familyId, code, role: "admin", name };
+}
+
+// Davet oluştur (admin tarafından)
+async function createInvitation(familyId, memberName, memberEmail) {
+  const code = genCode();
+  await set(ref(rtdb, `invitations/${code}`), { familyId, name: memberName, email: memberEmail, createdAt: new Date().toISOString(), used: false });
+  return code;
+}
+
+// Davet kodunu kontrol et
+async function lookupInvitation(code) {
+  try {
+    const snap = await get(ref(rtdb, `invitations/${code}`));
+    if (snap.exists()) { const inv = snap.val(); if (!inv.used) return inv; }
+  } catch {}
+  return null;
+}
+
+// Davetli üye katılım (Firebase Auth hesabı oluşturulduktan sonra)
+async function joinViaInvitation(uid2, code, invData) {
+  const { familyId, name, email } = invData;
+  await set(ref(rtdb, `families/${familyId}/members/${uid2}`), { name, email, role: "member", joinedAt: new Date().toISOString() });
+  await set(ref(rtdb, `userFamilies/${uid2}`), { familyId, code, role: "member", name });
+  await set(ref(rtdb, `invitations/${code}/used`), true);
+  await registerName(name, email, familyId, uid2);
+  return { familyId, code, role: "member", name };
+}
+
+// Üye erişim sıfırlama (yeni kod ver, eski üye kaydını temizle)
+async function resetMemberAccess(familyId, memberUid, memberName, memberEmail) {
+  // Eski kayıtları temizle
+  try { await set(ref(rtdb, `userFamilies/${memberUid}`), null); } catch {}
+  try { await set(ref(rtdb, `nameIndex/${nameKey(memberName)}`), null); } catch {}
+  try { await set(ref(rtdb, `families/${familyId}/members/${memberUid}`), null); } catch {}
+  // Yeni davet oluştur
+  return await createInvitation(familyId, memberName, memberEmail);
+}
+
+async function getUserFamily(uid2) {
+  try {
+    const snap = await get(ref(rtdb, `userFamilies/${uid2}`));
+    if (snap.exists()) return snap.val();
+  } catch {}
+  return null;
+}
+
+async function getFamilyMembers(familyId) {
+  try {
+    const snap = await get(ref(rtdb, `families/${familyId}/members`));
+    if (snap.exists()) return snap.val();
+  } catch {}
+  return {};
+}
+
+async function loadDB(familyId) {
+  try {
+    if (familyId) {
+      const snap = await get(ref(rtdb, `families/${familyId}/data`));
       if (snap.exists()) {
         const data = snap.val();
         try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch {}
@@ -50,27 +131,32 @@ async function loadDB(uid) {
       }
     }
   } catch (e) { console.warn("Firebase okuma hatası:", e); }
-  // 2. localStorage fallback
-  try {
-    const r = localStorage.getItem(STORAGE_KEY);
-    if (r) return JSON.parse(r);
-  } catch {}
+  try { const r = localStorage.getItem(STORAGE_KEY); if (r) return JSON.parse(r); } catch {}
   return null;
 }
 
-async function saveDB(d, uid) {
-  const clean = JSON.parse(JSON.stringify(d)); // undefined değerleri temizle
-  // 1. Firebase'e kaydet
-  try {
-    if (uid) await set(ref(rtdb, `budgets/${uid}`), clean);
-  } catch (e) { console.warn("Firebase kayıt hatası:", e); }
-  // 2. localStorage yedek
+async function saveDB(d, familyId) {
+  const clean = JSON.parse(JSON.stringify(d));
+  try { if (familyId) await set(ref(rtdb, `families/${familyId}/data`), clean); } catch (e) { console.warn("Firebase kayıt hatası:", e); }
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); } catch {}
 }
 
-async function deleteDB(uid) {
-  try { if (uid) await set(ref(rtdb, `budgets/${uid}`), null); } catch {}
+async function deleteDB(familyId) {
+  try { if (familyId) await set(ref(rtdb, `families/${familyId}/data`), null); } catch {}
   try { localStorage.removeItem(STORAGE_KEY); } catch {}
+}
+
+async function migrateOldData(uid2) {
+  try {
+    const oldSnap = await get(ref(rtdb, `budgets/${uid2}`));
+    if (oldSnap.exists()) {
+      const oldData = oldSnap.val();
+      await set(ref(rtdb, `families/${uid2}/data`), oldData);
+      await set(ref(rtdb, `budgets/${uid2}`), null);
+      return oldData;
+    }
+  } catch {}
+  return null;
 }
 
 /* ═══ KUR SİSTEMİ (sadece manuel) ═══ */
@@ -2665,9 +2751,129 @@ function PlanningScreen({ data, setData, mk }) {
   );
 }
 
-function Settings({ data, setData }) {
+function FamilyManagement({ isAdmin, family, onBack }) {
+  const [members, setMembers] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [addMode, setAddMode] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+  const [generatedCode, setGeneratedCode] = useState(null);
+  const [msg, setMsg] = useState(null);
+
+  useEffect(() => {
+    if (family?.familyId) {
+      getFamilyMembers(family.familyId).then(m => { setMembers(m); setLoading(false); });
+    }
+  }, [family]);
+
+  const handleAddMember = async () => {
+    if (!newName || !newEmail) { setMsg({ type: "error", text: "İsim ve e-posta gerekli" }); return; }
+    try {
+      const code = await createInvitation(family.familyId, newName, newEmail);
+      setGeneratedCode(code);
+      setMsg({ type: "success", text: "Davet kodu oluşturuldu!" });
+    } catch (e) { setMsg({ type: "error", text: "Hata: " + e.message }); }
+  };
+
+  const handleResetMember = async (memberUid, memberName, memberEmail) => {
+    if (!confirm(`"${memberName}" için mevcut erişimi iptal edip yeni davet kodu oluşturulsun mu?`)) return;
+    try {
+      const code = await resetMemberAccess(family.familyId, memberUid, memberName, memberEmail);
+      setGeneratedCode(code);
+      setMsg({ type: "success", text: `${memberName} için yeni kod: ${code}` });
+      // Üye listesini güncelle
+      const m = await getFamilyMembers(family.familyId);
+      setMembers(m);
+    } catch (e) { setMsg({ type: "error", text: "Hata: " + e.message }); }
+  };
+
+  const memberList = Object.entries(members).map(([uid2, m]) => ({ uid: uid2, ...m }));
+
+  return (
+    <div style={{ padding: "20px 16px 100px" }}>
+      <button onClick={onBack} style={{ background: "none", border: "none", color: X.g, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff, padding: 0, marginBottom: 16 }}>← Geri</button>
+
+      {msg && <div style={{ background: msg.type === "success" ? X.gd : X.rd, border: `1px solid ${msg.type === "success" ? X.g : X.r}`, borderRadius: 10, padding: "8px 12px", marginBottom: 12, color: msg.type === "success" ? X.g : X.r, fontSize: 12, fontWeight: 600 }}>{msg.text}</div>}
+
+      <Card s={{ marginBottom: 12 }}>
+        <div style={{ color: X.tm, fontSize: 12, fontWeight: 700, marginBottom: 12 }}>AİLE BİLGİLERİ</div>
+        <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid rgba(0,0,0,0.06)" }}>
+          <span style={{ color: X.tm, fontSize: 13 }}>Giriş adınız</span>
+          <span style={{ color: X.t, fontSize: 13, fontWeight: 700 }}>{family?.name || "—"}</span>
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid rgba(0,0,0,0.06)" }}>
+          <span style={{ color: X.tm, fontSize: 13 }}>Rolünüz</span>
+          <span style={{ color: isAdmin ? X.g : X.b, fontSize: 13, fontWeight: 700 }}>{isAdmin ? "👑 Yönetici" : "👤 Üye"}</span>
+        </div>
+      </Card>
+
+      <Card s={{ marginBottom: 12 }}>
+        <div style={{ color: X.tm, fontSize: 12, fontWeight: 700, marginBottom: 12 }}>ÜYELER</div>
+        {loading ? <div style={{ color: X.td, fontSize: 12 }}>Yükleniyor...</div> :
+          memberList.map(m => (
+            <div key={m.uid} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid rgba(0,0,0,0.04)" }}>
+              <div>
+                <div style={{ color: X.t, fontSize: 13, fontWeight: 700 }}>{m.name || m.email}</div>
+                <div style={{ color: X.td, fontSize: 10 }}>{m.role === "admin" ? "👑 Yönetici" : "👤 Üye"} · {m.email}</div>
+              </div>
+              {isAdmin && m.role !== "admin" && (
+                <button onClick={() => handleResetMember(m.uid, m.name, m.email)} style={{ background: X.wd, border: `1px solid ${X.w}`, borderRadius: 6, padding: "4px 8px", color: X.w, fontSize: 10, fontWeight: 700, cursor: "pointer" }}>Yeni Kod Ver</button>
+              )}
+            </div>
+          ))
+        }
+      </Card>
+
+      {isAdmin && !addMode && !generatedCode && (
+        <Btn onClick={() => setAddMode(true)} v="outline" c={X.g}>+ Yeni Üye Ekle</Btn>
+      )}
+
+      {isAdmin && addMode && !generatedCode && (
+        <Card s={{ border: `1px solid ${X.g}` }}>
+          <div style={{ color: X.g, fontSize: 13, fontWeight: 700, marginBottom: 10 }}>YENİ ÜYE</div>
+          <Inp label="İsim Soyisim" value={newName} onChange={setNewName} placeholder="Örn: Kadriye Huca" />
+          <Inp label="E-posta" value={newEmail} onChange={setNewEmail} placeholder="ornek@gmail.com" />
+          <div style={{ display: "flex", gap: 8 }}>
+            <Btn onClick={handleAddMember} c={X.g} s={{ flex: 1 }}>Davet Kodu Oluştur</Btn>
+            <Btn onClick={() => { setAddMode(false); setNewName(""); setNewEmail(""); }} v="outline" c={X.td} s={{ flex: 1 }}>İptal</Btn>
+          </div>
+        </Card>
+      )}
+
+      {generatedCode && (
+        <Card s={{ border: `1px solid ${X.g}`, background: X.gd, textAlign: "center" }}>
+          <div style={{ color: X.g, fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Davet Kodu:</div>
+          <div style={{ color: X.t, fontSize: 36, fontWeight: 800, fontFamily: fm, letterSpacing: 6 }}>{generatedCode}</div>
+          <div style={{ color: X.tm, fontSize: 11, marginTop: 8 }}>Bu kodu üyeyle paylaşın. Tek seferlik kullanılır.</div>
+          <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+            <Btn onClick={() => navigator.clipboard?.writeText(generatedCode)} s={{ flex: 1 }}>📋 Kopyala</Btn>
+            <Btn onClick={() => { setGeneratedCode(null); setAddMode(false); setNewName(""); setNewEmail(""); }} v="outline" c={X.td} s={{ flex: 1 }}>Tamam</Btn>
+          </div>
+        </Card>
+      )}
+
+      <div style={{ color: X.td, fontSize: 11, marginTop: 12, lineHeight: 1.6 }}>
+        {isAdmin ? "Yönetici olarak yeni üye ekleyebilir ve mevcut üyelerin erişimini sıfırlayabilirsiniz. Yedekleme sorumluluğu sizdedir." : "Aile yöneticisi üye ekleme ve erişim yönetimi yapabilir."}
+      </div>
+    </div>
+  );
+}
+
+function Settings({ data, setData, isAdmin, family }) {
   const [sec, setSec] = useState(null); const [form, setForm] = useState({}); const mk = cmk();
-  const secs = [{ id: "budget", l: "Aylık Bütçe", i: "💰", d: C(data.settings.monthlyBudget) }, { id: "cards", l: "Kartlarım", i: "💳", d: `${(data.settings.cards || []).length} kart` }, { id: "fixed", l: "Sabit Giderler", i: "🔒", d: `${data.settings.fixedExpenses.length} kalem` }, { id: "variable", l: "Harcama Kategorileri", i: "🔄", d: `${data.settings.variableExpenses.length} kategori` }, { id: "debts", l: "Borçlar", i: "📌", d: `${data.debts.filter(d => d.remainingMonths > 0).length} aktif` }, { id: "emergency", l: "Acil Durum Fonu", i: "🛡️", d: data.settings.emergencyFundTarget ? C(data.settings.emergencyFundTarget) : "Henüz belirlenmedi" }, { id: "rates", l: "Güncel Kurlar", i: "💱", d: data.liveRates?.USD ? `$${data.liveRates.USD.toFixed(2)}` : "Henüz girilmedi" }, { id: "backup", l: "Yedekleme", i: "💾", d: "Yedek Al / Geri Yükle" }, { id: "reset", l: "Sıfırla", i: "🗑️", d: "Geri alınamaz" }, { id: "logout", l: "Çıkış Yap", i: "🚪", d: auth.currentUser?.email || "" }];
+  const secs = [
+    { id: "budget", l: "Aylık Bütçe", i: "💰", d: C(data.settings.monthlyBudget) },
+    { id: "cards", l: "Kartlarım", i: "💳", d: `${(data.settings.cards || []).length} kart` },
+    { id: "fixed", l: "Sabit Giderler", i: "🔒", d: `${data.settings.fixedExpenses.length} kalem` },
+    { id: "variable", l: "Harcama Kategorileri", i: "🔄", d: `${data.settings.variableExpenses.length} kategori` },
+    { id: "debts", l: "Borçlar", i: "📌", d: `${data.debts.filter(d => d.remainingMonths > 0).length} aktif` },
+    { id: "emergency", l: "Acil Durum Fonu", i: "🛡️", d: data.settings.emergencyFundTarget ? C(data.settings.emergencyFundTarget) : "Henüz belirlenmedi" },
+    { id: "rates", l: "Güncel Kurlar", i: "💱", d: data.liveRates?.USD ? `$${data.liveRates.USD.toFixed(2)}` : "Henüz girilmedi" },
+    ...(isAdmin ? [{ id: "backup", l: "Yedekleme", i: "💾", d: "Yedek Al / Geri Yükle" }] : []),
+    { id: "family", l: "Aile Bilgileri", i: "👨‍👩‍👧‍👦", d: isAdmin ? "Yönetici" : "Üye" },
+    ...(isAdmin ? [{ id: "reset", l: "Sıfırla", i: "🗑️", d: "Geri alınamaz" }] : []),
+    { id: "logout", l: "Çıkış Yap", i: "🚪", d: auth.currentUser?.email || "" },
+  ];
   const BackBtn = () => <button onClick={() => setSec(null)} style={{ background: "none", border: "none", color: X.g, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff, padding: 0, marginBottom: 16 }}>← Geri</button>;
   if (!sec) return (<div style={{ padding: "20px 16px 100px" }}><h2 style={{ color: X.t, fontSize: 20, margin: "0 0 16px", fontFamily: ff }}>Ayarlar</h2><div style={{ display: "flex", flexDirection: "column", gap: 8 }}>{secs.map(s => (<Card key={s.id} onClick={() => { setSec(s.id); setForm({}); }} s={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 14 }}><span style={{ fontSize: 24 }}>{s.i}</span><div style={{ flex: 1 }}><div style={{ color: X.t, fontWeight: 700, fontSize: 15 }}>{s.l}</div><div style={{ color: X.td, fontSize: 12 }}>{s.d}</div></div><span style={{ color: X.td }}>›</span></Card>))}</div></div>);
   if (sec === "budget") return (<div style={{ padding: "20px 16px 100px" }}><BackBtn /><Inp label="Varsayılan (₺)" type="number" value={form.b ?? data.settings.monthlyBudget} onChange={v => setForm({ b: v })} suffix="₺" /><Btn onClick={() => { setData(d => ({ ...d, settings: { ...d.settings, monthlyBudget: parseFloat(form.b) || 0 } })); setSec(null); }}>Kaydet</Btn></div>);
@@ -2678,8 +2884,9 @@ function Settings({ data, setData }) {
   if (sec === "emergency") return <EmergencyFundSettings data={data} setData={setData} onBack={() => setSec(null)} />;
   if (sec === "rates") return <RatesSettings data={data} setData={setData} onBack={() => setSec(null)} />;
   if (sec === "backup") return <BackupSettings data={data} setData={setData} onBack={() => setSec(null)} />;
-  if (sec === "reset") return (<div style={{ padding: "20px 16px 100px" }}><BackBtn /><Card s={{ border: `1px solid ${X.r}`, background: X.rd, textAlign: "center", padding: 24 }}><div style={{ fontSize: 36, marginBottom: 8 }}>⚠️</div><Btn c={X.r} onClick={async () => { await deleteDB(auth.currentUser?.uid); setData({ ...DD }); setSec(null); }}>Tüm Verileri Sil</Btn></Card></div>);
-  if (sec === "logout") return (<div style={{ padding: "20px 16px 100px" }}><BackBtn /><Card s={{ textAlign: "center", padding: 24 }}><div style={{ fontSize: 36, marginBottom: 8 }}>🚪</div><div style={{ color: X.t, fontSize: 14, marginBottom: 8 }}>Giriş yapan: <strong>{auth.currentUser?.email}</strong></div><div style={{ color: X.tm, fontSize: 12, marginBottom: 16 }}>Çıkış yaptığınızda verileriniz bulutta güvende kalır. Tekrar aynı hesapla giriş yapabilirsiniz.</div><Btn c={X.r} onClick={() => signOut(auth)}>Çıkış Yap</Btn></Card></div>);
+  if (sec === "reset") return (<div style={{ padding: "20px 16px 100px" }}><BackBtn /><Card s={{ border: `1px solid ${X.r}`, background: X.rd, textAlign: "center", padding: 24 }}><div style={{ fontSize: 36, marginBottom: 8 }}>⚠️</div><Btn c={X.r} onClick={async () => { await deleteDB(family?.familyId); setData({ ...DD }); setSec(null); }}>Tüm Verileri Sil</Btn></Card></div>);
+  if (sec === "family") return (<FamilyManagement isAdmin={isAdmin} family={family} onBack={() => setSec(null)} />);
+  if (sec === "logout") return (<div style={{ padding: "20px 16px 100px" }}><BackBtn /><Card s={{ textAlign: "center", padding: 24 }}><div style={{ fontSize: 36, marginBottom: 8 }}>🚪</div><div style={{ color: X.t, fontSize: 14, marginBottom: 8 }}>Giriş: <strong>{family?.name || auth.currentUser?.email}</strong></div><div style={{ color: X.tm, fontSize: 12, marginBottom: 16 }}>Çıkış yaptığınızda verileriniz bulutta güvende kalır. İsminiz ve şifrenizle tekrar giriş yapabilirsiniz.</div><Btn c={X.r} onClick={() => signOut(auth)}>Çıkış Yap</Btn></Card></div>);
   return null;
 }
 function FixedSettings({ data, setData, onBack }) {
@@ -3193,29 +3400,80 @@ function MonthCloseRitual({ data, setData, prevMk, onClose }) {
 }
 
 /* ═══ MAIN ═══ */
-function LoginScreen() {
-  const [email, setEmail] = useState("");
+function LoginScreen({ pendingInvite, setPendingInvite }) {
+  const [name, setName] = useState("");
   const [pass, setPass] = useState("");
-  const [isRegister, setIsRegister] = useState(false);
+  const [mode, setMode] = useState("login");
+  const [email, setEmail] = useState("");
+  const [invCode, setInvCode] = useState("");
+  const [invData, setInvData] = useState(null);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async () => {
-    if (!email || !pass) { setErr("E-posta ve şifre gerekli"); return; }
+  const handleLogin = async () => {
+    if (!name || !pass) { setErr("İsim ve şifre gerekli"); return; }
+    setLoading(true); setErr("");
+    try {
+      const found = await lookupName(name);
+      if (found) {
+        await signInWithEmailAndPassword(auth, found.email, pass);
+      } else if (name.includes("@")) {
+        // E-posta ile giriş (eski hesaplarla uyumluluk)
+        setPendingInvite({ type: "migrateName", name });
+        await signInWithEmailAndPassword(auth, name, pass);
+      } else {
+        setErr("Bu isimle kayıtlı hesap yok. İlk girişte e-postanızı kullanın.");
+      }
+    } catch (e) {
+      if (e.code === "auth/wrong-password" || e.code === "auth/invalid-credential") setErr("Şifre yanlış.");
+      else if (e.code === "auth/user-not-found") setErr("Hesap bulunamadı.");
+      else setErr(e.message);
+      setPendingInvite(null);
+    }
+    setLoading(false);
+  };
+
+  const handleRegister = async () => {
+    if (!name || !email || !pass) { setErr("Tüm alanları doldurun"); return; }
     if (pass.length < 6) { setErr("Şifre en az 6 karakter olmalı"); return; }
     setLoading(true); setErr("");
     try {
-      if (isRegister) {
-        await createUserWithEmailAndPassword(auth, email, pass);
-      } else {
-        await signInWithEmailAndPassword(auth, email, pass);
-      }
+      const existing = await lookupName(name);
+      if (existing) { setErr("Bu isim zaten kayıtlı. Giriş yapın."); setLoading(false); return; }
+      setPendingInvite({ type: "newAdmin", name, email });
+      await createUserWithEmailAndPassword(auth, email, pass);
     } catch (e) {
-      if (e.code === "auth/user-not-found") setErr("Bu e-posta ile kayıtlı hesap yok. Kayıt olun.");
-      else if (e.code === "auth/wrong-password" || e.code === "auth/invalid-credential") setErr("Şifre yanlış.");
-      else if (e.code === "auth/email-already-in-use") setErr("Bu e-posta zaten kayıtlı. Giriş yapın.");
+      if (e.code === "auth/email-already-in-use") setErr("Bu e-posta zaten kayıtlı.");
       else if (e.code === "auth/invalid-email") setErr("Geçersiz e-posta adresi.");
       else setErr(e.message);
+      setPendingInvite(null);
+    }
+    setLoading(false);
+  };
+
+  const handleCheckInvite = async () => {
+    if (!invCode || invCode.length !== 6) { setErr("6 haneli davet kodunu girin"); return; }
+    setLoading(true); setErr("");
+    try {
+      const inv = await lookupInvitation(invCode);
+      if (!inv) { setErr("Geçersiz veya kullanılmış davet kodu."); setLoading(false); return; }
+      setInvData(inv);
+      setName(inv.name);
+      setEmail(inv.email);
+    } catch (e) { setErr(e.message); }
+    setLoading(false);
+  };
+
+  const handleInviteRegister = async () => {
+    if (!pass || pass.length < 6) { setErr("Şifre en az 6 karakter olmalı"); return; }
+    setLoading(true); setErr("");
+    try {
+      setPendingInvite({ type: "invite", code: invCode, invData });
+      await createUserWithEmailAndPassword(auth, invData.email, pass);
+    } catch (e) {
+      if (e.code === "auth/email-already-in-use") setErr("Bu e-posta zaten kayıtlı. Yöneticinizden yeni kod isteyin.");
+      else setErr(e.message);
+      setPendingInvite(null);
     }
     setLoading(false);
   };
@@ -3227,17 +3485,46 @@ function LoginScreen() {
         <div style={{ textAlign: "center", marginBottom: 24 }}>
           <div style={{ fontSize: 40, marginBottom: 8 }}>💰</div>
           <div style={{ color: X.t, fontSize: 22, fontWeight: 800 }}>EV BÜTÇESİ</div>
-          <div style={{ color: X.tm, fontSize: 13, marginTop: 4 }}>{isRegister ? "Yeni hesap oluştur" : "Giriş yap"}</div>
+          <div style={{ color: X.tm, fontSize: 13, marginTop: 4 }}>{mode === "login" ? "Giriş yap" : mode === "register" ? "Yeni hesap oluştur" : "Davet ile katıl"}</div>
         </div>
         {err && <div style={{ background: X.rd, border: `1px solid ${X.r}`, borderRadius: 10, padding: "8px 12px", marginBottom: 12, color: X.r, fontSize: 12, fontWeight: 600 }}>{err}</div>}
-        <Inp label="E-posta" value={email} onChange={setEmail} placeholder="ornek@gmail.com" />
-        <Inp label="Şifre" type="password" value={pass} onChange={setPass} placeholder="••••••" />
-        <Btn onClick={handleSubmit} disabled={loading}>{loading ? "Yükleniyor..." : isRegister ? "Kayıt Ol" : "Giriş Yap"}</Btn>
-        <div style={{ textAlign: "center", marginTop: 16 }}>
-          <button onClick={() => { setIsRegister(!isRegister); setErr(""); }} style={{ background: "none", border: "none", color: X.b, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: ff }}>
-            {isRegister ? "Zaten hesabım var → Giriş Yap" : "Hesabım yok → Kayıt Ol"}
-          </button>
-        </div>
+
+        {mode === "login" && (<>
+          <Inp label="İsim Soyisim" value={name} onChange={setName} placeholder="Örn: Abdullah Şehid Huca" />
+          <Inp label="Şifre" type="password" value={pass} onChange={setPass} placeholder="••••••" />
+          <Btn onClick={handleLogin} disabled={loading}>{loading ? "Giriş yapılıyor..." : "Giriş Yap"}</Btn>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, marginTop: 16 }}>
+            <button onClick={() => { setMode("register"); setErr(""); }} style={{ background: "none", border: "none", color: X.b, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: ff }}>Hesabım yok → Kayıt Ol</button>
+            <button onClick={() => { setMode("invite"); setErr(""); }} style={{ background: "none", border: "none", color: X.g, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: ff }}>🔑 Davet kodum var</button>
+          </div>
+        </>)}
+
+        {mode === "register" && (<>
+          <Inp label="İsim Soyisim" value={name} onChange={setName} placeholder="Örn: Abdullah Şehid Huca" />
+          <Inp label="E-posta" value={email} onChange={setEmail} placeholder="ornek@gmail.com" />
+          <Inp label="Şifre" type="password" value={pass} onChange={setPass} placeholder="En az 6 karakter" />
+          <Btn onClick={handleRegister} disabled={loading}>{loading ? "Kayıt yapılıyor..." : "Kayıt Ol"}</Btn>
+          <div style={{ textAlign: "center", marginTop: 16 }}>
+            <button onClick={() => { setMode("login"); setErr(""); }} style={{ background: "none", border: "none", color: X.b, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: ff }}>← Giriş Yap</button>
+          </div>
+        </>)}
+
+        {mode === "invite" && !invData && (<>
+          <Inp label="Davet Kodu" value={invCode} onChange={setInvCode} placeholder="6 haneli kod" />
+          <Btn onClick={handleCheckInvite} disabled={loading} c={X.g}>{loading ? "Kontrol ediliyor..." : "Kodu Kontrol Et"}</Btn>
+          <div style={{ textAlign: "center", marginTop: 16 }}>
+            <button onClick={() => { setMode("login"); setErr(""); setInvData(null); }} style={{ background: "none", border: "none", color: X.b, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: ff }}>← Giriş Yap</button>
+          </div>
+        </>)}
+
+        {mode === "invite" && invData && (<>
+          <div style={{ background: X.gd, border: `1px solid ${X.g}`, borderRadius: 10, padding: 12, marginBottom: 12, textAlign: "center" }}>
+            <div style={{ color: X.g, fontSize: 13, fontWeight: 700 }}>Hoş geldiniz!</div>
+            <div style={{ color: X.t, fontSize: 18, fontWeight: 800, marginTop: 4 }}>{invData.name}</div>
+          </div>
+          <Inp label="Şifrenizi belirleyin" type="password" value={pass} onChange={setPass} placeholder="En az 6 karakter" />
+          <Btn onClick={handleInviteRegister} disabled={loading} c={X.g}>{loading ? "Hesap oluşturuluyor..." : "Hesap Oluştur ve Katıl"}</Btn>
+        </>)}
       </div>
     </div>
   );
@@ -3246,29 +3533,58 @@ function LoginScreen() {
 export default function App() {
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [family, setFamily] = useState(null);
+  const [familyLoading, setFamilyLoading] = useState(true);
+  const [pendingInvite, setPendingInvite] = useState(null);
   const [data, setData] = useState(DD);
   const [loaded, setLoaded] = useState(false);
   const [tab, setTab] = useState("home");
   const [headerDetail, setHeaderDetail] = useState(null);
   const mk = cmk();
 
-  // Auth state listener
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, u => { setUser(u); setAuthLoading(false); });
     return unsub;
   }, []);
 
-  // Realtime Database'den veri yükle + realtime sync
+  // Kullanıcı giriş yaptığında: aile bilgisini kontrol et veya oluştur
   useEffect(() => {
-    if (!user) { setLoaded(false); return; }
-    let unsubValue = null;
+    if (!user) { setFamily(null); setFamilyLoading(false); setLoaded(false); return; }
+    setFamilyLoading(true);
 
-    loadDB(user.uid).then(d => {
+    (async () => {
+      // Önce mevcut aile kaydını kontrol et
+      let f = await getUserFamily(user.uid);
+
+      // Aile kaydı yoksa ve pendingInvite varsa: yeni aile oluştur veya davete katıl
+      if (!f && pendingInvite) {
+        if (pendingInvite.type === "newAdmin") {
+          await migrateOldData(user.uid);
+          f = await createFamily(user.uid, user.email, pendingInvite.name);
+        } else if (pendingInvite.type === "invite") {
+          f = await joinViaInvitation(user.uid, pendingInvite.code, pendingInvite.invData);
+        } else if (pendingInvite.type === "migrateName") {
+          const displayName = prompt("Giriş adınızı belirleyin (İsim Soyisim):");
+          if (displayName && displayName.trim()) {
+            await migrateOldData(user.uid);
+            f = await createFamily(user.uid, user.email, displayName.trim());
+          }
+        }
+        setPendingInvite(null);
+      }
+
+      setFamily(f);
+      setFamilyLoading(false);
+    })();
+  }, [user]);
+
+  useEffect(() => {
+    if (!user || !family?.familyId) { setLoaded(false); return; }
+    let unsubValue = null;
+    loadDB(family.familyId).then(d => {
       if (d) setData({ ...DD, ...d, settings: { ...DD.settings, ...(d.settings || {}) }, liveRates: d.liveRates || DD.liveRates, savings: { ...DD.savings, ...(d.savings || {}) }, lastClosedMonth: d.lastClosedMonth || null, lastBackup: d.lastBackup || null });
       setLoaded(true);
-
-      // Realtime sync: diğer cihazdan değişiklik geldiğinde güncelle
-      unsubValue = onValue(ref(rtdb, `budgets/${user.uid}`), snap => {
+      unsubValue = onValue(ref(rtdb, `families/${family.familyId}/data`), snap => {
         if (snap.exists()) {
           const r = snap.val();
           setData(prev => {
@@ -3280,13 +3596,12 @@ export default function App() {
         }
       }, err => console.warn("Sync hatası:", err));
     });
-
     return () => { if (unsubValue) unsubValue(); };
-  }, [user]);
+  }, [user, family]);
 
-  // Veri değiştiğinde kaydet
-  useEffect(() => { if (loaded && user) saveDB(data, user.uid); }, [data, loaded, user]);
+  useEffect(() => { if (loaded && family?.familyId) saveDB(data, family.familyId); }, [data, loaded, family]);
 
+  const isAdmin = family?.role === "admin";
   const gmd = useCallback(m => data.months[m] || DM(), [data.months]);
   const smf = useCallback((m, f, v) => { setData(d => { const ms = { ...d.months }; const md = { ...(ms[m] || DM()) }; md[f] = v; ms[m] = md; return { ...d, months: ms }; }); }, []);
 
@@ -3300,11 +3615,15 @@ export default function App() {
     return null;
   }, [loaded, data.lastClosedMonth, data.months, mk]);
 
-  if (authLoading) return <div style={{ background: "linear-gradient(160deg, #E4E9F2, #D8DFE8, #E8ECF4)", height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: X.g, fontFamily: ff, fontSize: 16 }}>Yükleniyor...</div>;
-  if (!user) return <LoginScreen />;
+  if (authLoading || familyLoading) return <div style={{ background: "linear-gradient(160deg, #E4E9F2, #D8DFE8, #E8ECF4)", height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: X.g, fontFamily: ff, fontSize: 16 }}>Yükleniyor...</div>;
+  if (!user) return <LoginScreen pendingInvite={pendingInvite} setPendingInvite={setPendingInvite} />;
+  if (!family) return <div style={{ background: "linear-gradient(160deg, #E4E9F2, #D8DFE8, #E8ECF4)", height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: X.tm, fontFamily: ff, fontSize: 14, padding: 20, textAlign: "center" }}>Aile kaydı bulunamadı. Lütfen çıkış yapıp yeniden kayıt olun veya davet koduyla giriş yapın.<br/><button onClick={() => signOut(auth)} style={{ marginTop: 16, background: X.rd, border: "none", borderRadius: 8, padding: "8px 20px", color: X.r, fontWeight: 700, cursor: "pointer" }}>Çıkış Yap</button></div>;
   if (!loaded) return <div style={{ background: "linear-gradient(160deg, #E4E9F2, #D8DFE8, #E8ECF4)", height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: X.g, fontFamily: ff, fontSize: 16 }}>Veriler yükleniyor...</div>;
 
-  const c = calcMonth(data, mk, null);
+  const backupNeeded = needsWeeklyBackup(data);
+  const memberLocked = !isAdmin && backupNeeded;
+
+    const c = calcMonth(data, mk, null);
   const showHeaderDetail = () => { const bd = getMonthBreakdown(data, mk); setHeaderDetail({ title: `${ml(mk)} — Bütçe Dökümü`, rows: bd.rows, total: bd.mc.remaining, totalLabel: "Kalan bütçe", totalColor: bd.mc.remaining >= CARD_LOAD_MIN ? X.g : bd.mc.remaining >= 0 ? X.w : X.r }); };
 
   return (
@@ -3325,13 +3644,23 @@ export default function App() {
           </div>
         </div>
       </div>
+      {/* Üye yedekleme kilidi */}
+      {memberLocked && (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div style={{ ...glassSolid, borderRadius: 16, padding: 24, maxWidth: 340, textAlign: "center" }}>
+            <div style={{ fontSize: 36, marginBottom: 8 }}>⚠️</div>
+            <div style={{ color: X.w, fontSize: 15, fontWeight: 800, marginBottom: 8 }}>Yedekleme Gerekli</div>
+            <div style={{ color: X.tm, fontSize: 13, lineHeight: 1.6 }}>Haftalık yedekleme süresi doldu. Veri girişi yapabilmek için yöneticinin yedek alması gerekiyor.</div>
+          </div>
+        </div>
+      )}
       {tab === "home" && <Dashboard data={data} mk={mk} gmd={gmd} setMonthField={smf} setData={setData} />}
       {tab === "report" && <AnalysisScreen data={data} setData={setData} mk={mk} />}
       {tab === "plan" && <PlanningScreen data={data} setData={setData} mk={mk} />}
-      {tab === "settings" && <Settings data={data} setData={setData} />}
+      {tab === "settings" && <Settings data={data} setData={setData} isAdmin={isAdmin} family={family} />}
       <TabBar tab={tab} setTab={setTab} />
       {pendingCloseMk && <MonthCloseRitual data={data} setData={setData} prevMk={pendingCloseMk} onClose={() => { }} />}
-      {!pendingCloseMk && needsWeeklyBackup(data) && <WeeklyBackupRitual data={data} setData={setData} />}
+      {!pendingCloseMk && isAdmin && needsWeeklyBackup(data) && <WeeklyBackupRitual data={data} setData={setData} />}
       {headerDetail && <DetailModal {...headerDetail} onClose={() => setHeaderDetail(null)} />}
     </div>
   );
