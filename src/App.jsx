@@ -34,7 +34,7 @@ const CARD_LOAD_MIN = 40000; // kart yükleme kapasitesi bu tutarın altına dü
 const CARD_LOAD_MIN_TOLERANCE = 0.05; // %5 tolerans
 
 const DD = { settings: { monthlyBudget: 450000, fixedExpenses: [], variableExpenses: [], cards: [], emergencyFundTarget: null }, months: {}, installmentPlans: [], debts: [], merchantMap: {}, goldRates: {}, usdRates: {}, eurRates: {}, liveRates: { USD: null, EUR: null, XAU: null, fetchedAt: null }, savings: { TRY: [], USD: [], EUR: [], XAU: [] }, lastClosedMonth: null, lastBackup: null };
-const DM = () => ({ budget: null, fixedPaid: {}, variableEntries: {}, ccSingle: [], cardLoaded: 0, debtPayments: {}, ccTransferred: {}, csvByCard: {}, finalSavings: null });
+const DM = () => ({ budget: null, fixedPaid: {}, variableEntries: {}, ccSingle: [], cardLoaded: 0, debtPayments: {}, ccTransferred: {}, csvByCard: {}, finalSavings: null, receipts: [] });
 
 const STORAGE_KEY = "ev-butce-v11";
 
@@ -1429,6 +1429,383 @@ function SellAssetModal({ asset, data, onClose, onSave }) {
   );
 }
 
+/* ═══ RECEIPT ANALYSIS (FİŞ ANALİZİ) ═══ */
+
+const RECEIPT_CATEGORIES = ["süt ürünleri", "et/tavuk", "meyve/sebze", "temel gıda", "atıştırmalık", "içecek", "temizlik", "kişisel bakım", "bebek/çocuk", "diğer"];
+const RECEIPT_CAT_ICONS = { "süt ürünleri": "🥛", "et/tavuk": "🥩", "meyve/sebze": "🥬", "temel gıda": "🌾", "atıştırmalık": "🍫", "içecek": "🥤", "temizlik": "🧹", "kişisel bakım": "🧴", "bebek/çocuk": "👶", "diğer": "📦" };
+
+function analyzeReceipts(receipts) {
+  if (!receipts || receipts.length === 0) return null;
+  const allItems = receipts.flatMap(r => (r.items || []).map(it => ({ ...it, store: r.store, date: r.date })));
+  if (allItems.length === 0) return null;
+
+  // Kategori dağılımı
+  const catTotals = {};
+  allItems.forEach(it => {
+    const cat = it.category || "diğer";
+    catTotals[cat] = (catTotals[cat] || 0) + (it.price * (it.qty || 1));
+  });
+  const grandTotal = Object.values(catTotals).reduce((s, v) => s + v, 0);
+  const catBreakdown = Object.entries(catTotals)
+    .map(([cat, total]) => ({ cat, total, pct: grandTotal > 0 ? Math.round((total / grandTotal) * 100) : 0, icon: RECEIPT_CAT_ICONS[cat] || "📦" }))
+    .sort((a, b) => b.total - a.total);
+
+  // Tekrar eden ürünler
+  const itemMap = {};
+  allItems.forEach(it => {
+    const key = (it.name || "").toLowerCase().trim();
+    if (!key) return;
+    if (!itemMap[key]) itemMap[key] = { name: it.name, totalQty: 0, totalSpent: 0, count: 0, brand: it.brand };
+    itemMap[key].totalQty += (it.qty || 1);
+    itemMap[key].totalSpent += (it.price * (it.qty || 1));
+    itemMap[key].count += 1;
+  });
+  const repeating = Object.values(itemMap).filter(it => it.count >= 2).sort((a, b) => b.totalSpent - a.totalSpent);
+
+  // Marka tercihleri
+  const brandMap = {};
+  allItems.forEach(it => {
+    if (!it.brand || it.brand.toLowerCase() === "marka yok" || it.brand === "-") return;
+    const cat = it.category || "diğer";
+    if (!brandMap[cat]) brandMap[cat] = {};
+    const b = it.brand;
+    if (!brandMap[cat][b]) brandMap[cat][b] = { brand: b, totalSpent: 0, count: 0 };
+    brandMap[cat][b].totalSpent += (it.price * (it.qty || 1));
+    brandMap[cat][b].count += 1;
+  });
+  const topBrands = Object.entries(brandMap).flatMap(([cat, brands]) =>
+    Object.values(brands).map(b => ({ ...b, category: cat }))
+  ).sort((a, b) => b.totalSpent - a.totalSpent).slice(0, 8);
+
+  return { catBreakdown, repeating, topBrands, grandTotal, totalReceipts: receipts.length, totalItems: allItems.length };
+}
+
+function ReceiptModal({ receipts, onClose, onSave, onDelete, apiKey, onSaveApiKey }) {
+  const [step, setStep] = useState("list"); // list, capture, analyzing, result, analysis
+  const [imgSrc, setImgSrc] = useState(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState(null);
+  const [editIdx, setEditIdx] = useState(null);
+  const [keyInput, setKeyInput] = useState(apiKey || "");
+  const [showKeyInput, setShowKeyInput] = useState(!apiKey);
+
+  const handleFile = e => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      setImgSrc(ev.target.result);
+      setStep("capture");
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const doAnalyze = async () => {
+    if (!imgSrc) return;
+    const key = apiKey || keyInput;
+    if (!key) { setError("Claude API anahtarı gerekli. Lütfen anahtarınızı girin."); setShowKeyInput(true); return; }
+    if (keyInput && !apiKey) { onSaveApiKey(keyInput); }
+    setAnalyzing(true);
+    setError(null);
+    setStep("analyzing");
+    try {
+      const base64 = imgSrc.split(",")[1];
+      const mediaType = imgSrc.split(";")[0].split(":")[1] || "image/jpeg";
+      const resp = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-api-key": key, "anthropic-dangerous-direct-browser-access": "true" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 2000,
+          messages: [{
+            role: "user",
+            content: [
+              { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
+              { type: "text", text: `Bu bir market/mağaza fişi. Fişi analiz et ve SADECE aşağıdaki JSON formatında yanıt ver, başka hiçbir şey yazma:
+{"store":"mağaza adı","totalAmount":toplam_tutar_sayı,"items":[{"name":"ürün adı","qty":adet_sayı,"price":birim_fiyat_sayı,"brand":"marka veya boş string","category":"kategori"}]}
+category değerleri SADECE şunlardan biri olmalı: süt ürünleri, et/tavuk, meyve/sebze, temel gıda, atıştırmalık, içecek, temizlik, kişisel bakım, bebek/çocuk, diğer.
+Fiyatlar Türk Lirası cinsindendir. Eğer fiş okunamıyorsa {"error":"Fiş okunamadı"} döndür.` }
+            ]
+          }]
+        })
+      });
+      const data = await resp.json();
+      const text = (data.content || []).map(c => c.text || "").join("");
+      const clean = text.replace(/```json|```/g, "").trim();
+      const parsed = JSON.parse(clean);
+      if (parsed.error) { setError(parsed.error); setStep("capture"); }
+      else { setResult(parsed); setStep("result"); }
+    } catch (err) {
+      console.error("Fiş analizi hatası:", err);
+      setError("Fiş analiz edilemedi. Lütfen tekrar deneyin.");
+      setStep("capture");
+    } finally { setAnalyzing(false); }
+  };
+
+  const saveResult = () => {
+    if (!result) return;
+    const receipt = {
+      id: uid(),
+      date: td(),
+      store: result.store || "Bilinmeyen",
+      totalAmount: result.totalAmount || result.items?.reduce((s, it) => s + (it.price * (it.qty || 1)), 0) || 0,
+      items: (result.items || []).map(it => ({
+        name: it.name || "",
+        qty: it.qty || 1,
+        price: it.price || 0,
+        brand: it.brand || "",
+        category: it.category || "diğer"
+      }))
+    };
+    onSave(receipt);
+    setResult(null);
+    setImgSrc(null);
+    setStep("list");
+  };
+
+  const editItem = (idx, field, value) => {
+    if (!result) return;
+    const items = [...result.items];
+    items[idx] = { ...items[idx], [field]: field === "qty" || field === "price" ? (parseFloat(value) || 0) : value };
+    setResult({ ...result, items });
+  };
+
+  const deleteItem = idx => {
+    if (!result) return;
+    setResult({ ...result, items: result.items.filter((_, i) => i !== idx) });
+  };
+
+  const analysis = useMemo(() => analyzeReceipts(receipts), [receipts]);
+
+  return (
+    <Modal title="📷 Market Fişi" onClose={onClose}>
+      {/* Tab bar */}
+      <div style={{ display: "flex", gap: 0, marginBottom: 16, borderRadius: 10, overflow: "hidden", border: `1px solid ${X.border}` }}>
+        <button onClick={() => setStep("list")} style={{ flex: 1, padding: "10px 0", background: step === "list" || step === "capture" || step === "analyzing" || step === "result" ? X.g : "transparent", color: step === "list" || step === "capture" || step === "analyzing" || step === "result" ? "#fff" : X.tm, border: "none", fontSize: 13, fontWeight: 700, fontFamily: ff, cursor: "pointer" }}>📷 Fiş Yükle</button>
+        <button onClick={() => setStep("analysis")} style={{ flex: 1, padding: "10px 0", background: step === "analysis" ? X.g : "transparent", color: step === "analysis" ? "#fff" : X.tm, border: "none", fontSize: 13, fontWeight: 700, fontFamily: ff, cursor: "pointer" }}>📊 Analiz {receipts.length > 0 ? `(${receipts.length})` : ""}</button>
+      </div>
+
+      {/* ── FİŞ YÜKLEME ── */}
+      {step === "list" && (
+        <div>
+          {/* API Key uyarısı / girişi */}
+          {showKeyInput && (
+            <div style={{ marginBottom: 14, padding: "12px 14px", background: X.wd, borderRadius: 10, border: `1px solid ${X.w}40` }}>
+              <div style={{ color: X.w, fontSize: 12, fontWeight: 700, marginBottom: 6 }}>🔑 Claude API Anahtarı</div>
+              <div style={{ color: X.tm, fontSize: 11, marginBottom: 8 }}>Fiş analizi için Anthropic API anahtarı gerekli. Anahtar güvenli şekilde aile veritabanında saklanır.</div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <input type="password" value={keyInput} onChange={e => setKeyInput(e.target.value)} placeholder="sk-ant-..." style={{ flex: 1, background: "rgba(220,235,230,0.6)", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 8, padding: "8px 10px", fontSize: 13, fontFamily: fm, outline: "none" }} />
+                <button onClick={() => { if (keyInput) { onSaveApiKey(keyInput); setShowKeyInput(false); } }} style={{ background: X.g, color: "#fff", border: "none", borderRadius: 8, padding: "8px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: ff, whiteSpace: "nowrap" }}>Kaydet</button>
+              </div>
+            </div>
+          )}
+          {apiKey && !showKeyInput && (
+            <div style={{ marginBottom: 10, display: "flex", justifyContent: "flex-end" }}>
+              <button onClick={() => setShowKeyInput(true)} style={{ background: "none", border: "none", color: X.td, fontSize: 10, cursor: "pointer", fontFamily: ff }}>🔑 API anahtarını değiştir</button>
+            </div>
+          )}
+          {/* Yükleme butonu */}
+          <label style={{ display: "block", cursor: "pointer", marginBottom: 16 }}>
+            <input type="file" accept="image/*" capture="environment" onChange={handleFile} style={{ display: "none" }} />
+            <div style={{ ...glass, borderRadius: 14, padding: "24px 16px", textAlign: "center", border: `2px dashed ${X.g}40` }}>
+              <div style={{ fontSize: 36, marginBottom: 8 }}>📷</div>
+              <div style={{ color: X.g, fontSize: 14, fontWeight: 700 }}>Fiş Fotoğrafı Çek / Seç</div>
+              <div style={{ color: X.td, fontSize: 11, marginTop: 4 }}>Kamera açılır veya galeriden seçebilirsiniz</div>
+            </div>
+          </label>
+
+          {/* Bu aydaki fişler */}
+          {receipts.length > 0 && (
+            <div>
+              <div style={{ color: X.tm, fontSize: 11, fontWeight: 700, marginBottom: 8 }}>BU AY YÜKLENEN FİŞLER</div>
+              {receipts.map((r, i) => (
+                <div key={r.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid rgba(0,0,0,0.06)" }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ color: X.t, fontSize: 13, fontWeight: 600 }}>🧾 {r.store}</div>
+                    <div style={{ color: X.td, fontSize: 11 }}>{r.date} · {(r.items || []).length} ürün</div>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ color: X.t, fontSize: 14, fontWeight: 700, fontFamily: fm }}>{C(r.totalAmount)}</span>
+                    <button onClick={() => { if (confirm("Bu fişi silmek istediğinize emin misiniz?")) onDelete(r.id); }} style={{ background: "none", border: "none", color: X.r, fontSize: 14, cursor: "pointer", padding: "2px 4px" }}>✕</button>
+                  </div>
+                </div>
+              ))}
+              <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 8, marginTop: 4, borderTop: "1px solid rgba(0,0,0,0.1)" }}>
+                <span style={{ color: X.tm, fontSize: 12, fontWeight: 700 }}>Toplam ({receipts.length} fiş)</span>
+                <span style={{ color: X.t, fontSize: 14, fontWeight: 800, fontFamily: fm }}>{C(receipts.reduce((s, r) => s + r.totalAmount, 0))}</span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── FOTOĞRAF ÖNİZLEME ── */}
+      {step === "capture" && imgSrc && (
+        <div>
+          <div style={{ borderRadius: 12, overflow: "hidden", marginBottom: 12, border: `1px solid ${X.border}` }}>
+            <img src={imgSrc} alt="Fiş" style={{ width: "100%", display: "block" }} />
+          </div>
+          {error && <div style={{ color: X.r, fontSize: 13, fontWeight: 600, marginBottom: 12, padding: "8px 12px", background: X.rd, borderRadius: 8 }}>⚠️ {error}</div>}
+          <div style={{ display: "flex", gap: 10 }}>
+            <Btn v="outline" c={X.tm} onClick={() => { setImgSrc(null); setStep("list"); setError(null); }}>İptal</Btn>
+            <Btn onClick={doAnalyze}>🔍 Analiz Et</Btn>
+          </div>
+        </div>
+      )}
+
+      {/* ── ANALİZ EDİLİYOR ── */}
+      {step === "analyzing" && (
+        <div style={{ textAlign: "center", padding: "40px 0" }}>
+          <div style={{ fontSize: 48, marginBottom: 16, animation: "pulse 1.5s ease-in-out infinite" }}>🔍</div>
+          <div style={{ color: X.t, fontSize: 15, fontWeight: 700, marginBottom: 8 }}>Fiş analiz ediliyor...</div>
+          <div style={{ color: X.td, fontSize: 12 }}>Ürünler, fiyatlar ve markalar okunuyor</div>
+          <style>{`@keyframes pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.15); opacity: 0.7; } }`}</style>
+        </div>
+      )}
+
+      {/* ── SONUÇ ── */}
+      {step === "result" && result && (
+        <div>
+          <div style={{ ...glass, borderRadius: 12, padding: "12px 14px", marginBottom: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <div>
+                <div style={{ color: X.t, fontSize: 15, fontWeight: 700 }}>🏪 {result.store || "Mağaza"}</div>
+                <div style={{ color: X.td, fontSize: 11 }}>{td()} · {(result.items || []).length} ürün</div>
+              </div>
+              <div style={{ color: X.g, fontSize: 18, fontWeight: 800, fontFamily: fm }}>{C(result.totalAmount || 0)}</div>
+            </div>
+          </div>
+
+          {/* Ürün listesi */}
+          <div style={{ color: X.tm, fontSize: 11, fontWeight: 700, marginBottom: 6 }}>ÜRÜNLER</div>
+          <div style={{ maxHeight: 300, overflow: "auto", marginBottom: 12 }}>
+            {(result.items || []).map((it, idx) => (
+              <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                    <span style={{ fontSize: 12 }}>{RECEIPT_CAT_ICONS[it.category] || "📦"}</span>
+                    {editIdx === idx ? (
+                      <input value={it.name} onChange={e => editItem(idx, "name", e.target.value)} style={{ background: "rgba(220,235,230,0.6)", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 6, padding: "4px 8px", fontSize: 12, fontFamily: ff, width: "100%", outline: "none" }} />
+                    ) : (
+                      <span style={{ color: X.t, fontSize: 12, fontWeight: 600 }} onClick={() => setEditIdx(idx)}>{it.name}</span>
+                    )}
+                  </div>
+                  <div style={{ color: X.td, fontSize: 10, marginLeft: 20 }}>
+                    {it.brand && it.brand !== "" && <span>{it.brand} · </span>}
+                    <span>{it.category}</span>
+                  </div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                  {editIdx === idx ? (
+                    <>
+                      <input value={it.qty} onChange={e => editItem(idx, "qty", e.target.value)} style={{ width: 32, textAlign: "center", background: "rgba(220,235,230,0.6)", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 6, padding: "4px", fontSize: 12, fontFamily: fm, outline: "none" }} />
+                      <span style={{ color: X.td, fontSize: 10 }}>×</span>
+                      <input value={it.price} onChange={e => editItem(idx, "price", e.target.value)} style={{ width: 56, textAlign: "right", background: "rgba(220,235,230,0.6)", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 6, padding: "4px", fontSize: 12, fontFamily: fm, outline: "none" }} />
+                      <button onClick={() => setEditIdx(null)} style={{ background: "none", border: "none", color: X.g, fontSize: 14, cursor: "pointer" }}>✓</button>
+                    </>
+                  ) : (
+                    <>
+                      <span style={{ color: X.td, fontSize: 11 }}>{it.qty > 1 ? `${it.qty}×` : ""}</span>
+                      <span style={{ color: X.t, fontSize: 13, fontWeight: 700, fontFamily: fm }}>{C(it.price * (it.qty || 1))}</span>
+                      <button onClick={() => setEditIdx(idx)} style={{ background: "none", border: "none", color: X.b, fontSize: 12, cursor: "pointer", padding: "2px" }}>✎</button>
+                      <button onClick={() => deleteItem(idx)} style={{ background: "none", border: "none", color: X.r, fontSize: 12, cursor: "pointer", padding: "2px" }}>✕</button>
+                    </>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display: "flex", gap: 10 }}>
+            <Btn v="outline" c={X.tm} onClick={() => { setResult(null); setStep("capture"); }}>Geri</Btn>
+            <Btn onClick={saveResult}>💾 Kaydet</Btn>
+          </div>
+        </div>
+      )}
+
+      {/* ── AYLIK ANALİZ ── */}
+      {step === "analysis" && (
+        <div>
+          {!analysis ? (
+            <div style={{ textAlign: "center", padding: "30px 0" }}>
+              <div style={{ fontSize: 36, marginBottom: 8, opacity: 0.5 }}>📊</div>
+              <div style={{ color: X.td, fontSize: 13 }}>Henüz fiş yüklenmedi</div>
+              <div style={{ color: X.td, fontSize: 11, marginTop: 4 }}>Fiş yükledikçe burada analiz göreceksiniz</div>
+            </div>
+          ) : (
+            <div>
+              {/* Özet */}
+              <div style={{ ...glass, borderRadius: 12, padding: "12px 14px", marginBottom: 14 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div>
+                    <div style={{ color: X.t, fontSize: 14, fontWeight: 700 }}>Bu Ay Toplam</div>
+                    <div style={{ color: X.td, fontSize: 11 }}>{analysis.totalReceipts} fiş · {analysis.totalItems} ürün</div>
+                  </div>
+                  <div style={{ color: X.t, fontSize: 20, fontWeight: 800, fontFamily: fm }}>{C(analysis.grandTotal)}</div>
+                </div>
+              </div>
+
+              {/* Kategori Dağılımı */}
+              <div style={{ color: X.tm, fontSize: 11, fontWeight: 700, marginBottom: 8 }}>KATEGORİ DAĞILIMI</div>
+              <div style={{ marginBottom: 16 }}>
+                {analysis.catBreakdown.map(cat => (
+                  <div key={cat.cat} style={{ marginBottom: 6 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 2 }}>
+                      <span style={{ color: X.t, fontSize: 12, fontWeight: 600 }}>{cat.icon} {cat.cat}</span>
+                      <span style={{ color: X.t, fontSize: 12, fontWeight: 700, fontFamily: fm }}>{C(cat.total)} <span style={{ color: X.td, fontSize: 10 }}>%{cat.pct}</span></span>
+                    </div>
+                    <div style={{ height: 5, borderRadius: 3, background: "rgba(0,0,0,0.06)", overflow: "hidden" }}>
+                      <div style={{ height: "100%", borderRadius: 3, background: X.g, width: `${cat.pct}%`, transition: "width 0.4s" }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Tekrar Eden Ürünler */}
+              {analysis.repeating.length > 0 && (
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ color: X.tm, fontSize: 11, fontWeight: 700, marginBottom: 8 }}>🔄 TEKRAR EDEN ÜRÜNLER</div>
+                  {analysis.repeating.slice(0, 6).map((it, i) => (
+                    <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px solid rgba(0,0,0,0.04)" }}>
+                      <div>
+                        <div style={{ color: X.t, fontSize: 12, fontWeight: 600 }}>{it.name}</div>
+                        <div style={{ color: X.td, fontSize: 10 }}>{it.count} alışverişte toplam {it.totalQty} adet{it.brand ? ` · ${it.brand}` : ""}</div>
+                      </div>
+                      <span style={{ color: X.w, fontSize: 12, fontWeight: 700, fontFamily: fm }}>{C(it.totalSpent)}</span>
+                    </div>
+                  ))}
+                  {analysis.repeating.length > 0 && (
+                    <div style={{ color: X.b, fontSize: 11, fontWeight: 600, marginTop: 8, padding: "8px 12px", background: X.bd, borderRadius: 8 }}>
+                      💡 Sık aldığınız ürünlerde toplu alım ile tasarruf edebilirsiniz
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Marka Tercihleri */}
+              {analysis.topBrands.length > 0 && (
+                <div>
+                  <div style={{ color: X.tm, fontSize: 11, fontWeight: 700, marginBottom: 8 }}>🏷️ MARKA TERCİHLERİ</div>
+                  {analysis.topBrands.slice(0, 6).map((b, i) => (
+                    <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px solid rgba(0,0,0,0.04)" }}>
+                      <div>
+                        <div style={{ color: X.t, fontSize: 12, fontWeight: 600 }}>{b.brand}</div>
+                        <div style={{ color: X.td, fontSize: 10 }}>{b.category} · {b.count} kez</div>
+                      </div>
+                      <span style={{ color: X.p, fontSize: 12, fontWeight: 700, fontFamily: fm }}>{C(b.totalSpent)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 /* ═══ DASHBOARD ═══ */
 function Dashboard({ data, mk, gmd, setMonthField, setData }) {
   const [expanded, setExpanded] = useState(null);
@@ -1472,6 +1849,10 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
   };
   const handleCCTransfer = itemKey => { setMonthField(mk, "ccTransferred", { ...(md.ccTransferred || {}), [itemKey]: { transferred: true, date: td() } }); };
   const undoCCTransfer = itemKey => { const ct = { ...(md.ccTransferred || {}) }; delete ct[itemKey]; setMonthField(mk, "ccTransferred", ct); };
+
+  // Fiş handler'ları
+  const handleReceiptSave = receipt => { setMonthField(mk, "receipts", [...(md.receipts || []), receipt]); flash("✓ Fiş kaydedildi"); };
+  const handleReceiptDelete = id => { setMonthField(mk, "receipts", (md.receipts || []).filter(r => r.id !== id)); };
 
   // CC Hesabına Aktarılacak Kalemlerin Listesi
   const ccTransferItems = useMemo(() => {
@@ -1611,6 +1992,18 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
           <TapAmt color={X.t} onTap={() => { const activeDebts = data.debts.filter(d2 => d2.remainingMonths > 0); setDetail({ title: "📌 Borç Ödemeleri Dökümü", rows: activeDebts.map(d2 => { const sym = debtCurSymbol(d2.currency); const tlVal = debtTLValue(d2, data, mk); return { label: d2.name, value: tlVal, sign: "", sub: d2.currency !== "TRY" ? `${d2.monthlyPayment} ${sym}/ay · ${d2.remainingMonths} ay kaldı` : `${d2.remainingMonths} ay kaldı`, color: X.w }; }), total: c.debtTotal, totalLabel: "Aylık toplam borç ödemesi", totalColor: X.w }); }}><div style={{ color: X.t, fontSize: 16, fontWeight: 800, fontFamily: fm, marginTop: 2 }}>{C(c.debtTotal)}</div></TapAmt>
         </div>
 
+        {/* Receipt card full width */}
+        <div onClick={() => setModal("receipt")} style={{ gridColumn: "1 / -1", ...glass, borderRadius: 16, padding: "14px 16px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <span style={{ fontSize: 24 }}>📷</span>
+            <div>
+              <div style={{ color: X.o, fontSize: 13, fontWeight: 700 }}>Market Fişi</div>
+              <div style={{ color: X.td, fontSize: 11 }}>{(md.receipts || []).length > 0 ? `${(md.receipts || []).length} fiş · ${C((md.receipts || []).reduce((s, r) => s + r.totalAmount, 0))}` : "Fiş yükle, harcama analizi gör"}</div>
+            </div>
+          </div>
+          <span style={{ color: X.o, fontSize: 18 }}>›</span>
+        </div>
+
         {/* Simulation full width */}
         <div onClick={() => setModal("simulate")} style={{ gridColumn: "1 / -1", ...glass, borderRadius: 16, padding: "14px 16px", cursor: "pointer", position: "relative", minHeight: 92, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
           <InfoBtn onClick={() => setInfo("simulate")} />
@@ -1690,6 +2083,7 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
       {modal === "cardLoad" && <CardLoadModal currentLoaded={md.cardLoaded || 0} maxPerTx={c.cardLoadMaxPerTx} maxTotal={c.cardLoadMaxTotal} onClose={() => setModal(null)} onSave={handleCardLoad} onEdit={editCardLoad} />}
       {modal === "debtPay" && <DebtPayModal debts={data.debts} debtPayments={md.debtPayments} data={data} mk={mk} onClose={() => setModal(null)} onPay={handleDebtPay} onUndo={undoDebtPay} />}
       {modal === "budget" && <BudgetModal mk={mk} cur={md.budget || data.settings.monthlyBudget} def={data.settings.monthlyBudget} onSave={v => setMonthField(mk, "budget", v)} onClose={() => setModal(null)} />}
+      {modal === "receipt" && <ReceiptModal receipts={md.receipts || []} onClose={() => setModal(null)} onSave={handleReceiptSave} onDelete={handleReceiptDelete} apiKey={data.settings.claudeApiKey || ""} onSaveApiKey={key => setData(d => ({ ...d, settings: { ...d.settings, claudeApiKey: key } }))} />}
       {info && info === "cardLoad" && (
         <Modal title="ℹ️ Genel Harcama Kartı" onClose={() => setInfo(null)}>
           <div style={{ marginBottom: 16 }}>
