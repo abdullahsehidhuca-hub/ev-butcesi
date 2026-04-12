@@ -20,8 +20,8 @@ const auth = getAuth(fbApp);
 
 const C = n => new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n);
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-const td = () => new Date().toISOString().slice(0, 10);
-const cmk = () => td().slice(0, 7);
+const td = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; };
+const cmk = () => { const d = new Date(); if (d.getDate() < 15) d.setMonth(d.getMonth() - 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; };
 const MTR = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
 const ml = mk => { const [y, m] = mk.split("-"); return MTR[+m - 1] + " " + y; };
 const nmk = mk => { let [y, m] = mk.split("-").map(Number); m++; if (m > 12) { m = 1; y++; } return `${y}-${String(m).padStart(2, "0")}`; };
