@@ -423,6 +423,135 @@ function calcFlat(data, m, extraInst) {
   return { remaining: b - totalSpent, totalSpent };
 }
 
+/* ═══ YAKLAŞAN ÖDEMELER ═══ */
+function getUpcomingPayments(data, daysAhead = 3) {
+  const today = new Date();
+  const todayDay = today.getDate();
+  const todayMonth = today.getMonth();
+  const todayYear = today.getFullYear();
+  const upcoming = [];
+
+  const daysDiff = (payDay, payDayEnd) => {
+    // Bu ay ve gelecek ay için kontrol et
+    const results = [];
+    for (let monthOffset = 0; monthOffset <= 1; monthOffset++) {
+      const checkDate = new Date(todayYear, todayMonth + monthOffset, payDay);
+      const diff = Math.floor((checkDate - today) / 86400000);
+      if (diff >= 0 && diff <= daysAhead) {
+        results.push({ diff, date: checkDate });
+      }
+      // Aralık gün varsa (payDayEnd)
+      if (payDayEnd && payDayEnd > payDay) {
+        for (let d = payDay; d <= payDayEnd; d++) {
+          const cd = new Date(todayYear, todayMonth + monthOffset, d);
+          const dd = Math.floor((cd - today) / 86400000);
+          if (dd >= 0 && dd <= daysAhead) {
+            results.push({ diff: dd, date: cd });
+            break; // en yakın günü bulduk
+          }
+        }
+      }
+    }
+    return results.length > 0 ? results[0] : null;
+  };
+
+  // Sabit giderler
+  data.settings.fixedExpenses.forEach(exp => {
+    if (!exp.paymentDay) return;
+    const result = daysDiff(exp.paymentDay, exp.paymentDayEnd);
+    if (result) {
+      const isToday = result.diff === 0;
+      const isTomorrow = result.diff === 1;
+      upcoming.push({
+        id: exp.id,
+        type: "fixed",
+        name: exp.name,
+        amount: C(exp.amount),
+        amountRaw: exp.amount,
+        day: exp.paymentDay,
+        dayEnd: exp.paymentDayEnd,
+        diff: result.diff,
+        label: isToday ? "Bugün" : isTomorrow ? "Yarın" : `${result.diff} gün sonra`,
+        icon: exp.paymentMethod === "cc" ? "💳" : "🏦",
+        color: isToday ? X.r : isTomorrow ? X.o : X.w,
+        auto: exp.autoPayment || false,
+      });
+    }
+  });
+
+  // Borç ödemeleri
+  data.debts.filter(d => d.remainingMonths > 0).forEach(debt => {
+    if (!debt.paymentDay) return;
+    const result = daysDiff(debt.paymentDay, debt.paymentDayEnd);
+    if (result) {
+      const isToday = result.diff === 0;
+      const isTomorrow = result.diff === 1;
+      const tlVal = debtTLValue(debt, data, cmk());
+      upcoming.push({
+        id: debt.id,
+        type: "debt",
+        name: debt.name,
+        amount: C(tlVal),
+        amountRaw: tlVal,
+        day: debt.paymentDay,
+        dayEnd: debt.paymentDayEnd,
+        diff: result.diff,
+        label: isToday ? "Bugün" : isTomorrow ? "Yarın" : `${result.diff} gün sonra`,
+        icon: "📌",
+        color: isToday ? X.r : isTomorrow ? X.o : X.w,
+      });
+    }
+  });
+
+  return upcoming.sort((a, b) => a.diff - b.diff);
+}
+
+// ICS takvim dosyası oluştur
+function generateICS(data) {
+  const events = [];
+  const now = new Date();
+  const year = now.getFullYear();
+
+  const icsDate = (y, m, d) => `${y}${String(m+1).padStart(2,"0")}${String(d).padStart(2,"0")}`;
+
+  // Sabit giderler → aylık tekrarlayan etkinlik
+  data.settings.fixedExpenses.forEach(exp => {
+    if (!exp.paymentDay) return;
+    const day = exp.paymentDay;
+    const uid2 = `fixed-${exp.id}@ev-butcesi`;
+    events.push(
+      `BEGIN:VEVENT\nDTSTART;VALUE=DATE:${icsDate(year, now.getMonth(), day)}\nSUMMARY:💰 ${exp.name} ${C(exp.amount)}\nDESCRIPTION:${exp.autoPayment ? "Otomatik ödeme" : "Manuel ödeme"} - Ev Bütçesi\nRRULE:FREQ=MONTHLY;BYMONTHDAY=${day}\nBEGIN:VALARM\nTRIGGER:-PT12H\nACTION:DISPLAY\nDESCRIPTION:Yarın: ${exp.name} ${C(exp.amount)}\nEND:VALARM\nBEGIN:VALARM\nTRIGGER:PT0S\nACTION:DISPLAY\nDESCRIPTION:Bugün: ${exp.name} ${C(exp.amount)}\nEND:VALARM\nUID:${uid2}\nEND:VEVENT`
+    );
+  });
+
+  // Borçlar → aylık tekrarlayan etkinlik (kalan ay kadar)
+  data.debts.filter(d => d.remainingMonths > 0).forEach(debt => {
+    if (!debt.paymentDay) return;
+    const day = debt.paymentDay;
+    const tlVal = debtTLValue(debt, data, cmk());
+    const uid2 = `debt-${debt.id}@ev-butcesi`;
+    events.push(
+      `BEGIN:VEVENT\nDTSTART;VALUE=DATE:${icsDate(year, now.getMonth(), day)}\nSUMMARY:📌 ${debt.name} ${C(tlVal)}\nDESCRIPTION:Borç ödemesi - ${debt.remainingMonths} ay kaldı - Ev Bütçesi\nRRULE:FREQ=MONTHLY;BYMONTHDAY=${day};COUNT=${debt.remainingMonths}\nBEGIN:VALARM\nTRIGGER:-PT12H\nACTION:DISPLAY\nDESCRIPTION:Yarın: ${debt.name} borç ödemesi\nEND:VALARM\nBEGIN:VALARM\nTRIGGER:PT0S\nACTION:DISPLAY\nDESCRIPTION:Bugün: ${debt.name} borç ödemesi\nEND:VALARM\nUID:${uid2}\nEND:VEVENT`
+    );
+  });
+
+  const ics = `BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//Ev Bütçesi//TR\nCALSCALE:GREGORIAN\nMETHOD:PUBLISH\nX-WR-CALNAME:Ev Bütçesi Ödemeleri\n${events.join("\n")}\nEND:VCALENDAR`;
+  return ics;
+}
+
+function downloadICS(data) {
+  const ics = generateICS(data);
+  const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "ev-butcesi-odemeler.ics";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 /* ═══ DÖKÜM HELPER ═══ */
 function getMonthBreakdown(data, m) {
   const mc = calcMonth(data, m, null);
@@ -638,17 +767,16 @@ function TabBar({ tab, setTab }) { return (<div style={{ position: "fixed", bott
 
 /* ═══ MODALS ═══ */
 function CCSingleModal({ cards, variableExpenses, onClose, onSave }) {
-  const [a, sa] = useState(""); const [n, sn] = useState(""); const [mn, smn] = useState(""); const [d, sd] = useState(td());
+  const [a, sa] = useState(""); const [n, sn] = useState(""); const [d, sd] = useState(td());
   const [cardId, setCardId] = useState(cards[0]?.id || "");
   const [categoryId, setCategoryId] = useState("");
   const [userChanged, setUserChanged] = useState(false);
 
-  // Otomatik eşleşme: kullanıcı manuel değiştirmediyse, n veya mn değiştiğinde kategori bulunur
   useEffect(() => {
     if (userChanged) return;
-    const matched = matchCategory(n + " " + mn, variableExpenses || []);
+    const matched = matchCategory(n, variableExpenses || []);
     if (matched) setCategoryId(matched);
-  }, [n, mn, userChanged, variableExpenses]);
+  }, [n, userChanged, variableExpenses]);
 
   const handleCategoryChange = v => { setCategoryId(v); setUserChanged(true); };
 
@@ -660,14 +788,13 @@ function CCSingleModal({ cards, variableExpenses, onClose, onSave }) {
         <Sel label="Hangi Kart" value={cardId} onChange={setCardId} options={cards.map(c => ({ v: c.id, l: c.name }))} />
       )}
       <Inp label="Tutar" type="number" value={a} onChange={sa} suffix="₺" />
-      <Inp label="Harcama Açıklaması" value={n} onChange={sn} placeholder="Örn: Shell Çumra" />
-      <Inp label="Banka Ekstresindeki Adı (isteğe bağlı)" value={mn} onChange={smn} placeholder="Opsiyonel" />
+      <Inp label="Harcama Açıklaması" value={n} onChange={sn} placeholder="Örn: Shell Çumra, File market" />
       {(variableExpenses || []).length > 0 && (
         <Sel label="Kategori" value={categoryId} onChange={handleCategoryChange} options={[{ v: "", l: "— Otomatik / Kategorisiz —" }, ...(variableExpenses || []).map(ve => ({ v: ve.id, l: (ve.icon || "📋") + " " + ve.name }))]} />
       )}
       {categoryId && !userChanged && <div style={{ color: X.g, fontSize: 11, marginTop: -8, marginBottom: 12 }}>✓ Anahtar kelime eşleşmesi bulundu</div>}
       <Inp label="Tarih" type="date" value={d} onChange={sd} />
-      <Btn onClick={() => { if (!a || !cardId) return; onSave({ id: uid(), amount: parseFloat(a), note: n, merchantName: mn, date: d, cardId, categoryId: categoryId || null }); onClose(); }} disabled={!cardId}>💳 Kaydet</Btn>
+      <Btn onClick={() => { if (!a || !cardId) return; onSave({ id: uid(), amount: parseFloat(a), note: n, merchantName: "", date: d, cardId, categoryId: categoryId || null }); onClose(); }} disabled={!cardId}>💳 Kaydet</Btn>
     </Modal>
   );
 }
@@ -1070,7 +1197,7 @@ function WeeklyBackupRitual({ data, setData }) {
 function BudgetModal({ mk: m, cur, def, onSave, onClose }) { const [v, setV] = useState(String(cur || def)); return (<Modal title={`💰 ${ml(m)} Bütçesi`} onClose={onClose}><Inp label="Bu Ayın Bütçesi" type="number" value={v} onChange={setV} suffix="₺" /><Btn onClick={() => { onSave(parseFloat(v) || def); onClose(); }}>Kaydet</Btn></Modal>); }
 
 function CCInstallModal({ data, mk, cards, variableExpenses, onClose, onSave, onDeletePlan, onEditPlan, startInSim }) {
-  const [a, sa] = useState(""); const [mo, smo] = useState("3"); const [n, sn] = useState(""); const [mn, smn] = useState("");
+  const [a, sa] = useState(""); const [mo, smo] = useState("3"); const [n, sn] = useState("");
   const [cardId, setCardId] = useState(cards[0]?.id || "");
   const [categoryId, setCategoryId] = useState("");
   const [userChanged, setUserChanged] = useState(false);
@@ -1085,9 +1212,9 @@ function CCInstallModal({ data, mk, cards, variableExpenses, onClose, onSave, on
 
   useEffect(() => {
     if (userChanged) return;
-    const matched = matchCategory(n + " " + mn, variableExpenses || []);
+    const matched = matchCategory(n, variableExpenses || []);
     if (matched) setCategoryId(matched);
-  }, [n, mn, userChanged, variableExpenses]);
+  }, [n, userChanged, variableExpenses]);
 
   const handleCategoryChange = v => { setCategoryId(v); setUserChanged(true); };
 
@@ -1100,7 +1227,7 @@ function CCInstallModal({ data, mk, cards, variableExpenses, onClose, onSave, on
     setSim({ plan, without, withS, deficit });
   };
 
-  const save = () => { if (!t || !cardId) return; onSave({ id: uid(), totalAmount: t, monthlyPayment: mp, months: m2, rate: 0, startMonth: startMk, remainingMonths: m2, note: n, merchantName: mn, cardId, categoryId: categoryId || null, createdDate: td() }); onClose(); };
+  const save = () => { if (!t || !cardId) return; onSave({ id: uid(), totalAmount: t, monthlyPayment: mp, months: m2, rate: 0, startMonth: startMk, remainingMonths: m2, note: n, merchantName: "", cardId, categoryId: categoryId || null, createdDate: td() }); onClose(); };
 
   // Aktif taksit planları
   const activePlans = data.installmentPlans.filter(p => {
@@ -1165,8 +1292,7 @@ function CCInstallModal({ data, mk, cards, variableExpenses, onClose, onSave, on
       <Inp label="Taksit Sayısı" type="number" value={mo} onChange={v2 => { smo(v2); setSim(null); }} />
       <Sel label="İlk Taksit Ayı" value={startMk} onChange={v2 => { setStartMk(v2); setSim(null); }} options={startOptions} />
       {t > 0 && m2 > 0 && <div style={{ color: X.tm, fontSize: 13, marginBottom: 12 }}>Aylık taksit: <span style={{ color: X.p, fontWeight: 800, fontFamily: fm, fontSize: 16 }}>{C(mp)}</span> × {m2} ay · {ml(startMk)}'dan itibaren</div>}
-      <Inp label="Harcama Açıklaması" value={n} onChange={sn} placeholder="Örn: Salon Mobilyası" />
-      <Inp label="Banka Ekstresindeki Adı (isteğe bağlı)" value={mn} onChange={smn} placeholder="Opsiyonel" />
+      <Inp label="Harcama Açıklaması" value={n} onChange={sn} placeholder="Örn: Saloni yatak odası" />
       {(variableExpenses || []).length > 0 && (
         <Sel label="Kategori" value={categoryId} onChange={handleCategoryChange} options={[{ v: "", l: "— Otomatik / Kategorisiz —" }, ...(variableExpenses || []).map(ve => ({ v: ve.id, l: (ve.icon || "📋") + " " + ve.name }))]} />
       )}
@@ -1405,6 +1531,32 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
       </div>
 
       <RiskBar score={risk.score} onInfo={() => setInfo("risk")} />
+
+      {/* YAKLAŞAN ÖDEMELER */}
+      {(() => {
+        const upcoming = getUpcomingPayments(data, 3);
+        if (upcoming.length === 0) return null;
+        const totalAmt = upcoming.reduce((s, u) => s + u.amountRaw, 0);
+        return (
+          <Card s={{ marginBottom: 8, border: `1px solid ${upcoming[0].color}40`, background: upcoming[0].diff === 0 ? X.rd : X.wd, padding: "10px 14px" }}>
+            <div style={{ color: upcoming[0].color, fontSize: 12, fontWeight: 700, marginBottom: 6 }}>📅 YAKLAŞAN ÖDEMELER</div>
+            {upcoming.map(u => (
+              <div key={u.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 0", borderBottom: "1px solid rgba(0,0,0,0.04)" }}>
+                <div>
+                  <span style={{ fontSize: 12 }}>{u.icon} </span>
+                  <span style={{ color: X.t, fontSize: 12, fontWeight: 600 }}>{u.name}</span>
+                  {u.auto && <span style={{ color: X.g, fontSize: 9, marginLeft: 4 }}>⚡oto</span>}
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <span style={{ color: u.color, fontSize: 12, fontWeight: 700, fontFamily: fm }}>{u.amount}</span>
+                  <span style={{ color: u.color, fontSize: 10, marginLeft: 4 }}>{u.label}</span>
+                </div>
+              </div>
+            ))}
+            {upcoming.length > 1 && <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 6, marginTop: 4, borderTop: "1px solid rgba(0,0,0,0.08)" }}><span style={{ color: X.tm, fontSize: 11, fontWeight: 700 }}>Toplam</span><span style={{ color: X.t, fontSize: 13, fontWeight: 800, fontFamily: fm }}>{C(totalAmt)}</span></div>}
+          </Card>
+        );
+      })()}
 
       {warnings.map((w, i) => (<Card key={i} s={{ marginBottom: 6, border: `1px solid ${w.color}`, background: w.color === X.r ? X.rd : w.color === X.o ? X.od : X.wd, padding: "10px 14px" }}><div style={{ color: w.color, fontSize: 13, fontWeight: 600, lineHeight: 1.4 }}>{w.icon} {w.msg}</div></Card>))}
 
@@ -1654,33 +1806,117 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
     Papa.parse(file, {
       header: true, skipEmptyLines: true, complete: r => {
         const ves = data.settings.variableExpenses || [];
-        // Her satırı transaction olarak sakla
+        const md = data.months[mk] || DM();
+        const ccEntries = (md.ccSingle || []).filter(e2 => e2.cardId === csvCardId);
+
+        // CSV satırlarını parse et
         const transactions = r.data.map(row => {
           const desc = (row["Açıklama"] || row["Description"] || row["İşlem Açıklaması"] || Object.values(row)[1] || "").toString();
           const raw = row["Tutar"] || row["Amount"] || row["İşlem Tutarı"] || Object.values(row)[2] || "0";
           const date = (row["Tarih"] || row["Date"] || row["İşlem Tarihi"] || Object.values(row)[0] || "").toString();
           const amt = Math.abs(parseFloat(raw.toString().replace(/[^\d,.-]/g, "").replace(",", ".")) || 0);
-          // 1. merchantMap öğrenilmiş eşleşmeyi ara
-          let categoryId = null;
-          const descLower = desc.toLowerCase();
-          for (const [merchantKey, catId] of Object.entries(data.merchantMap || {})) {
-            if (descLower.includes(merchantKey.toLowerCase())) { categoryId = catId; break; }
-          }
-          // 2. Anahtar kelime eşleşmesini dene
-          if (!categoryId) {
-            categoryId = matchCategory(desc, ves);
-          }
-          return { id: uid(), desc, amount: amt, date, categoryId };
+          return { id: uid(), desc, amount: amt, date };
         }).filter(t => t.amount > 0);
+
+        // EŞLEŞME MOTORU
+        const matchedCCIds = new Set();
+        const newMerchantMap = { ...(data.merchantMap || {}) };
+
+        const enriched = transactions.map(tx => {
+          let categoryId = null;
+          let matchedEntryId = null;
+          let matchedNote = null;
+
+          // 1. Tarih + tutar eşleşmesi (en güvenilir)
+          const dateNorm = tx.date.replace(/\./g, "-").replace(/(\d{2})-(\d{2})-(\d{4})/, "$3-$2-$1"); // dd.mm.yyyy → yyyy-mm-dd
+          for (const entry of ccEntries) {
+            if (matchedCCIds.has(entry.id)) continue;
+            const entryAmt = Math.abs(entry.amount);
+            const txAmt = Math.abs(tx.amount);
+            if (Math.abs(entryAmt - txAmt) < 0.5 && entry.date) {
+              // Tarih karşılaştırma (farklı formatları tolere et)
+              const entryDateNorm = entry.date.replace(/\./g, "-");
+              if (entryDateNorm === dateNorm || entry.date === tx.date || entryDateNorm.includes(tx.date) || tx.date.includes(entryDateNorm)) {
+                matchedEntryId = entry.id;
+                matchedNote = entry.note;
+                categoryId = entry.categoryId;
+                matchedCCIds.add(entry.id);
+
+                // merchantMap'e öğret: kullanıcının açıklamasındaki anahtar kelimeler → banka açıklaması
+                if (entry.note) {
+                  const noteWords = entry.note.toLowerCase().split(/\s+/);
+                  const bankDesc = tx.desc.toLowerCase().split(/\s+/).slice(0, 3).join(" ");
+                  noteWords.forEach(word => {
+                    if (word.length >= 3 && !newMerchantMap[word]) {
+                      newMerchantMap[word] = { bankName: tx.desc, categoryId: entry.categoryId || null };
+                    }
+                  });
+                  if (bankDesc.length >= 3) {
+                    newMerchantMap[bankDesc] = { bankName: tx.desc, categoryId: entry.categoryId || null };
+                  }
+                }
+                break;
+              }
+            }
+          }
+
+          // 2. Tutar eşleşmesi (tarihsiz — taksitler için)
+          if (!matchedEntryId) {
+            for (const entry of ccEntries) {
+              if (matchedCCIds.has(entry.id)) continue;
+              if (Math.abs(Math.abs(entry.amount) - Math.abs(tx.amount)) < 0.5) {
+                matchedEntryId = entry.id;
+                matchedNote = entry.note;
+                categoryId = entry.categoryId;
+                matchedCCIds.add(entry.id);
+                if (entry.note) {
+                  const noteWords = entry.note.toLowerCase().split(/\s+/);
+                  noteWords.forEach(word => { if (word.length >= 3) newMerchantMap[word] = { bankName: tx.desc, categoryId: entry.categoryId || null }; });
+                }
+                break;
+              }
+            }
+          }
+
+          // 3. merchantMap'ten öğrenilmiş eşleşme
+          if (!categoryId) {
+            const descLower = tx.desc.toLowerCase();
+            for (const [key, val] of Object.entries(newMerchantMap)) {
+              if (descLower.includes(key.toLowerCase())) {
+                categoryId = typeof val === "string" ? val : val.categoryId;
+                break;
+              }
+            }
+          }
+
+          // 4. Anahtar kelime eşleşmesi (variableExpenses keywords)
+          if (!categoryId) {
+            categoryId = matchCategory(tx.desc, ves);
+          }
+
+          return { ...tx, categoryId, matchedEntryId, matchedNote };
+        });
+
+        // Eşleşmeyen uygulama kayıtları (CSV'de bulunmayan)
+        const unmatchedEntries = ccEntries.filter(e2 => !matchedCCIds.has(e2.id));
 
         setData(d => {
           const ms = { ...d.months };
-          const md = { ...(ms[mk] || DM()) };
-          const csvByCard = { ...(md.csvByCard || {}) };
-          csvByCard[csvCardId] = { transactions, uploadedAt: td() };
-          md.csvByCard = csvByCard;
-          ms[mk] = md;
-          return { ...d, months: ms };
+          const md2 = { ...(ms[mk] || DM()) };
+          const csvByCard = { ...(md2.csvByCard || {}) };
+          csvByCard[csvCardId] = {
+            transactions: enriched,
+            uploadedAt: td(),
+            matchStats: {
+              total: enriched.length,
+              matched: enriched.filter(t => t.matchedEntryId).length,
+              unmatched: enriched.filter(t => !t.matchedEntryId).length,
+              unmatchedEntries: unmatchedEntries.map(e2 => ({ id: e2.id, note: e2.note, amount: e2.amount, date: e2.date }))
+            }
+          };
+          md2.csvByCard = csvByCard;
+          ms[mk] = md2;
+          return { ...d, months: ms, merchantMap: newMerchantMap };
         });
         e.target.value = "";
       }
@@ -2088,6 +2324,64 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
 
             {csvTotal > 0 && (
               <>
+                {/* EŞLEŞME SONUÇLARI */}
+                {(() => {
+                  const allStats = Object.entries(allCsvData).map(([cid, cd]) => cd.matchStats).filter(Boolean);
+                  const totalMatched = allStats.reduce((s, st) => s + (st.matched || 0), 0);
+                  const totalUnmatched = allStats.reduce((s, st) => s + (st.unmatched || 0), 0);
+                  const allUnmatchedEntries = allStats.flatMap(st => st.unmatchedEntries || []);
+                  if (allStats.length === 0) return null;
+                  return (
+                    <Card s={{ marginBottom: 12, border: `1px solid ${totalUnmatched > 0 ? X.w : X.g}40` }}>
+                      <div style={{ color: X.tm, fontSize: 12, fontWeight: 700, marginBottom: 8 }}>EŞLEŞME SONUÇLARI</div>
+                      <div style={{ display: "flex", gap: 10, marginBottom: 8 }}>
+                        <div style={{ flex: 1, background: X.gd, borderRadius: 8, padding: "8px 10px", textAlign: "center" }}>
+                          <div style={{ color: X.g, fontSize: 18, fontWeight: 800, fontFamily: fm }}>{totalMatched}</div>
+                          <div style={{ color: X.g, fontSize: 10 }}>Eşleşen</div>
+                        </div>
+                        <div style={{ flex: 1, background: totalUnmatched > 0 ? X.wd : X.gd, borderRadius: 8, padding: "8px 10px", textAlign: "center" }}>
+                          <div style={{ color: totalUnmatched > 0 ? X.w : X.g, fontSize: 18, fontWeight: 800, fontFamily: fm }}>{totalUnmatched}</div>
+                          <div style={{ color: totalUnmatched > 0 ? X.w : X.g, fontSize: 10 }}>Ekstre'de kayıtsız</div>
+                        </div>
+                      </div>
+                      {/* Eşleşen işlemler */}
+                      {Object.entries(allCsvData).map(([cid, cd]) => (cd.transactions || []).filter(t => t.matchedEntryId).map(t => (
+                        <div key={t.id} style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", borderBottom: "1px solid rgba(0,0,0,0.03)", fontSize: 11 }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <span style={{ color: X.g }}>✓ </span>
+                            <span style={{ color: X.t }}>{t.matchedNote}</span>
+                            <span style={{ color: X.td }}> ↔ {t.desc.slice(0, 25)}</span>
+                          </div>
+                          <span style={{ color: X.g, fontFamily: fm, fontWeight: 700, flexShrink: 0 }}>{C(t.amount)}</span>
+                        </div>
+                      )))}
+                      {/* Ekstre'de olup kayıtsız işlemler */}
+                      {Object.entries(allCsvData).map(([cid, cd]) => (cd.transactions || []).filter(t => !t.matchedEntryId).map(t => (
+                        <div key={t.id} style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", borderBottom: "1px solid rgba(0,0,0,0.03)", fontSize: 11 }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <span style={{ color: X.w }}>? </span>
+                            <span style={{ color: X.tm }}>{t.desc.slice(0, 30)}</span>
+                            <span style={{ color: X.td }}> · {t.date}</span>
+                          </div>
+                          <span style={{ color: X.w, fontFamily: fm, fontWeight: 700, flexShrink: 0 }}>{C(t.amount)}</span>
+                        </div>
+                      )))}
+                      {/* Uygulamada olup ekstre'de bulunmayan */}
+                      {allUnmatchedEntries.length > 0 && (
+                        <div style={{ marginTop: 8, borderTop: "1px solid rgba(0,0,0,0.06)", paddingTop: 6 }}>
+                          <div style={{ color: X.b, fontSize: 10, fontWeight: 700, marginBottom: 4 }}>UYGULAMADA VAR, EKSTRE'DE YOK</div>
+                          {allUnmatchedEntries.map(e2 => (
+                            <div key={e2.id} style={{ display: "flex", justifyContent: "space-between", padding: "3px 0", fontSize: 11 }}>
+                              <span style={{ color: X.b }}>↳ {e2.note || "?"} · {e2.date}</span>
+                              <span style={{ color: X.b, fontFamily: fm }}>{C(e2.amount)}</span>
+                            </div>
+                          ))}
+                          <div style={{ color: X.td, fontSize: 9, marginTop: 4 }}>Henüz ekstreye yansımamış olabilir.</div>
+                        </div>
+                      )}
+                    </Card>
+                  );
+                })()}
                 <Card s={{ marginBottom: 12 }}>
                   <div style={{ color: X.g, fontSize: 13, fontWeight: 700, marginBottom: 4 }}>TOPLAM (TÜM KARTLAR)</div>
                   <div style={{ color: X.t, fontSize: 28, fontWeight: 800, fontFamily: fm }}>{C(csvTotal)}</div>
@@ -2870,6 +3164,7 @@ function Settings({ data, setData, isAdmin, family }) {
     { id: "emergency", l: "Acil Durum Fonu", i: "🛡️", d: data.settings.emergencyFundTarget ? C(data.settings.emergencyFundTarget) : "Henüz belirlenmedi" },
     { id: "rates", l: "Güncel Kurlar", i: "💱", d: data.liveRates?.USD ? `$${data.liveRates.USD.toFixed(2)}` : "Henüz girilmedi" },
     ...(isAdmin ? [{ id: "backup", l: "Yedekleme", i: "💾", d: "Yedek Al / Geri Yükle" }] : []),
+    { id: "calendar", l: "Takvim Hatırlatıcı", i: "📅", d: "Ödeme günlerini takvime ekle" },
     { id: "family", l: "Aile Bilgileri", i: "👨‍👩‍👧‍👦", d: isAdmin ? "Yönetici" : "Üye" },
     ...(isAdmin ? [{ id: "reset", l: "Sıfırla", i: "🗑️", d: "Geri alınamaz" }] : []),
     { id: "logout", l: "Çıkış Yap", i: "🚪", d: auth.currentUser?.email || "" },
@@ -2884,6 +3179,45 @@ function Settings({ data, setData, isAdmin, family }) {
   if (sec === "emergency") return <EmergencyFundSettings data={data} setData={setData} onBack={() => setSec(null)} />;
   if (sec === "rates") return <RatesSettings data={data} setData={setData} onBack={() => setSec(null)} />;
   if (sec === "backup") return <BackupSettings data={data} setData={setData} onBack={() => setSec(null)} />;
+  if (sec === "calendar") {
+    const hasPayDays = data.settings.fixedExpenses.some(e => e.paymentDay) || data.debts.some(d => d.paymentDay);
+    return (
+      <div style={{ padding: "20px 16px 100px" }}>
+        <BackBtn />
+        <h3 style={{ color: X.t, fontSize: 16, margin: "0 0 12px" }}>📅 Takvim Hatırlatıcı</h3>
+        <p style={{ color: X.td, fontSize: 12, marginBottom: 16, lineHeight: 1.6 }}>
+          Sabit giderler ve borçlar için ödeme günü tanımladıysanız, bu dosyayı indirip iPhone Takvim'e ekleyebilirsiniz. Her ödeme günü geldiğinde telefonunuz zil çalarak hatırlatır.
+        </p>
+        {!hasPayDays ? (
+          <Card s={{ textAlign: "center", padding: 20 }}>
+            <div style={{ color: X.w, fontSize: 13 }}>⚠️ Henüz ödeme günü tanımlanmış gider yok. Önce Ayarlar → Sabit Giderler veya Borçlar'dan ödeme günlerini girin.</div>
+          </Card>
+        ) : (
+          <>
+            <Card s={{ marginBottom: 12 }}>
+              <div style={{ color: X.tm, fontSize: 12, fontWeight: 700, marginBottom: 10 }}>TAKVİME EKLENECEKLER</div>
+              {data.settings.fixedExpenses.filter(e => e.paymentDay).map(e => (
+                <div key={e.id} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid rgba(0,0,0,0.04)", fontSize: 12 }}>
+                  <span style={{ color: X.t }}>{e.name}</span>
+                  <span style={{ color: X.tm, fontFamily: fm }}>Her ayın {e.paymentDay}'i · {C(e.amount)}{e.autoPayment ? " ⚡" : ""}</span>
+                </div>
+              ))}
+              {data.debts.filter(d => d.paymentDay && d.remainingMonths > 0).map(d => (
+                <div key={d.id} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid rgba(0,0,0,0.04)", fontSize: 12 }}>
+                  <span style={{ color: X.t }}>{d.name}</span>
+                  <span style={{ color: X.tm, fontFamily: fm }}>Her ayın {d.paymentDay}'i · {d.remainingMonths} ay kaldı</span>
+                </div>
+              ))}
+            </Card>
+            <Btn onClick={() => downloadICS(data)} c={X.b}>📅 Takvim Dosyasını İndir (.ics)</Btn>
+            <div style={{ color: X.td, fontSize: 11, marginTop: 10, lineHeight: 1.6 }}>
+              İndirilen dosyaya tıkladığınızda iPhone otomatik olarak Takvim uygulamasını açar. "Tümünü Ekle" deyince her ödeme aylık tekrarlayan etkinlik olarak eklenir. Her ödeme günü 12 saat önce ve ödeme anında bildirim alırsınız.
+            </div>
+          </>
+        )}
+      </div>
+    );
+  }
   if (sec === "reset") return (<div style={{ padding: "20px 16px 100px" }}><BackBtn /><Card s={{ border: `1px solid ${X.r}`, background: X.rd, textAlign: "center", padding: 24 }}><div style={{ fontSize: 36, marginBottom: 8 }}>⚠️</div><Btn c={X.r} onClick={async () => { await deleteDB(family?.familyId); setData({ ...DD }); setSec(null); }}>Tüm Verileri Sil</Btn></Card></div>);
   if (sec === "family") return (<FamilyManagement isAdmin={isAdmin} family={family} onBack={() => setSec(null)} />);
   if (sec === "logout") return (<div style={{ padding: "20px 16px 100px" }}><BackBtn /><Card s={{ textAlign: "center", padding: 24 }}><div style={{ fontSize: 36, marginBottom: 8 }}>🚪</div><div style={{ color: X.t, fontSize: 14, marginBottom: 8 }}>Giriş: <strong>{family?.name || auth.currentUser?.email}</strong></div><div style={{ color: X.tm, fontSize: 12, marginBottom: 16 }}>Çıkış yaptığınızda verileriniz bulutta güvende kalır. İsminiz ve şifrenizle tekrar giriş yapabilirsiniz.</div><Btn c={X.r} onClick={() => signOut(auth)}>Çıkış Yap</Btn></Card></div>);
@@ -2892,17 +3226,18 @@ function Settings({ data, setData, isAdmin, family }) {
 function FixedSettings({ data, setData, onBack }) {
   const [editing, setEditing] = useState(null);
   const [n, sn] = useState(""); const [a, sa] = useState(""); const [m, sm] = useState("account"); const [d, sd] = useState(""); const [cardId, setCardId] = useState("");
+  const [pDay, setPDay] = useState(""); const [pDayEnd, setPDayEnd] = useState(""); const [autoPay, setAutoPay] = useState(false);
   const cards = data.settings.cards || [];
 
-  const startNew = () => { sn(""); sa(""); sm("account"); sd(""); setCardId(cards[0]?.id || ""); setEditing("new"); };
-  const startEdit = exp => { sn(exp.name); sa(String(exp.amount)); sm(exp.paymentMethod || "account"); sd(exp.increaseDate || ""); setCardId(exp.cardId || cards[0]?.id || ""); setEditing(exp.id); };
-  const cancel = () => { setEditing(null); sn(""); sa(""); sm("account"); sd(""); setCardId(""); };
+  const startNew = () => { sn(""); sa(""); sm("account"); sd(""); setCardId(cards[0]?.id || ""); setPDay(""); setPDayEnd(""); setAutoPay(false); setEditing("new"); };
+  const startEdit = exp => { sn(exp.name); sa(String(exp.amount)); sm(exp.paymentMethod || "account"); sd(exp.increaseDate || ""); setCardId(exp.cardId || cards[0]?.id || ""); setPDay(exp.paymentDay ? String(exp.paymentDay) : ""); setPDayEnd(exp.paymentDayEnd ? String(exp.paymentDayEnd) : ""); setAutoPay(exp.autoPayment || false); setEditing(exp.id); };
+  const cancel = () => { setEditing(null); sn(""); sa(""); sm("account"); sd(""); setCardId(""); setPDay(""); setPDayEnd(""); setAutoPay(false); };
 
   const save = () => {
     if (!n || !a) return;
     setData(dd => {
       const list = [...dd.settings.fixedExpenses];
-      const newItem = { name: n, amount: parseFloat(a), paymentMethod: m, increaseDate: d || null, cardId: m === "cc" ? cardId : null };
+      const newItem = { name: n, amount: parseFloat(a), paymentMethod: m, increaseDate: d || null, cardId: m === "cc" ? cardId : null, paymentDay: parseInt(pDay) || null, paymentDayEnd: parseInt(pDayEnd) || null, autoPayment: autoPay };
       if (editing === "new") {
         list.push({ id: uid(), ...newItem });
       } else {
@@ -2925,6 +3260,14 @@ function FixedSettings({ data, setData, onBack }) {
       {m === "cc" && cards.length > 0 && <Sel label="Hangi Kart" value={cardId} onChange={setCardId} options={cards.map(c => ({ v: c.id, l: c.name }))} />}
       {m === "cc" && cards.length === 0 && <div style={{ color: X.w, fontSize: 12, marginBottom: 8 }}>⚠️ Önce Ayarlar → Kartlarım'dan kart ekleyin</div>}
       <Inp label="Artış Tarihi" type="month" value={d} onChange={sd} />
+      <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ flex: 1 }}><Inp label="Ödeme Günü" type="number" value={pDay} onChange={setPDay} placeholder="Örn: 17" /></div>
+        <div style={{ flex: 1 }}><Inp label="Son Gün (opsiyonel)" type="number" value={pDayEnd} onChange={setPDayEnd} placeholder="Örn: 20" /></div>
+      </div>
+      <div onClick={() => setAutoPay(!autoPay)} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, cursor: "pointer" }}>
+        <div style={{ width: 20, height: 20, borderRadius: 4, border: `2px solid ${autoPay ? X.g : X.td}`, background: autoPay ? X.g : "transparent", display: "flex", alignItems: "center", justifyContent: "center" }}>{autoPay && <span style={{ color: "#fff", fontSize: 12, fontWeight: 800 }}>✓</span>}</div>
+        <span style={{ color: X.tm, fontSize: 12 }}>Otomatik ödeme talimatı var</span>
+      </div>
       <div style={{ display: "flex", gap: 8 }}>
         <Btn onClick={save} s={{ flex: 1 }}>Kaydet</Btn>
         <Btn onClick={cancel} v="outline" c={X.td} s={{ flex: 1 }}>İptal</Btn>
@@ -2949,7 +3292,7 @@ function FixedSettings({ data, setData, onBack }) {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ color: X.t, fontWeight: 700 }}>{exp.name}</div>
-                  <div style={{ color: X.tm, fontSize: 12 }}>{C(exp.amount)} • {exp.paymentMethod === "cc" ? "💳" + (cardName ? " " + cardName : "") : "🏦"}{exp.increaseDate ? " • " + exp.increaseDate : ""}</div>
+                  <div style={{ color: X.tm, fontSize: 12 }}>{C(exp.amount)} • {exp.paymentMethod === "cc" ? "💳" + (cardName ? " " + cardName : "") : "🏦"}{exp.paymentDay ? ` • ${exp.paymentDay}${exp.paymentDayEnd ? "-" + exp.paymentDayEnd : ""}'inde` : ""}{exp.autoPayment ? " • ⚡oto" : ""}{exp.increaseDate ? " • 📈" + exp.increaseDate : ""}</div>
                 </div>
                 <div style={{ display: "flex", gap: 6 }}>
                   <button onClick={() => editing === exp.id ? cancel() : startEdit(exp)} style={{ background: X.bd, border: `1px solid ${X.b}`, borderRadius: 6, padding: "4px 10px", color: X.b, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{editing === exp.id ? "▲" : "✎"}</button>
@@ -3190,16 +3533,18 @@ function DebtSettings({ data, setData, onBack }) {
   const [editing, setEditing] = useState(null);
   const [n, sn] = useState(""); const [c, sc] = useState("TRY");
   const [total, setTotal] = useState(""); const [months, setMonths] = useState("");
+  const [pDay, setPDay] = useState(""); const [pDayEnd, setPDayEnd] = useState("");
 
-  const startNew = () => { sn(""); sc("TRY"); setTotal(""); setMonths(""); setEditing("new"); };
+  const startNew = () => { sn(""); sc("TRY"); setTotal(""); setMonths(""); setPDay(""); setPDayEnd(""); setEditing("new"); };
   const startEdit = debt => {
     sn(debt.name); sc(debt.currency);
     const t = debt.totalAmount || (debt.monthlyPayment * (debt.totalMonths || debt.remainingMonths));
     const m2 = debt.totalMonths || debt.remainingMonths;
     setTotal(String(t)); setMonths(String(m2));
+    setPDay(debt.paymentDay ? String(debt.paymentDay) : ""); setPDayEnd(debt.paymentDayEnd ? String(debt.paymentDayEnd) : "");
     setEditing(debt.id);
   };
-  const cancel = () => { setEditing(null); sn(""); sc("TRY"); setTotal(""); setMonths(""); };
+  const cancel = () => { setEditing(null); sn(""); sc("TRY"); setTotal(""); setMonths(""); setPDay(""); setPDayEnd(""); };
 
   const totalNum = parseFloat(total) || 0;
   const monthsNum = parseInt(months) || 0;
@@ -3210,14 +3555,14 @@ function DebtSettings({ data, setData, onBack }) {
     setData(d => {
       const list = [...d.debts];
       if (editing === "new") {
-        list.push({ id: uid(), name: n, currency: c, totalAmount: totalNum, totalMonths: monthsNum, remainingMonths: monthsNum, monthlyPayment: monthlyCalc });
+        list.push({ id: uid(), name: n, currency: c, totalAmount: totalNum, totalMonths: monthsNum, remainingMonths: monthsNum, monthlyPayment: monthlyCalc, paymentDay: parseInt(pDay) || null, paymentDayEnd: parseInt(pDayEnd) || null });
       } else {
         const idx = list.findIndex(x => x.id === editing);
         if (idx >= 0) {
           const old = list[idx];
           const paidCount = (old.totalMonths || old.remainingMonths) - old.remainingMonths;
           const newRemaining = Math.max(0, monthsNum - paidCount);
-          list[idx] = { ...old, name: n, currency: c, totalAmount: totalNum, totalMonths: monthsNum, remainingMonths: newRemaining, monthlyPayment: monthlyCalc };
+          list[idx] = { ...old, name: n, currency: c, totalAmount: totalNum, totalMonths: monthsNum, remainingMonths: newRemaining, monthlyPayment: monthlyCalc, paymentDay: parseInt(pDay) || null, paymentDayEnd: parseInt(pDayEnd) || null };
         }
       }
       return { ...d, debts: list };
@@ -3239,6 +3584,10 @@ function DebtSettings({ data, setData, onBack }) {
       )}
       <Inp label="Toplam Borç" type="number" value={total} onChange={setTotal} suffix={debtCurSymbol(c)} placeholder="Örn: 24" />
       <Inp label="Geri Ödeme Süresi (ay)" type="number" value={months} onChange={setMonths} placeholder="Örn: 12" />
+      <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ flex: 1 }}><Inp label="Ödeme Günü" type="number" value={pDay} onChange={setPDay} placeholder="Örn: 28" /></div>
+        <div style={{ flex: 1 }}><Inp label="Son Gün (opsiyonel)" type="number" value={pDayEnd} onChange={setPDayEnd} placeholder="Örn: 31" /></div>
+      </div>
       {totalNum > 0 && monthsNum > 0 && (
         <Card s={{ background: X.wd, border: `1px solid ${X.w}`, marginBottom: 12, padding: "10px 14px" }}>
           <div style={{ color: X.tm, fontSize: 11, fontWeight: 700, marginBottom: 4 }}>HESAPLANAN AYLIK TAKSİT</div>
