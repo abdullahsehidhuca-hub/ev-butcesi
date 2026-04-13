@@ -368,7 +368,8 @@ function calcMonth(data, m, extraInst) {
     .map(pm => { const pmd = data.months[pm] || DM(); return (pmd.ccSingle || []).reduce((s2, e) => s2 + e.amount, 0) + (pmd.cardLoaded || 0); })
     .filter(t => t > 0);
   const variableEstimate = past3.length >= 2 ? Math.round(past3.reduce((s, t) => s + t, 0) / past3.length) : expectedVariableBase;
-  const expectedVariable = hasActualSpending ? 0 : variableEstimate;
+  // Kısmi harcama varsa: tahmin - gerçekleşen = kalan beklenen
+  const expectedVariable = hasActualSpending ? Math.max(0, variableEstimate - ccSingleTotal - cardLoaded) : variableEstimate;
 
   // Card load limits
   const cardLoadMaxPerTx = Math.floor(baseBudget * CARD_LOAD_PER_TX_PCT);
@@ -384,12 +385,13 @@ function calcMonth(data, m, extraInst) {
   const totalSpent = fixedTotal + ccSingleTotal + installmentTotal + debtTotal + cardLoaded + expectedVariable;
   const remaining = effectiveBudget - totalSpent;
 
-  // Mevcut ay için: henüz yapılmamış değişken gider tahmini (birikim hedefi hesabı)
+  // Mevcut ay için: henüz yapılmamış değişken gider tahmini (bilgi amaçlı)
   const pendingVariable = hasActualSpending ? Math.max(0, variableEstimate - ccSingleTotal - cardLoaded) : 0;
 
-  // Savings target = remaining - pending variable expenses - expected future CC singles
+  // Savings target = remaining - expected future CC singles - unused card capacity
+  // NOT: pendingVariable zaten expectedVariable üzerinden totalSpent'e dahil, tekrar çıkarmaya gerek yok
   const expectedCCSingle = hasActualSpending ? getCCSingleAvg(data, m) : 0;
-  const savingsTarget = Math.max(0, remaining - pendingVariable - expectedCCSingle - (hasActualSpending ? cardLoadRemaining : 0));
+  const savingsTarget = Math.max(0, remaining - expectedCCSingle - (hasActualSpending ? cardLoadRemaining : 0));
 
   // CC transfer needed
   const ccTransferNeeded = fixedCC + variableCC + ccSingleTotal + installmentTotal;
@@ -418,7 +420,7 @@ function calcFlat(data, m, extraInst) {
     .map(pm => { const pmd = data.months[pm] || DM(); return (pmd.ccSingle || []).reduce((s2, e) => s2 + e.amount, 0) + (pmd.cardLoaded || 0); })
     .filter(t => t > 0);
   const variableEstimate = past3.length >= 2 ? Math.round(past3.reduce((s, t) => s + t, 0) / past3.length) : expectedVariableBase;
-  const expectedVariable = hasActualData ? 0 : variableEstimate;
+  const expectedVariable = hasActualData ? Math.max(0, variableEstimate - cc - cl) : variableEstimate;
   const totalSpent = ft + cc + inst + dt + cl + expectedVariable;
   return { remaining: b - totalSpent, totalSpent };
 }
