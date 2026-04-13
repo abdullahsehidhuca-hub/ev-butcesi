@@ -164,13 +164,47 @@ const HAREMALTIN_XAU = "https://www.haremaltin.com/grafik?tip=altin&birim=ALTIN"
 const HAREMALTIN_USD = "https://www.haremaltin.com/grafik?tip=doviz&birim=USDTRY";
 const HAREMALTIN_EUR = "https://www.haremaltin.com/grafik?tip=doviz&birim=EURTRY";
 
-const X = { bg: "#EBE3DB", card: "rgba(140,180,195,0.65)", cardSolid: "#B0C8D5", border: "rgba(255,255,255,0.22)", g: "#0F766E", gd: "rgba(15,118,110,0.18)", w: "#B45309", wd: "rgba(180,83,9,0.18)", r: "#DC2626", rd: "rgba(220,38,38,0.18)", b: "#1D4ED8", bd: "rgba(29,78,216,0.18)", p: "#7C3AED", pd: "rgba(124,58,237,0.18)", o: "#C2410C", od: "rgba(194,65,12,0.18)", t: "#141008", tm: "#3D3528", td: "#5A5045" };
-const ff = `'Quicksand',sans-serif`;
-const fm = `'Quicksand',sans-serif`;
-const neu = "6px 6px 14px rgba(0,0,0,0.12), -6px -6px 14px rgba(255,255,255,0.6)";
-const neuIn = "inset 3px 3px 6px rgba(0,0,0,0.10), inset -3px -3px 6px rgba(255,255,255,0.4)";
-const glass = { background: "rgba(140,180,195,0.65)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(255,255,255,0.22)", boxShadow: neu };
-const glassSolid = { background: "rgba(145,185,205,0.90)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", border: "1px solid rgba(255,255,255,0.25)" };
+const THEMES = {
+  default: {
+    name: "Varsayılan",
+    ff: "'Quicksand',sans-serif",
+    fm: "'Quicksand',sans-serif",
+    X: { bg: "#EBE3DB", card: "rgba(140,180,195,0.65)", cardSolid: "#B0C8D5", border: "rgba(255,255,255,0.22)", g: "#0F766E", gd: "rgba(15,118,110,0.18)", w: "#B45309", wd: "rgba(180,83,9,0.18)", r: "#DC2626", rd: "rgba(220,38,38,0.18)", b: "#1D4ED8", bd: "rgba(29,78,216,0.18)", p: "#7C3AED", pd: "rgba(124,58,237,0.18)", o: "#C2410C", od: "rgba(194,65,12,0.18)", t: "#141008", tm: "#3D3528", td: "#5A5045" },
+    neu: "6px 6px 14px rgba(0,0,0,0.12), -6px -6px 14px rgba(255,255,255,0.6)",
+    neuIn: "inset 3px 3px 6px rgba(0,0,0,0.10), inset -3px -3px 6px rgba(255,255,255,0.4)",
+    glass: (n) => ({ background: "rgba(140,180,195,0.65)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(255,255,255,0.22)", boxShadow: n }),
+    glassSolid: { background: "rgba(145,185,205,0.90)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", border: "1px solid rgba(255,255,255,0.25)" },
+    gradient: "linear-gradient(160deg, #E5DBD0 0%, #DCD0C4 40%, #EBE3DA 100%)",
+    gradientShort: "linear-gradient(160deg, #E5DBD0, #DCD0C4, #EBE3DA)",
+    inputBg: "rgba(200,220,232,0.65)",
+    expandedBg: "rgba(160,190,200,0.50)",
+    expandedBgLight: "rgba(160,190,200,0.35)"
+  },
+  warm: {
+    name: "Sıcak Kurumsal",
+    ff: "'DM Sans',sans-serif",
+    fm: "'DM Sans',sans-serif",
+    X: { bg: "#F5F0EB", card: "rgba(255,255,255,0.70)", cardSolid: "#F0EBE5", border: "rgba(0,0,0,0.05)", g: "#0F766E", gd: "rgba(15,118,110,0.08)", w: "#B45309", wd: "rgba(180,83,9,0.08)", r: "#DC2626", rd: "rgba(220,38,38,0.08)", b: "#1D4ED8", bd: "rgba(29,78,216,0.08)", p: "#7C3AED", pd: "rgba(124,58,237,0.08)", o: "#C2410C", od: "rgba(194,65,12,0.08)", t: "#1C1917", tm: "#57534E", td: "#A8A29E" },
+    neu: "0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)",
+    neuIn: "inset 1px 1px 3px rgba(0,0,0,0.06), inset -1px -1px 3px rgba(255,255,255,0.7)",
+    glass: (n) => ({ background: "rgba(255,255,255,0.70)", border: "1px solid rgba(0,0,0,0.05)", boxShadow: n }),
+    glassSolid: { background: "rgba(255,255,255,0.88)", border: "1px solid rgba(0,0,0,0.06)" },
+    gradient: "linear-gradient(160deg, #F5F0EB 0%, #EDE7E0 40%, #F5F0EB 100%)",
+    gradientShort: "linear-gradient(160deg, #F5F0EB, #EDE7E0, #F5F0EB)",
+    inputBg: "rgba(245,240,235,0.8)",
+    expandedBg: "rgba(245,240,235,0.6)",
+    expandedBgLight: "rgba(245,240,235,0.4)"
+  }
+};
+let _tid = "default";
+function applyTheme(id) { _tid = THEMES[id] ? id : "default"; const th = THEMES[_tid]; X = th.X; ff = th.ff; fm = th.fm; neu = th.neu; neuIn = th.neuIn; glass = th.glass(th.neu); glassSolid = th.glassSolid; }
+let X = THEMES.default.X;
+let ff = THEMES.default.ff;
+let fm = THEMES.default.fm;
+let neu = THEMES.default.neu;
+let neuIn = THEMES.default.neuIn;
+let glass = THEMES.default.glass(THEMES.default.neu);
+let glassSolid = THEMES.default.glassSolid;
 
 /* ═══ UI ═══ */
 function Card({ children, s, onClick }) { return <div onClick={onClick} style={{ borderRadius: 14, padding: "14px 16px", cursor: onClick ? "pointer" : "default", ...glass, ...s }}>{children}</div>; }
@@ -3811,6 +3845,7 @@ function Settings({ data, setData, isAdmin, family }) {
     { id: "rates", l: "Güncel Kurlar", i: "💱", d: data.liveRates?.USD ? `$${data.liveRates.USD.toFixed(2)}` : "Henüz girilmedi" },
     ...(isAdmin ? [{ id: "backup", l: "Yedekleme", i: "💾", d: "Yedek Al / Geri Yükle" }] : []),
     { id: "calendar", l: "Takvim Hatırlatıcı", i: "📅", d: "Ödeme günlerini takvime ekle" },
+    { id: "theme", l: "Tema", i: "🎨", d: THEMES[data.settings.theme || "default"]?.name || "Varsayılan" },
     { id: "family", l: "Aile Bilgileri", i: "👨‍👩‍👧‍👦", d: isAdmin ? "Yönetici" : "Üye" },
     ...(isAdmin ? [{ id: "reset", l: "Sıfırla", i: "🗑️", d: "Geri alınamaz" }] : []),
     { id: "logout", l: "Çıkış Yap", i: "🚪", d: auth.currentUser?.email || "" },
@@ -3865,6 +3900,32 @@ function Settings({ data, setData, isAdmin, family }) {
     );
   }
   if (sec === "reset") return (<div style={{ padding: "20px 16px 100px" }}><BackBtn /><Card s={{ border: `1px solid ${X.r}`, background: X.rd, textAlign: "center", padding: 24 }}><div style={{ fontSize: 36, marginBottom: 8 }}>⚠️</div><Btn c={X.r} onClick={async () => { await deleteDB(family?.familyId); setData({ ...DD }); setSec(null); }}>Tüm Verileri Sil</Btn></Card></div>);
+  if (sec === "theme") return (
+    <div style={{ padding: "20px 16px 100px" }}>
+      <BackBtn />
+      <h3 style={{ color: X.t, fontSize: 16, margin: "0 0 12px" }}>🎨 Tema Seçimi</h3>
+      <p style={{ color: X.td, fontSize: 12, marginBottom: 16 }}>Uygulamanın görünümünü değiştirin.</p>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {Object.entries(THEMES).map(([id, th]) => {
+          const active = (data.settings.theme || "default") === id;
+          return (
+            <div key={id} onClick={() => { setData(d => ({ ...d, settings: { ...d.settings, theme: id } })); }} style={{ background: active ? `${X.g}15` : X.card, border: `2px solid ${active ? X.g : X.border}`, borderRadius: 12, padding: "14px 16px", cursor: "pointer", display: "flex", alignItems: "center", gap: 14 }}>
+              <div style={{ width: 48, height: 48, borderRadius: 10, overflow: "hidden", flexShrink: 0, border: `1px solid ${X.border}` }}>
+                <div style={{ width: "100%", height: "100%", background: th.gradient }} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ color: X.t, fontWeight: 700, fontSize: 14, fontFamily: th.ff }}>{th.name}</div>
+                <div style={{ color: X.td, fontSize: 11, marginTop: 2, fontFamily: th.ff }}>
+                  {id === "default" ? "Quicksand · Kum-teal tonlar · Cam efekti" : "DM Sans · Krem zemin · Beyaz kartlar · Profesyonel"}
+                </div>
+              </div>
+              {active && <span style={{ color: X.g, fontSize: 18, fontWeight: 800 }}>✓</span>}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
   if (sec === "family") return (<FamilyManagement isAdmin={isAdmin} family={family} onBack={() => setSec(null)} />);
   if (sec === "logout") return (<div style={{ padding: "20px 16px 100px" }}><BackBtn /><Card s={{ textAlign: "center", padding: 24 }}><div style={{ fontSize: 36, marginBottom: 8 }}>🚪</div><div style={{ color: X.t, fontSize: 14, marginBottom: 8 }}>Giriş: <strong>{family?.name || auth.currentUser?.email}</strong></div><div style={{ color: X.tm, fontSize: 12, marginBottom: 16 }}>Çıkış yaptığınızda verileriniz bulutta güvende kalır. İsminiz ve şifrenizle tekrar giriş yapabilirsiniz.</div><Btn c={X.r} onClick={() => signOut(auth)}>Çıkış Yap</Btn></Card></div>);
   return null;
@@ -4474,8 +4535,8 @@ function LoginScreen({ pendingInvite, setPendingInvite }) {
   };
 
   return (
-    <div style={{ background: "linear-gradient(160deg, #E5DBD0 0%, #DCD0C4 40%, #EBE3DA 100%)", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: ff, padding: 16 }}>
-      <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <div style={{ background: _theme.gradient, minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: ff, padding: 16 }}>
+      <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
       <div style={{ ...glassSolid, borderRadius: 20, width: "100%", maxWidth: 380, padding: 28, boxShadow: neu }}>
         <div style={{ textAlign: "center", marginBottom: 24 }}>
           <div style={{ fontSize: 40, marginBottom: 8 }}>💰</div>
@@ -4536,6 +4597,8 @@ export default function App() {
   const [tab, setTab] = useState("home");
   const [headerDetail, setHeaderDetail] = useState(null);
   const mk = cmk();
+  applyTheme(data?.settings?.theme || "default");
+  const _theme = THEMES[data?.settings?.theme] || THEMES.default;
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, u => { setUser(u); setAuthLoading(false); });
@@ -4610,10 +4673,10 @@ export default function App() {
     return null;
   }, [loaded, data.lastClosedMonth, data.months, mk]);
 
-  if (authLoading || familyLoading) return <div style={{ background: "linear-gradient(160deg, #E5DBD0, #DCD0C4, #EBE3DA)", height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: X.g, fontFamily: ff, fontSize: 16 }}>Yükleniyor...</div>;
+  if (authLoading || familyLoading) return <div style={{ background: _theme.gradientShort, height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: X.g, fontFamily: ff, fontSize: 16 }}>Yükleniyor...</div>;
   if (!user) return <LoginScreen pendingInvite={pendingInvite} setPendingInvite={setPendingInvite} />;
-  if (!family) return <div style={{ background: "linear-gradient(160deg, #E5DBD0, #DCD0C4, #EBE3DA)", height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: X.tm, fontFamily: ff, fontSize: 14, padding: 20, textAlign: "center" }}>Aile kaydı bulunamadı. Lütfen çıkış yapıp yeniden kayıt olun veya davet koduyla giriş yapın.<br/><button onClick={() => signOut(auth)} style={{ marginTop: 16, background: X.rd, border: "none", borderRadius: 8, padding: "8px 20px", color: X.r, fontWeight: 700, cursor: "pointer" }}>Çıkış Yap</button></div>;
-  if (!loaded) return <div style={{ background: "linear-gradient(160deg, #E5DBD0, #DCD0C4, #EBE3DA)", height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: X.g, fontFamily: ff, fontSize: 16 }}>Veriler yükleniyor...</div>;
+  if (!family) return <div style={{ background: _theme.gradientShort, height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: X.tm, fontFamily: ff, fontSize: 14, padding: 20, textAlign: "center" }}>Aile kaydı bulunamadı. Lütfen çıkış yapıp yeniden kayıt olun veya davet koduyla giriş yapın.<br/><button onClick={() => signOut(auth)} style={{ marginTop: 16, background: X.rd, border: "none", borderRadius: 8, padding: "8px 20px", color: X.r, fontWeight: 700, cursor: "pointer" }}>Çıkış Yap</button></div>;
+  if (!loaded) return <div style={{ background: _theme.gradientShort, height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: X.g, fontFamily: ff, fontSize: 16 }}>Veriler yükleniyor...</div>;
 
   const backupNeeded = needsWeeklyBackup(data);
   const memberLocked = !isAdmin && backupNeeded;
@@ -4622,8 +4685,8 @@ export default function App() {
   const showHeaderDetail = () => { const bd = getMonthBreakdown(data, mk); setHeaderDetail({ title: `${ml(mk)} — Bütçe Dökümü`, rows: bd.rows, total: bd.mc.remaining, totalLabel: "Kalan bütçe", totalColor: bd.mc.remaining >= CARD_LOAD_MIN ? X.g : bd.mc.remaining >= 0 ? X.w : X.r }); };
 
   return (
-    <div style={{ background: "linear-gradient(160deg, #E5DBD0 0%, #DCD0C4 40%, #EBE3DA 100%)", minHeight: "100vh", color: X.t, fontFamily: ff, maxWidth: 480, margin: "0 auto", position: "relative" }}>
-      <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <div style={{ background: _theme.gradient, minHeight: "100vh", color: X.t, fontFamily: ff, maxWidth: 480, margin: "0 auto", position: "relative" }}>
+      <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
       {/* Renk lekeleri */}
       <div style={{ position: "fixed", top: 60, left: -50, width: 200, height: 200, borderRadius: "50%", background: "rgba(22,163,74,0.07)", filter: "blur(60px)", pointerEvents: "none" }} />
       <div style={{ position: "fixed", top: 280, right: -40, width: 170, height: 170, borderRadius: "50%", background: "rgba(37,99,235,0.06)", filter: "blur(50px)", pointerEvents: "none" }} />
