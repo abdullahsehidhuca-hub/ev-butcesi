@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import * as Papa from "papaparse";
 import { initializeApp } from "firebase/app";
 import { getDatabase, ref, set, get, onValue } from "firebase/database";
@@ -742,28 +742,38 @@ const INFO = {
 };
 
 /* ═══ RISK BAR ═══ */
-function RiskBar({ score, onInfo }) {
+function RiskBar({ score, onInfo, warnings }) {
   const info = getRiskInfo(score);
+  const hasWarnings = warnings && warnings.length > 0;
   return (
-    <div style={{ margin: "0 0 12px", padding: "10px 14px", borderRadius: 14, ...glass, display: "flex", alignItems: "center", gap: 14, position: "relative" }}>
-      <div style={{ width: 34, height: 34, borderRadius: 10, background: info.color, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 14, fontWeight: 900, fontFamily: fm, boxShadow: `0 2px 8px ${info.color}40` }}>{score}</div>
-      <div style={{ flex: 1 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-          <span style={{ color: info.color, fontSize: 12, fontWeight: 800 }}>{info.label}</span>
-          <span style={{ color: X.td, fontSize: 10, marginRight: 18 }}>{info.sub}</span>
+    <div style={{ margin: "0 0 12px", padding: hasWarnings ? "10px 14px 12px" : "10px 14px", borderRadius: 14, ...glass, position: "relative" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        <div style={{ width: 34, height: 34, borderRadius: 10, background: info.color, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 14, fontWeight: 900, fontFamily: fm, boxShadow: `0 2px 8px ${info.color}40`, flexShrink: 0 }}>{score}</div>
+        <div style={{ flex: 1 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+            <span style={{ color: info.color, fontSize: 12, fontWeight: 800 }}>{info.label}</span>
+            <span style={{ color: info.color, fontSize: 12, fontWeight: 700, marginRight: 18 }}>{info.sub}</span>
+          </div>
+          <div style={{ height: 5, borderRadius: 3, background: "linear-gradient(to right, #16A34A, #D97706, #DC2626)", position: "relative", overflow: "visible", boxShadow: neuIn }}>
+            <div style={{ position: "absolute", top: -3, left: `${score}%`, transform: "translateX(-50%)", width: 11, height: 11, borderRadius: "50%", background: info.color, border: `2px solid ${X.bg}`, boxShadow: `0 1px 4px ${info.color}60` }} />
+          </div>
         </div>
-        <div style={{ height: 5, borderRadius: 3, background: "linear-gradient(to right, #16A34A, #D97706, #DC2626)", position: "relative", overflow: "visible", boxShadow: neuIn }}>
-          <div style={{ position: "absolute", top: -3, left: `${score}%`, transform: "translateX(-50%)", width: 11, height: 11, borderRadius: "50%", background: info.color, border: `2px solid ${X.bg}`, boxShadow: `0 1px 4px ${info.color}60` }} />
-        </div>
+        <InfoBtn onClick={onInfo} />
       </div>
-      <InfoBtn onClick={onInfo} />
+      {hasWarnings && (
+        <div style={{ marginTop: 10, paddingTop: 8, borderTop: "1px solid rgba(0,0,0,0.06)" }}>
+          {warnings.map((w, i) => (
+            <div key={i} style={{ color: w.color, fontSize: 12, fontWeight: 600, lineHeight: 1.5, padding: "3px 0" }}>{w.icon} {w.msg}</div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
 /* ═══ TABS ═══ */
-const TABS = [{ id: "home", label: "Özet", icon: "◉" }, { id: "report", label: "Analiz", icon: "▤" }, { id: "plan", label: "Planlama", icon: "◈" }, { id: "settings", label: "Ayarlar", icon: "⚙" }];
-function TabBar({ tab, setTab }) { return (<div style={{ position: "fixed", bottom: 0, left: 0, right: 0, ...glassSolid, borderRadius: "16px 16px 0 0", display: "flex", justifyContent: "space-around", padding: "6px 0 env(safe-area-inset-bottom, 8px)", zIndex: 100, boxShadow: "0 -4px 16px rgba(0,0,0,0.06)" }}>{TABS.map(t => (<button key={t.id} onClick={() => setTab(t.id)} style={{ background: "none", border: "none", display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "6px 12px", cursor: "pointer", color: tab === t.id ? X.g : X.td, fontFamily: ff }}><span style={{ fontSize: 18, lineHeight: 1 }}>{t.icon}</span><span style={{ fontSize: 9, fontWeight: 600 }}>{t.label}</span></button>))}</div>); }
+const TABS = [{ id: "home", label: "Güncel Durum", icon: "◉" }, { id: "report", label: "Analiz", icon: "▤" }, { id: "plan", label: "Planlama", icon: "◈" }, { id: "settings", label: "Ayarlar", icon: "⚙" }];
+function TabBar({ tab, setTab }) { return (<div style={{ position: "fixed", bottom: 0, left: 0, right: 0, ...glassSolid, borderRadius: "16px 16px 0 0", display: "flex", justifyContent: "space-around", alignItems: "center", padding: "6px 0 env(safe-area-inset-bottom, 8px)", zIndex: 100, boxShadow: "0 -4px 16px rgba(0,0,0,0.06)" }}>{TABS.map((t, i) => (<React.Fragment key={t.id}>{i > 0 && <div style={{ width: 1, height: 22, background: "rgba(0,0,0,0.1)" }} />}<button onClick={() => setTab(t.id)} style={{ background: "none", border: "none", display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "6px 10px", cursor: "pointer", color: tab === t.id ? X.g : X.td, fontFamily: ff }}><span style={{ fontSize: 18, lineHeight: 1 }}>{t.icon}</span><span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "-0.2px" }}>{t.label}</span></button></React.Fragment>))}</div>); }
 
 /* ═══ MODALS ═══ */
 function CCSingleModal({ cards, variableExpenses, onClose, onSave }) {
@@ -1984,22 +1994,51 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
     <div style={{ padding: "12px 16px 100px" }}>
       {msg && <div style={{ background: X.gd, border: `1px solid ${X.g}`, borderRadius: 10, padding: 10, marginBottom: 10, color: X.g, fontSize: 14, fontWeight: 600, textAlign: "center" }}>{msg}</div>}
 
-      <div style={{ margin: "8px 0 12px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: X.tm, marginBottom: 4 }}><span>{C(c.totalSpent)} harcandı · {C(c.remaining)} kalan</span><span>%{Math.min(Math.round(pct), 999)}</span></div>
-        <div style={{ height: 6, borderRadius: 3, background: X.border, overflow: "hidden" }}><div style={{ height: "100%", borderRadius: 3, background: pct > 100 ? X.r : pct > 80 ? X.w : X.g, width: `${Math.min(pct, 100)}%`, transition: "width 0.5s" }} /></div>
-      </div>
+      <RiskBar score={risk.score} onInfo={() => setInfo("risk")} warnings={warnings} />
 
-      <RiskBar score={risk.score} onInfo={() => setInfo("risk")} />
-
-      {/* YAKLAŞAN ÖDEMELER */}
+      {/* ÖDEME HATIRLATICI */}
       {(() => {
+        // CC aktarım uyarıları (2+ gün aktarılmamış CC harcamaları)
+        const ccOverdue = [];
+        const now = new Date();
+        (md.ccSingle || []).forEach(e => {
+          if (md.ccTransferred?.[`single-${e.id}`]?.transferred) return;
+          if (!e.date) return;
+          const entryDate = new Date(e.date + "T00:00:00");
+          const daysSince = Math.floor((now - entryDate) / 86400000);
+          if (daysSince >= 2) {
+            const cardName = (data.settings.cards || []).find(c2 => c2.id === e.cardId)?.name || "kart";
+            ccOverdue.push({ id: `cc-overdue-${e.id}`, name: `${e.note || e.merchantName || "Tek çekim"} ödemesi ${cardName} hesabına aktarılmadı`, amount: C(e.amount), amountRaw: e.amount, color: X.r, icon: "💳", label: `${daysSince} gündür`, diff: -1 });
+          }
+        });
+
         const upcoming = getUpcomingPayments(data, 3);
-        if (upcoming.length === 0) return null;
-        const totalAmt = upcoming.reduce((s, u) => s + u.amountRaw, 0);
+        // Ödenen sabit giderleri ve borçları filtrele
+        const filteredUpcoming = upcoming.filter(u => {
+          if (u.type === "fixed" && md.fixedPaid?.[u.id]?.paid) return false;
+          if (u.type === "debt" && md.debtPayments?.[u.id]?.paid) return false;
+          return true;
+        });
+
+        const allItems = [...ccOverdue, ...filteredUpcoming];
+        if (allItems.length === 0) return null;
+        const totalAmt = filteredUpcoming.reduce((s, u) => s + (u.amountRaw || 0), 0);
+        const topColor = ccOverdue.length > 0 ? X.r : (filteredUpcoming[0]?.color || X.w);
         return (
-          <Card s={{ marginBottom: 8, border: `1px solid ${upcoming[0].color}40`, background: upcoming[0].diff === 0 ? X.rd : X.wd, padding: "10px 14px" }}>
-            <div style={{ color: upcoming[0].color, fontSize: 12, fontWeight: 700, marginBottom: 6 }}>📅 YAKLAŞAN ÖDEMELER</div>
-            {upcoming.map(u => (
+          <Card s={{ marginBottom: 8, border: `1px solid ${topColor}40`, background: ccOverdue.length > 0 ? X.rd : filteredUpcoming[0]?.diff === 0 ? X.rd : X.wd, padding: "10px 14px" }}>
+            <div style={{ color: topColor, fontSize: 12, fontWeight: 700, marginBottom: 6 }}>📅 ÖDEME HATIRLATICI</div>
+            {ccOverdue.map(u => (
+              <div key={u.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "5px 0", borderBottom: "1px solid rgba(220,38,38,0.12)" }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ color: X.r, fontSize: 12, fontWeight: 800 }}>{u.icon} {u.name}</span>
+                </div>
+                <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 8 }}>
+                  <span style={{ color: X.r, fontSize: 12, fontWeight: 800, fontFamily: fm }}>{u.amount}</span>
+                  <span style={{ color: X.r, fontSize: 10, marginLeft: 4 }}>{u.label}</span>
+                </div>
+              </div>
+            ))}
+            {filteredUpcoming.map(u => (
               <div key={u.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 0", borderBottom: "1px solid rgba(0,0,0,0.04)" }}>
                 <div>
                   <span style={{ fontSize: 12 }}>{u.icon} </span>
@@ -2012,12 +2051,10 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
                 </div>
               </div>
             ))}
-            {upcoming.length > 1 && <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 6, marginTop: 4, borderTop: "1px solid rgba(0,0,0,0.08)" }}><span style={{ color: X.tm, fontSize: 11, fontWeight: 700 }}>Toplam</span><span style={{ color: X.t, fontSize: 13, fontWeight: 800, fontFamily: fm }}>{C(totalAmt)}</span></div>}
+            {filteredUpcoming.length > 1 && <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 6, marginTop: 4, borderTop: "1px solid rgba(0,0,0,0.08)" }}><span style={{ color: X.tm, fontSize: 11, fontWeight: 700 }}>Toplam</span><span style={{ color: X.t, fontSize: 13, fontWeight: 800, fontFamily: fm }}>{C(totalAmt)}</span></div>}
           </Card>
         );
       })()}
-
-      {warnings.map((w, i) => (<Card key={i} s={{ marginBottom: 6, border: `1px solid ${w.color}`, background: w.color === X.r ? X.rd : w.color === X.o ? X.od : X.wd, padding: "10px 14px" }}><div style={{ color: w.color, fontSize: 13, fontWeight: 600, lineHeight: 1.4 }}>{w.icon} {w.msg}</div></Card>))}
 
       {/* QUICK ACTIONS */}
       {(() => {
@@ -2037,17 +2074,17 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
 
         return (
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, margin: "12px 0" }}>
-        <div onClick={() => setModal("ccSingle")} style={{ ...glass, borderRadius: 16, padding: "14px 12px", cursor: "pointer", textAlign: "center", position: "relative" }}>
+        <div onClick={() => setModal("ccSingle")} style={{ background: "rgba(37,99,235,0.08)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(37,99,235,0.15)", borderRadius: 16, padding: "14px 12px", cursor: "pointer", textAlign: "center", position: "relative", boxShadow: neu }}>
           <InfoBtn onClick={() => setInfo("ccSingle")} />
           <div style={{ fontSize: 24, marginBottom: 4 }}>💳</div>
-          <div style={{ color: X.b, fontSize: 12, fontWeight: 700 }}>Kredi Kartı Tek Çekim</div>
-          <TapAmt color={X.t} onTap={() => { setDetail({ title: "💳 CC Tek Çekim Dökümü", rows: (md.ccSingle || []).map(e => ({ label: e.note || "İşlem", value: e.amount, sign: "", sub: e.date, color: X.b })), total: c.ccSingleTotal, totalLabel: `Toplam (${(md.ccSingle || []).length} işlem)`, totalColor: X.b, note: c.ccSingleTotal === 0 ? "Bu ay henüz CC tek çekim harcaması yok." : "" }); }}><div style={{ color: X.t, fontSize: 16, fontWeight: 800, fontFamily: fm, marginTop: 2 }}>{C(c.ccSingleTotal)}</div></TapAmt>
+          <div style={{ color: X.b, fontSize: 13, fontWeight: 800 }}>Kredi Kartı Tek Çekim</div>
+          <TapAmt color={X.t} onTap={() => { setDetail({ title: "💳 CC Tek Çekim Dökümü", rows: (md.ccSingle || []).map(e => ({ label: e.note || "İşlem", value: e.amount, sign: "", sub: e.date, color: X.b })), total: c.ccSingleTotal, totalLabel: `Toplam (${(md.ccSingle || []).length} işlem)`, totalColor: X.b, note: c.ccSingleTotal === 0 ? "Bu ay henüz CC tek çekim harcaması yok." : "" }); }}><div style={{ color: X.t, fontSize: 18, fontWeight: 800, fontFamily: fm, marginTop: 2 }}>{C(c.ccSingleTotal)}</div></TapAmt>
         </div>
-        <div onClick={() => setModal("ccInstall")} style={{ ...glass, borderRadius: 16, padding: "14px 12px", cursor: "pointer", textAlign: "center", position: "relative" }}>
+        <div onClick={() => setModal("ccInstall")} style={{ background: "rgba(124,58,237,0.08)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(124,58,237,0.15)", borderRadius: 16, padding: "14px 12px", cursor: "pointer", textAlign: "center", position: "relative", boxShadow: neu }}>
           <InfoBtn onClick={() => setInfo("ccInstall")} />
           <div style={{ fontSize: 24, marginBottom: 4 }}>📅</div>
-          <div style={{ color: X.p, fontSize: 12, fontWeight: 700 }}>Kredi Kartı Taksitli</div>
-          <TapAmt color={X.t} onTap={() => { setDetail({ title: "📅 CC Taksitli Dökümü", rows: activePlans.map(p => ({ label: p.note || "Taksitli harcama açıklaması", value: p.monthlyPayment, sign: "", sub: `${ml(p.startMonth)}'dan · ${p.months} taksit`, color: X.p })), total: c.installmentTotal, totalLabel: "Bu ay toplam taksit", totalColor: X.p, note: activePlans.length === 0 ? "Aktif taksit planı yok." : `${activePlans.length} plan · genel toplam: ${C(totalCommitted)}` }); }}><div style={{ color: X.t, fontSize: 16, fontWeight: 800, fontFamily: fm, marginTop: 2 }}>Bu ay: {C(c.installmentTotal)}</div></TapAmt>
+          <div style={{ color: X.p, fontSize: 13, fontWeight: 800 }}>Kredi Kartı Taksitli</div>
+          <TapAmt color={X.t} onTap={() => { setDetail({ title: "📅 CC Taksitli Dökümü", rows: activePlans.map(p => ({ label: p.note || "Taksitli harcama açıklaması", value: p.monthlyPayment, sign: "", sub: `${ml(p.startMonth)}'dan · ${p.months} taksit`, color: X.p })), total: c.installmentTotal, totalLabel: "Bu ay toplam taksit", totalColor: X.p, note: activePlans.length === 0 ? "Aktif taksit planı yok." : `${activePlans.length} plan · genel toplam: ${C(totalCommitted)}` }); }}><div style={{ color: X.t, fontSize: 18, fontWeight: 800, fontFamily: fm, marginTop: 2 }}>Bu ay: {C(c.installmentTotal)}</div></TapAmt>
           {activePlans.length > 0 && (
             <div style={{ marginTop: 4 }}>
               {c.installmentTotal === 0 && nextMonthInst > 0 && (
@@ -2057,25 +2094,25 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
             </div>
           )}
         </div>
-        <div onClick={() => setModal("cardLoad")} style={{ ...glass, borderRadius: 16, padding: "14px 12px", cursor: "pointer", textAlign: "center", position: "relative" }}>
+        <div onClick={() => setModal("cardLoad")} style={{ background: "rgba(22,163,74,0.08)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(22,163,74,0.15)", borderRadius: 16, padding: "14px 12px", cursor: "pointer", textAlign: "center", position: "relative", boxShadow: neu }}>
           <InfoBtn onClick={() => setInfo("cardLoad")} />
           <div style={{ fontSize: 24, marginBottom: 4 }}>🛒</div>
-          <div style={{ color: X.g, fontSize: 12, fontWeight: 700 }}>Genel Harcama Kartı</div>
-          <div style={{ color: X.t, fontSize: 14, fontWeight: 800, fontFamily: fm, marginTop: 2 }}>{C(md.cardLoaded || 0)} <span style={{ color: X.td, fontSize: 10 }}>/ {C(c.cardLoadMaxTotal)}</span></div>
+          <div style={{ color: X.g, fontSize: 13, fontWeight: 800 }}>Genel Harcama Kartı</div>
+          <div style={{ color: X.t, fontSize: 18, fontWeight: 800, fontFamily: fm, marginTop: 2 }}>{C(md.cardLoaded || 0)} <span style={{ color: X.td, fontSize: 11 }}>/ {C(c.cardLoadMaxTotal)}</span></div>
         </div>
-        <div onClick={() => setModal("debtPay")} style={{ ...glass, borderRadius: 16, padding: "14px 12px", cursor: "pointer", textAlign: "center", position: "relative" }}>
+        <div onClick={() => setModal("debtPay")} style={{ background: "rgba(217,119,6,0.08)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(217,119,6,0.15)", borderRadius: 16, padding: "14px 12px", cursor: "pointer", textAlign: "center", position: "relative", boxShadow: neu }}>
           <InfoBtn onClick={() => setInfo("debt")} />
           <div style={{ fontSize: 24, marginBottom: 4 }}>📌</div>
-          <div style={{ color: X.w, fontSize: 12, fontWeight: 700 }}>Borç Ödemeleri</div>
-          <TapAmt color={X.t} onTap={() => { const activeDebts = data.debts.filter(d2 => d2.remainingMonths > 0); setDetail({ title: "📌 Borç Ödemeleri Dökümü", rows: activeDebts.map(d2 => { const sym = debtCurSymbol(d2.currency); const tlVal = debtTLValue(d2, data, mk); return { label: d2.name, value: tlVal, sign: "", sub: d2.currency !== "TRY" ? `${d2.monthlyPayment} ${sym}/ay · ${d2.remainingMonths} ay kaldı` : `${d2.remainingMonths} ay kaldı`, color: X.w }; }), total: c.debtTotal, totalLabel: "Aylık toplam borç ödemesi", totalColor: X.w }); }}><div style={{ color: X.t, fontSize: 16, fontWeight: 800, fontFamily: fm, marginTop: 2 }}>{C(c.debtTotal)}</div></TapAmt>
+          <div style={{ color: X.w, fontSize: 13, fontWeight: 800 }}>Borç Ödemeleri</div>
+          <TapAmt color={X.t} onTap={() => { const activeDebts = data.debts.filter(d2 => d2.remainingMonths > 0); setDetail({ title: "📌 Borç Ödemeleri Dökümü", rows: activeDebts.map(d2 => { const sym = debtCurSymbol(d2.currency); const tlVal = debtTLValue(d2, data, mk); return { label: d2.name, value: tlVal, sign: "", sub: d2.currency !== "TRY" ? `${d2.monthlyPayment} ${sym}/ay · ${d2.remainingMonths} ay kaldı` : `${d2.remainingMonths} ay kaldı`, color: X.w }; }), total: c.debtTotal, totalLabel: "Aylık toplam borç ödemesi", totalColor: X.w }); }}><div style={{ color: X.t, fontSize: 18, fontWeight: 800, fontFamily: fm, marginTop: 2 }}>{C(c.debtTotal)}</div></TapAmt>
         </div>
 
         {/* Receipt card full width */}
-        <div onClick={() => setModal("receipt")} style={{ gridColumn: "1 / -1", ...glass, borderRadius: 16, padding: "14px 16px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div onClick={() => setModal("receipt")} style={{ gridColumn: "1 / -1", background: "rgba(234,88,12,0.08)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(234,88,12,0.15)", borderRadius: 16, padding: "14px 16px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", boxShadow: neu }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <span style={{ fontSize: 24 }}>📷</span>
             <div>
-              <div style={{ color: X.o, fontSize: 13, fontWeight: 700 }}>Market Fişi</div>
+              <div style={{ color: X.o, fontSize: 14, fontWeight: 800 }}>Market Fişi</div>
               <div style={{ color: X.td, fontSize: 11 }}>{(md.receipts || []).length > 0 ? `${(md.receipts || []).length} fiş · ${C((md.receipts || []).reduce((s, r) => s + r.totalAmount, 0))}` : "Fiş yükle, harcama analizi gör"}</div>
             </div>
           </div>
@@ -2083,11 +2120,11 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
         </div>
 
         {/* Simulation full width */}
-        <div onClick={() => setModal("simulate")} style={{ gridColumn: "1 / -1", ...glass, borderRadius: 16, padding: "14px 16px", cursor: "pointer", position: "relative", minHeight: 92, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+        <div onClick={() => setModal("simulate")} style={{ gridColumn: "1 / -1", background: "rgba(124,58,237,0.08)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(124,58,237,0.15)", borderRadius: 16, padding: "14px 16px", cursor: "pointer", position: "relative", minHeight: 92, display: "flex", flexDirection: "column", justifyContent: "space-between", boxShadow: neu }}>
           <InfoBtn onClick={() => setInfo("simulate")} />
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
             <span style={{ fontSize: 24 }}>🔮</span>
-            <div style={{ color: X.p, fontSize: 13, fontWeight: 700 }}>Taksit Simülasyonu</div>
+            <div style={{ color: X.p, fontSize: 14, fontWeight: 800 }}>Taksit Simülasyonu</div>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
             <span style={{ color: X.t, fontSize: 14, fontWeight: 600 }}>Alım öncesi bütçeye etkisini test et</span>
@@ -2103,7 +2140,7 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
           <InfoBtn onClick={() => setInfo("savings")} />
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
             <span style={{ fontSize: 24 }}>💰</span>
-            <div style={{ color: X.g, fontSize: 13, fontWeight: 700 }}>Bu Ayın Birikimi</div>
+            <div style={{ color: X.g, fontSize: 14, fontWeight: 800 }}>Bu Ayın Birikimi</div>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
             <span style={{ color: c.remaining >= 0 ? X.g : X.r, fontSize: 22, fontWeight: 800, fontFamily: fm }}>{C(Math.max(0, c.remaining))}</span>
@@ -2119,7 +2156,7 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
 
       {/* CC TRANSFER */}
       {ccTransferTotal > 0 && (
-        <CatButton icon="💳" label="CC Hesabına Aktar" total={ccTransferTotal} color={X.b} dimColor={X.bd} expanded={expanded === "ccTransfer"} onToggle={() => toggle("ccTransfer")} onInfo={() => setInfo("ccTransfer")}>
+        <CatButton icon="💳" label="Kredi Kartı Hesabına Aktar" total={ccTransferTotal} color={X.b} dimColor={X.bd} expanded={expanded === "ccTransfer"} onToggle={() => toggle("ccTransfer")} onInfo={() => setInfo("ccTransfer")}>
           <div style={{ color: X.td, fontSize: 11, marginBottom: 8 }}>
             {ccTransferredCount}/{ccTransferItems.length} kalem aktarıldı
           </div>
@@ -4456,12 +4493,15 @@ export default function App() {
       <div style={{ position: "fixed", bottom: 250, left: 10, width: 140, height: 140, borderRadius: "50%", background: "rgba(124,58,237,0.05)", filter: "blur(45px)", pointerEvents: "none" }} />
       <div style={{ ...glassSolid, borderBottom: "none", borderRadius: "0 0 18px 18px", padding: "calc(12px + env(safe-area-inset-top)) 20px 12px", display: "flex", justifyContent: "space-between", alignItems: "center", position: "sticky", top: 0, zIndex: 50, boxShadow: "0 4px 16px rgba(0,0,0,0.06)" }}>
         <div><div style={{ fontSize: 15, fontWeight: 800, letterSpacing: "-0.3px", color: X.t }}>EV BÜTÇESİ</div><div style={{ fontSize: 11, color: X.td }}>{ml(mk)}</div></div>
-        <div style={{ textAlign: "right", cursor: "pointer" }} onClick={showHeaderDetail}>
-          <div style={{ fontSize: 10, color: X.tm, letterSpacing: 0.5 }}>BÜTÇE · KALAN</div>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
-            <span style={{ fontSize: 14, fontWeight: 600, color: X.td, fontFamily: fm }}>{C(c.effectiveBudget)}</span>
-            <span style={{ color: X.td }}>/</span>
-            <span style={{ fontSize: 16, fontWeight: 800, color: c.remaining >= 0 ? X.g : X.r, fontFamily: fm, borderBottom: "1px dotted rgba(0,0,0,0.2)", paddingBottom: 1 }}>{C(c.remaining)}</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }} onClick={showHeaderDetail}>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 9, color: X.tm, fontWeight: 700, letterSpacing: 0.3, marginBottom: 2 }}>AYLIK BÜTÇE</div>
+            <div style={{ fontSize: 15, fontWeight: 800, color: X.t, fontFamily: fm }}>{C(c.effectiveBudget)}</div>
+          </div>
+          <div style={{ color: X.td, fontSize: 16, fontWeight: 300 }}>/</div>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 9, color: X.tm, fontWeight: 700, letterSpacing: 0.3, marginBottom: 2 }}>KALAN BÜTÇE</div>
+            <div style={{ fontSize: 15, fontWeight: 800, fontFamily: fm, borderBottom: "1px dotted rgba(0,0,0,0.2)", paddingBottom: 1, color: (() => { const pct = c.effectiveBudget > 0 ? c.remaining / c.effectiveBudget : 0; if (c.remaining < 0) return X.r; if (pct < 0.1) return X.r; if (pct < 0.2) return "#FF6B35"; if (pct < 0.35) return X.w; if (pct < 0.5) return "#84CC16"; return X.g; })() }}>{C(c.remaining)}</div>
           </div>
         </div>
       </div>
