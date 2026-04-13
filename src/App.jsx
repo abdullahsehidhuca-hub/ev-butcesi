@@ -2107,32 +2107,16 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
           <TapAmt color={X.t} onTap={() => { const activeDebts = data.debts.filter(d2 => d2.remainingMonths > 0); setDetail({ title: "📌 Borç Ödemeleri Dökümü", rows: activeDebts.map(d2 => { const sym = debtCurSymbol(d2.currency); const tlVal = debtTLValue(d2, data, mk); return { label: d2.name, value: tlVal, sign: "", sub: d2.currency !== "TRY" ? `${d2.monthlyPayment} ${sym}/ay · ${d2.remainingMonths} ay kaldı` : `${d2.remainingMonths} ay kaldı`, color: X.w }; }), total: c.debtTotal, totalLabel: "Aylık toplam borç ödemesi", totalColor: X.w }); }}><div style={{ color: X.t, fontSize: 18, fontWeight: 800, fontFamily: fm, marginTop: 2 }}>{C(c.debtTotal)}</div></TapAmt>
         </div>
 
-        {/* Receipt card full width */}
-        <div onClick={() => setModal("receipt")} style={{ gridColumn: "1 / -1", background: "rgba(234,88,12,0.08)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(234,88,12,0.15)", borderRadius: 16, padding: "14px 16px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", boxShadow: neu }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <span style={{ fontSize: 24 }}>📷</span>
-            <div>
-              <div style={{ color: X.o, fontSize: 14, fontWeight: 800 }}>Market Fişi</div>
-              <div style={{ color: X.td, fontSize: 11 }}>{(md.receipts || []).length > 0 ? `${(md.receipts || []).length} fiş · ${C((md.receipts || []).reduce((s, r) => s + r.totalAmount, 0))}` : "Fiş yükle, harcama analizi gör"}</div>
-            </div>
-          </div>
-          <span style={{ color: X.o, fontSize: 18 }}>›</span>
+        {/* Receipt + Simulation half width */}
+        <div onClick={() => setModal("receipt")} style={{ background: "rgba(234,88,12,0.08)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(234,88,12,0.15)", borderRadius: 16, padding: "14px 12px", cursor: "pointer", textAlign: "center", position: "relative", boxShadow: neu }}>
+          <div style={{ fontSize: 24, marginBottom: 4 }}>📷</div>
+          <div style={{ color: X.o, fontSize: 13, fontWeight: 800 }}>Market Fişi</div>
+          <div style={{ color: X.td, fontSize: 11, marginTop: 2 }}>{(md.receipts || []).length > 0 ? `${(md.receipts || []).length} fiş · ${C((md.receipts || []).reduce((s, r) => s + r.totalAmount, 0))}` : "Fiş yükle"}</div>
         </div>
-
-        {/* Simulation full width */}
-        <div onClick={() => setModal("simulate")} style={{ gridColumn: "1 / -1", background: "rgba(124,58,237,0.08)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(124,58,237,0.15)", borderRadius: 16, padding: "14px 16px", cursor: "pointer", position: "relative", minHeight: 92, display: "flex", flexDirection: "column", justifyContent: "space-between", boxShadow: neu }}>
-          <InfoBtn onClick={() => setInfo("simulate")} />
-          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
-            <span style={{ fontSize: 24 }}>🔮</span>
-            <div style={{ color: X.p, fontSize: 14, fontWeight: 800 }}>Taksit Simülasyonu</div>
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
-            <span style={{ color: X.t, fontSize: 14, fontWeight: 600 }}>Alım öncesi bütçeye etkisini test et</span>
-            <span style={{ color: X.p, fontSize: 18 }}>›</span>
-          </div>
-          <div style={{ color: X.tm, fontSize: 11 }}>
-            {c.installmentTotal > 0 ? `Mevcut aylık taksit yükü: ${C(c.installmentTotal)}` : "Aktif taksit yok"}
-          </div>
+        <div onClick={() => setModal("simulate")} style={{ background: "rgba(124,58,237,0.06)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(124,58,237,0.12)", borderRadius: 16, padding: "14px 12px", cursor: "pointer", textAlign: "center", position: "relative", boxShadow: neu }}>
+          <div style={{ fontSize: 24, marginBottom: 4 }}>🔮</div>
+          <div style={{ color: X.p, fontSize: 13, fontWeight: 800 }}>Taksit Simülasyonu</div>
+          <div style={{ color: X.td, fontSize: 11, marginTop: 2 }}>{c.installmentTotal > 0 ? `Yük: ${C(c.installmentTotal)}/ay` : "Simüle et"}</div>
         </div>
 
         {/* Savings full width */}
@@ -2260,7 +2244,7 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
 
 /* ═══ ANALYSIS ═══ */
 function AnalysisScreen({ data, setData, mk: initialMk }) {
-  const [view, setView] = useState("risk");
+  const [view, setView] = useState("trend");
   const [selMk, setSelMk] = useState(initialMk);
   const [csvCardId, setCsvCardId] = useState("");
   const [expandedAsset, setExpandedAsset] = useState(null);
@@ -2620,22 +2604,176 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
       </Card>
       {!isCurrentMonth && <Btn v="outline" c={X.g} onClick={() => setSelMk(initialMk)} s={{ marginBottom: 12 }}>↻ Bu Aya Dön</Btn>}
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>
         {[
-          { id: "risk", l: "Risk", i: "⚠️" },
-          { id: "variable", l: "Harcama Kategorileri", i: "🔄" },
-          { id: "csv", l: "Banka Ekstresi Analizi", i: "🧾" }
+          { id: "trend", l: "Harcama Trendi", i: "📈" },
+          { id: "risk", l: "Risk & Yönlendirme", i: "⚠️" },
+          { id: "csv", l: "Banka Ekstresi", i: "🧾" },
+          { id: "calendar", l: "Takvim", i: "📅" }
         ].map(t => (
-          <button key={t.id} onClick={() => setView(t.id)} style={{ background: view === t.id ? X.gd : X.bg, border: `1px solid ${view === t.id ? X.g : X.border}`, borderRadius: 10, padding: "12px 6px", color: view === t.id ? X.g : X.tm, fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: ff, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, lineHeight: 1.2 }}>
-            <span style={{ fontSize: 20 }}>{t.i}</span>
-            <span style={{ textAlign: "center" }}>{t.l}</span>
+          <button key={t.id} onClick={() => setView(t.id)} style={{ background: view === t.id ? X.gd : X.bg, border: `1px solid ${view === t.id ? X.g : X.border}`, borderRadius: 10, padding: "12px 8px", color: view === t.id ? X.g : X.tm, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: ff, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, lineHeight: 1.2 }}>
+            <span style={{ fontSize: 18 }}>{t.i}</span>
+            <span>{t.l}</span>
           </button>
         ))}
-        <button onClick={() => setView("calendar")} style={{ gridColumn: "1 / -1", background: view === "calendar" ? X.gd : X.bg, border: `1px solid ${view === "calendar" ? X.g : X.border}`, borderRadius: 10, padding: "10px", color: view === "calendar" ? X.g : X.tm, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: ff, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-          <span style={{ fontSize: 18 }}>📅</span>
-          <span>Takvim</span>
-        </button>
       </div>
+
+      {/* ═══ HARCAMA TRENDİ ═══ */}
+      {view === "trend" && (() => {
+        // Son 6 ayın verilerini hazırla
+        const months6 = [];
+        let m6 = mk;
+        for (let i = 0; i < 6; i++) { months6.unshift({ mk: m6, ...calcMonth(data, m6, null) }); m6 = pmk(m6); }
+        const maxSpent = Math.max(...months6.map(m => m.totalSpent), 1);
+        const maxBudget = Math.max(...months6.map(m => m.effectiveBudget), 1);
+        const chartMax = Math.max(maxSpent, maxBudget);
+
+        // Kategori bazlı karşılaştırma (son 3 ay)
+        const catCompare = [];
+        const ves = data.settings.variableExpenses || [];
+        if (ves.length > 0) {
+          const prevMk = pmk(mk);
+          const curCats = getCategorizedTotal(data, mk);
+          const prevCats = getCategorizedTotal(data, prevMk);
+          ves.forEach(ve => {
+            const cur = curCats[ve.id] || 0;
+            const prev = prevCats[ve.id] || 0;
+            if (cur > 0 || prev > 0) {
+              const change = prev > 0 ? Math.round(((cur - prev) / prev) * 100) : (cur > 0 ? 100 : 0);
+              catCompare.push({ name: ve.name, icon: ve.icon || "📋", cur, prev, change });
+            }
+          });
+        }
+
+        // Ay bazlı değişim yüzdeleri
+        const monthChanges = months6.slice(1).map((m, i) => {
+          const prev = months6[i];
+          const change = prev.totalSpent > 0 ? Math.round(((m.totalSpent - prev.totalSpent) / prev.totalSpent) * 100) : 0;
+          return { ...m, change };
+        });
+
+        return (
+          <>
+            {/* BÜTÇE vs HARCAMA CHART */}
+            <Card s={{ marginBottom: 12 }}>
+              <div style={{ color: X.tm, fontSize: 12, fontWeight: 700, marginBottom: 12 }}>BÜTÇE vs HARCAMA (6 AY)</div>
+              <div style={{ display: "flex", alignItems: "flex-end", gap: 6, height: 120, marginBottom: 8 }}>
+                {months6.map((m, i) => {
+                  const budgetH = (m.effectiveBudget / chartMax) * 100;
+                  const spentH = (m.totalSpent / chartMax) * 100;
+                  const isOver = m.totalSpent > m.effectiveBudget;
+                  return (
+                    <div key={m.mk} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+                      <div style={{ width: "100%", display: "flex", gap: 2, alignItems: "flex-end", height: 100 }}>
+                        <div style={{ flex: 1, background: "rgba(22,163,74,0.15)", borderRadius: "4px 4px 0 0", height: `${budgetH}%`, minHeight: 2 }} />
+                        <div style={{ flex: 1, background: isOver ? X.r : X.b, borderRadius: "4px 4px 0 0", height: `${spentH}%`, minHeight: 2, opacity: 0.7 }} />
+                      </div>
+                      <div style={{ color: m.mk === mk ? X.t : X.td, fontSize: 9, fontWeight: m.mk === mk ? 800 : 400 }}>
+                        {ml(m.mk).split(" ")[0].slice(0, 3)}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{ display: "flex", gap: 16, justifyContent: "center", fontSize: 10 }}>
+                <span style={{ color: X.g }}>■ Bütçe</span>
+                <span style={{ color: X.b }}>■ Harcama</span>
+              </div>
+            </Card>
+
+            {/* AYLIK DEĞİŞİM */}
+            <Card s={{ marginBottom: 12 }}>
+              <div style={{ color: X.tm, fontSize: 12, fontWeight: 700, marginBottom: 10 }}>AYLIK DEĞİŞİM</div>
+              {monthChanges.map((m, i) => (
+                <div key={m.mk} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `1px solid ${X.border}` }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ color: m.mk === mk ? X.t : X.tm, fontSize: 13, fontWeight: m.mk === mk ? 700 : 400 }}>{ml(m.mk)}</div>
+                    <div style={{ color: X.td, fontSize: 11 }}>Harcama: {C(m.totalSpent)} · Kalan: {C(m.remaining)}</div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ color: m.change > 5 ? X.r : m.change < -5 ? X.g : X.td, fontSize: 15, fontWeight: 800, fontFamily: fm }}>
+                      {m.change > 0 ? "+" : ""}{m.change}%
+                    </div>
+                    <div style={{ color: X.td, fontSize: 9 }}>önceki aya göre</div>
+                  </div>
+                </div>
+              ))}
+            </Card>
+
+            {/* BÜTÇE PERFORMANSI */}
+            <Card s={{ marginBottom: 12 }}>
+              <div style={{ color: X.tm, fontSize: 12, fontWeight: 700, marginBottom: 10 }}>BÜTÇE PERFORMANSI</div>
+              {months6.map(m => {
+                const usagePct = m.effectiveBudget > 0 ? Math.round((m.totalSpent / m.effectiveBudget) * 100) : 0;
+                const savingsPct = m.effectiveBudget > 0 ? Math.max(0, Math.round((m.remaining / m.effectiveBudget) * 100)) : 0;
+                return (
+                  <div key={m.mk} style={{ marginBottom: 10 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+                      <span style={{ color: m.mk === mk ? X.t : X.tm, fontSize: 12, fontWeight: m.mk === mk ? 700 : 400 }}>{ml(m.mk).split(" ")[0]}</span>
+                      <span style={{ fontSize: 11 }}>
+                        <span style={{ color: X.b, fontFamily: fm, fontWeight: 700 }}>%{usagePct}</span>
+                        <span style={{ color: X.td }}> kullanım · </span>
+                        <span style={{ color: savingsPct > 15 ? X.g : savingsPct > 5 ? X.w : X.r, fontFamily: fm, fontWeight: 700 }}>%{savingsPct}</span>
+                        <span style={{ color: X.td }}> birikim</span>
+                      </span>
+                    </div>
+                    <div style={{ height: 8, borderRadius: 4, background: X.border, overflow: "hidden", display: "flex" }}>
+                      <div style={{ height: "100%", background: usagePct > 100 ? X.r : X.b, width: `${Math.min(usagePct, 100)}%`, opacity: 0.6 }} />
+                      <div style={{ height: "100%", background: X.g, width: `${savingsPct}%`, opacity: 0.6 }} />
+                    </div>
+                  </div>
+                );
+              })}
+              <div style={{ display: "flex", gap: 16, justifyContent: "center", fontSize: 10, marginTop: 8 }}>
+                <span style={{ color: X.b }}>■ Harcama</span>
+                <span style={{ color: X.g }}>■ Birikim</span>
+              </div>
+            </Card>
+
+            {/* KATEGORİ KARŞILAŞTIRMA */}
+            {catCompare.length > 0 && (
+              <Card s={{ marginBottom: 12 }}>
+                <div style={{ color: X.tm, fontSize: 12, fontWeight: 700, marginBottom: 4 }}>KATEGORİ KARŞILAŞTIRMA</div>
+                <div style={{ color: X.td, fontSize: 10, marginBottom: 10 }}>{ml(pmk(mk))} → {ml(mk)}</div>
+                {catCompare.sort((a, b) => Math.abs(b.change) - Math.abs(a.change)).map(cat => (
+                  <div key={cat.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: `1px solid ${X.border}` }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ color: X.t, fontSize: 12, fontWeight: 600 }}>{cat.icon} {cat.name}</div>
+                      <div style={{ color: X.td, fontSize: 10 }}>{C(cat.prev)} → {C(cat.cur)}</div>
+                    </div>
+                    <div style={{ color: cat.change > 10 ? X.r : cat.change < -10 ? X.g : X.td, fontSize: 14, fontWeight: 800, fontFamily: fm }}>
+                      {cat.change > 0 ? "+" : ""}{cat.change}%
+                    </div>
+                  </div>
+                ))}
+              </Card>
+            )}
+
+            {/* İÇGÖRÜLER */}
+            {(() => {
+              const insights = [];
+              const curTotal = months6[months6.length - 1]?.totalSpent || 0;
+              const avg3 = months6.slice(-4, -1).reduce((s, m) => s + m.totalSpent, 0) / 3;
+              if (avg3 > 0 && curTotal > avg3 * 1.15) insights.push({ icon: "📊", text: `Bu ay harcamanız (${C(curTotal)}) son 3 ay ortalamasının (${C(Math.round(avg3))}) %${Math.round(((curTotal - avg3) / avg3) * 100)} üzerinde.`, color: X.r });
+              else if (avg3 > 0 && curTotal < avg3 * 0.85) insights.push({ icon: "✨", text: `Bu ay harcamanız (${C(curTotal)}) son 3 ay ortalamasından (${C(Math.round(avg3))}) %${Math.round(((avg3 - curTotal) / avg3) * 100)} daha az. Tebrikler!`, color: X.g });
+
+              const bestMonth = months6.reduce((best, m) => m.remaining > best.remaining ? m : best, months6[0]);
+              const worstMonth = months6.reduce((worst, m) => m.remaining < worst.remaining ? m : worst, months6[0]);
+              if (months6.length >= 3) insights.push({ icon: "🏆", text: `En iyi ay: ${ml(bestMonth.mk)} (${C(bestMonth.remaining)} birikim). En zor ay: ${ml(worstMonth.mk)} (${C(worstMonth.remaining)}).`, color: X.b });
+
+              if (insights.length === 0) return null;
+              return (
+                <Card s={{ marginBottom: 12, borderLeft: `3px solid ${X.b}` }}>
+                  <div style={{ color: X.tm, fontSize: 12, fontWeight: 700, marginBottom: 8 }}>💡 İÇGÖRÜLER</div>
+                  {insights.map((ins, i) => (
+                    <div key={i} style={{ color: ins.color, fontSize: 12, fontWeight: 600, lineHeight: 1.5, padding: "4px 0" }}>{ins.icon} {ins.text}</div>
+                  ))}
+                </Card>
+              );
+            })()}
+          </>
+        );
+      })()}
 
       {view === "risk" && (
         <>
