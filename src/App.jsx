@@ -181,7 +181,7 @@ function Modal({ title, onClose, children }) { return (<div style={{ position: "
 
 /* ═══ INFO POPUP ═══ */
 function InfoBtn({ onClick }) {
-  return <button onClick={e => { e.stopPropagation(); onClick(); }} style={{ position: "absolute", top: 6, right: 6, width: 18, height: 18, borderRadius: "50%", background: "rgba(0,0,0,0.06)", border: "none", color: X.tm, fontSize: 11, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, fontFamily: ff }}>i</button>;
+  return <button onClick={e => { e.stopPropagation(); e.preventDefault(); onClick(); }} style={{ position: "absolute", top: 0, right: 0, width: 40, height: 40, background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, zIndex: 2 }}><span style={{ width: 20, height: 20, borderRadius: "50%", background: "rgba(0,0,0,0.08)", color: X.tm, fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: ff }}>i</span></button>;
 }
 function InfoModal({ title, text, onClose }) {
   return <Modal title={`ℹ️ ${title}`} onClose={onClose}><div style={{ color: X.t, fontSize: 14, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{text}</div><Btn onClick={onClose} s={{ marginTop: 16 }}>Anladım</Btn></Modal>;
@@ -224,7 +224,7 @@ function TapAmt({ children, onTap, color, style: s }) {
 function CatButton({ icon, label, total, color, dimColor, expanded, onToggle, children, onInfo }) {
   return (<div style={{ marginBottom: 8 }}><div onClick={onToggle} style={{ display: "flex", alignItems: "center", gap: 12, ...glass, borderRadius: expanded ? "14px 14px 0 0" : 14, padding: "14px 16px", cursor: "pointer", position: "relative", border: `1px solid ${expanded ? color + "40" : "rgba(255,255,255,0.55)"}` }}><span style={{ fontSize: 28, lineHeight: 1 }}>{icon}</span><div style={{ flex: 1 }}><div style={{ color: X.t, fontWeight: 700, fontSize: 14, fontFamily: ff }}>{label}</div></div><div style={{ textAlign: "right", marginRight: 4 }}><div style={{ color, fontWeight: 800, fontSize: 17, fontFamily: fm }}>{C(total)}</div></div><span style={{ color: X.td, fontSize: 11, transform: expanded ? "rotate(180deg)" : "rotate(0)", transition: "0.2s" }}>▼</span>{onInfo && <InfoBtn onClick={onInfo} />}</div>{expanded && <div style={{ background: "rgba(200,218,212,0.45)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", borderTop: `1px solid rgba(0,0,0,0.05)`, borderRadius: "0 0 14px 14px", padding: "8px 16px 14px", boxShadow: "0 4px 10px rgba(0,0,0,0.04)" }}>{children}</div>}</div>);
 }
-function ItemRow({ label, value, sub, color = X.t, onAction, actionLabel, onEdit, onDelete }) { return (<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid rgba(0,0,0,0.06)" }}><div style={{ flex: 1, minWidth: 0 }}><div style={{ color: X.t, fontSize: 13, fontWeight: 600 }}>{label}</div>{sub && <div style={{ color: X.td, fontSize: 11 }}>{sub}</div>}</div><div style={{ display: "flex", alignItems: "center", gap: 5, flexShrink: 0 }}><span style={{ color, fontWeight: 700, fontFamily: fm, fontSize: 14 }}>{typeof value === "number" ? C(value) : value}</span>{onEdit && <button onClick={e => { e.stopPropagation(); onEdit(); }} style={{ background: "none", border: "none", color: X.b, fontSize: 14, cursor: "pointer", padding: "2px 4px" }}>✎</button>}{onDelete && <button onClick={e => { e.stopPropagation(); if(confirm("Bu kaydı silmek istediğinize emin misiniz?")) onDelete(); }} style={{ background: "none", border: "none", color: X.r, fontSize: 14, cursor: "pointer", padding: "2px 4px" }}>✕</button>}{onAction && <button onClick={e => { e.stopPropagation(); onAction(); }} style={{ background: "rgba(22,163,74,0.1)", border: "none", borderRadius: 8, padding: "5px 10px", color: X.g, fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: ff }}>{actionLabel || "✓"}</button>}</div></div>); }
+function ItemRow({ label, value, sub, color = X.t, onAction, actionLabel, onEdit, onDelete }) { return (<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid rgba(0,0,0,0.06)" }}><div style={{ flex: 1, minWidth: 0 }}><div style={{ color: X.t, fontSize: 13, fontWeight: 600 }}>{label}</div>{sub && <div style={{ color: X.td, fontSize: 11 }}>{sub}</div>}</div><div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}><span style={{ color, fontWeight: 700, fontFamily: fm, fontSize: 14 }}>{typeof value === "number" ? C(value) : value}</span>{onEdit && <button onClick={e => { e.stopPropagation(); onEdit(); }} style={{ background: "none", border: "none", color: X.b, fontSize: 18, cursor: "pointer", padding: "6px 8px", minWidth: 36, minHeight: 36, display: "flex", alignItems: "center", justifyContent: "center" }}>✎</button>}{onDelete && <button onClick={e => { e.stopPropagation(); if(confirm("Bu kaydı silmek istediğinize emin misiniz?")) onDelete(); }} style={{ background: "none", border: "none", color: X.r, fontSize: 18, cursor: "pointer", padding: "6px 8px", minWidth: 36, minHeight: 36, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>}{onAction && <button onClick={e => { e.stopPropagation(); onAction(); }} style={{ background: "rgba(22,163,74,0.1)", border: "none", borderRadius: 8, padding: "5px 10px", color: X.g, fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: ff }}>{actionLabel || "✓"}</button>}</div></div>); }
 
 /* ═══ ENGINE ═══ */
 /* ═══ BİRİKİM HELPER ═══ */
@@ -1317,8 +1317,8 @@ function CCInstallModal({ data, mk, cards, variableExpenses, onClose, onSave, on
                     </div>
                   </div>
                   <div style={{ display: "flex", gap: 4, flexShrink: 0, marginLeft: 8 }}>
-                    <button onClick={isEditing ? cancelEdit : startEdit} style={{ background: "none", border: "none", color: X.b, fontSize: 16, cursor: "pointer", padding: "2px 4px" }}>{isEditing ? "▲" : "✎"}</button>
-                    {onDeletePlan && <button onClick={() => { if (confirm(`"${p.note || "Bu taksit planı"}" silinecek. Emin misiniz?`)) onDeletePlan(p.id); }} style={{ background: "none", border: "none", color: X.r, fontSize: 16, cursor: "pointer", padding: "2px 4px" }}>✕</button>}
+                    <button onClick={isEditing ? cancelEdit : startEdit} style={{ background: "none", border: "none", color: X.b, fontSize: 20, cursor: "pointer", padding: "6px 8px", minWidth: 36, minHeight: 36, display: "flex", alignItems: "center", justifyContent: "center" }}>{isEditing ? "▲" : "✎"}</button>
+                    {onDeletePlan && <button onClick={() => { if (confirm(`"${p.note || "Bu taksit planı"}" silinecek. Emin misiniz?`)) onDeletePlan(p.id); }} style={{ background: "none", border: "none", color: X.r, fontSize: 20, cursor: "pointer", padding: "6px 8px", minWidth: 36, minHeight: 36, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>}
                   </div>
                 </div>
 
@@ -1709,7 +1709,7 @@ Fiyatlar Türk Lirası cinsindendir. Eğer fiş okunamıyorsa {"error":"Fiş oku
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <span style={{ color: X.t, fontSize: 14, fontWeight: 700, fontFamily: fm }}>{C(r.totalAmount)}</span>
-                    <button onClick={() => { if (confirm("Bu fişi silmek istediğinize emin misiniz?")) onDelete(r.id); }} style={{ background: "none", border: "none", color: X.r, fontSize: 14, cursor: "pointer", padding: "2px 4px" }}>✕</button>
+                    <button onClick={() => { if (confirm("Bu fişi silmek istediğinize emin misiniz?")) onDelete(r.id); }} style={{ background: "none", border: "none", color: X.r, fontSize: 18, cursor: "pointer", padding: "6px 8px", minWidth: 36, minHeight: 36, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
                   </div>
                 </div>
               ))}
@@ -1790,8 +1790,8 @@ Fiyatlar Türk Lirası cinsindendir. Eğer fiş okunamıyorsa {"error":"Fiş oku
                     <>
                       <span style={{ color: X.td, fontSize: 11 }}>{it.qty > 1 ? `${it.qty}×` : ""}</span>
                       <span style={{ color: X.t, fontSize: 13, fontWeight: 700, fontFamily: fm }}>{C(it.price * (it.qty || 1))}</span>
-                      <button onClick={() => setEditIdx(idx)} style={{ background: "none", border: "none", color: X.b, fontSize: 12, cursor: "pointer", padding: "2px" }}>✎</button>
-                      <button onClick={() => deleteItem(idx)} style={{ background: "none", border: "none", color: X.r, fontSize: 12, cursor: "pointer", padding: "2px" }}>✕</button>
+                      <button onClick={() => setEditIdx(idx)} style={{ background: "none", border: "none", color: X.b, fontSize: 16, cursor: "pointer", padding: "6px", minWidth: 32, minHeight: 32, display: "flex", alignItems: "center", justifyContent: "center" }}>✎</button>
+                      <button onClick={() => deleteItem(idx)} style={{ background: "none", border: "none", color: X.r, fontSize: 16, cursor: "pointer", padding: "6px", minWidth: 32, minHeight: 32, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
                     </>
                   )}
                 </div>
