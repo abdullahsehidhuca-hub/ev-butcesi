@@ -165,8 +165,8 @@ const HAREMALTIN_USD = "https://www.haremaltin.com/grafik?tip=doviz&birim=USDTRY
 const HAREMALTIN_EUR = "https://www.haremaltin.com/grafik?tip=doviz&birim=EURTRY";
 
 const X = { bg: "#DCE2EE", card: "rgba(185,205,200,0.6)", cardSolid: "#B8CCC6", border: "rgba(255,255,255,0.45)", g: "#15803D", gd: "rgba(21,128,61,0.15)", w: "#B45309", wd: "rgba(180,83,9,0.15)", r: "#DC2626", rd: "rgba(220,38,38,0.15)", b: "#1D4ED8", bd: "rgba(29,78,216,0.15)", p: "#6D28D9", pd: "rgba(109,40,217,0.15)", o: "#C2410C", od: "rgba(194,65,12,0.15)", t: "#0F172A", tm: "#334155", td: "#475569" };
-const ff = `'DM Sans',sans-serif`;
-const fm = `'JetBrains Mono','Fira Code',monospace`;
+const ff = `'Plus Jakarta Sans',sans-serif`;
+const fm = `'Plus Jakarta Sans',sans-serif`;
 const neu = "6px 6px 14px rgba(0,0,0,0.1), -6px -6px 14px rgba(255,255,255,0.7)";
 const neuIn = "inset 3px 3px 6px rgba(0,0,0,0.08), inset -3px -3px 6px rgba(255,255,255,0.5)";
 const glass = { background: "rgba(175,200,195,0.6)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(255,255,255,0.35)", boxShadow: neu };
@@ -4477,7 +4477,7 @@ function LoginScreen({ pendingInvite, setPendingInvite }) {
 
   return (
     <div style={{ background: "linear-gradient(160deg, #D5DCE8 0%, #CBD4E0 40%, #DDE2EC 100%)", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: ff, padding: 16 }}>
-      <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700;800&family=JetBrains+Mono:wght@400;700;800&display=swap" rel="stylesheet" />
+      <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
       <div style={{ ...glassSolid, borderRadius: 20, width: "100%", maxWidth: 380, padding: 28, boxShadow: neu }}>
         <div style={{ textAlign: "center", marginBottom: 24 }}>
           <div style={{ fontSize: 40, marginBottom: 8 }}>💰</div>
@@ -4625,7 +4625,7 @@ export default function App() {
 
   return (
     <div style={{ background: "linear-gradient(160deg, #D5DCE8 0%, #CBD4E0 40%, #DDE2EC 100%)", minHeight: "100vh", color: X.t, fontFamily: ff, maxWidth: 480, margin: "0 auto", position: "relative" }}>
-      <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700;800&display=swap" rel="stylesheet" />
+      <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
       {/* Renk lekeleri */}
       <div style={{ position: "fixed", top: 60, left: -50, width: 200, height: 200, borderRadius: "50%", background: "rgba(22,163,74,0.07)", filter: "blur(60px)", pointerEvents: "none" }} />
       <div style={{ position: "fixed", top: 280, right: -40, width: 170, height: 170, borderRadius: "50%", background: "rgba(37,99,235,0.06)", filter: "blur(50px)", pointerEvents: "none" }} />
