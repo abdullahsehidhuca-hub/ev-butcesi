@@ -1,0 +1,73 @@
+<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgMain" x1="0" y1="0" x2="0.7" y2="1">
+      <stop offset="0%" stop-color="#0C6B63" />
+      <stop offset="55%" stop-color="#13527A" />
+      <stop offset="100%" stop-color="#1A44C0" />
+    </linearGradient>
+    <linearGradient id="shieldG" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0%" stop-color="rgba(255,255,255,0.30)" />
+      <stop offset="100%" stop-color="rgba(255,255,255,0.06)" />
+    </linearGradient>
+    <filter id="notifGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="8" result="blur" />
+      <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="110" fill="url(#bgMain)" />
+  <rect x="5" y="5" width="502" height="502" rx="108" fill="none" stroke="#00FFBA" stroke-width="9" opacity="0.75" />
+
+  <!-- Çatı -->
+  <path d="M256 62 L405 175 L375 175" fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M256 62 L107 175 L137 175" fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" />
+  <rect x="310" y="85" width="14" height="30" rx="3" fill="rgba(255,255,255,0.3)" />
+
+  <!-- Kalkan duvarlar -->
+  <path d="M137 175 L137 310 Q137 400 256 440 Q375 400 375 310 L375 175" fill="url(#shieldG)" stroke="rgba(255,255,255,0.5)" stroke-width="4" stroke-linejoin="round" />
+
+  <!-- Bütçe çemberi -->
+  <circle cx="256" cy="265" r="95" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="16" />
+  <circle cx="256" cy="265" r="95" fill="none" stroke="rgba(255,255,255,0.75)" stroke-width="16" stroke-dasharray="420 180" stroke-dashoffset="0" stroke-linecap="round" />
+  <circle cx="256" cy="265" r="95" fill="none" stroke="#4ADE80" stroke-width="16" stroke-dasharray="130 470" stroke-dashoffset="-420" stroke-linecap="round" />
+
+  <!-- Bildirim glow + rozet -->
+  <circle cx="402" cy="88" r="24" fill="#FF3B6F" filter="url(#notifGlow)" />
+  <circle cx="402" cy="88" r="24" fill="#FF3B6F" />
+  <circle cx="402" cy="88" r="10" fill="#fff" opacity="0.9" />
+
+  <!-- Açık defter -->
+  <g transform="translate(256, 268)">
+    <!-- Sol sayfa -->
+    <rect x="-70" y="-55" width="65" height="80" rx="4" fill="rgba(255,255,255,0.85)" />
+    <!-- Sağ sayfa -->
+    <rect x="5" y="-55" width="65" height="80" rx="4" fill="rgba(255,255,255,0.75)" />
+    <!-- Defter sırtı -->
+    <line x1="0" y1="-55" x2="0" y2="25" stroke="rgba(255,255,255,0.4)" stroke-width="3" />
+
+    <!-- Sol sayfa — büyüme grafiği -->
+    <line x1="-62" y1="-10" x2="-12" y2="-10" stroke="#0C6B63" stroke-width="0.8" opacity="0.2" />
+    <line x1="-62" y1="0" x2="-12" y2="0" stroke="#0C6B63" stroke-width="0.8" opacity="0.2" />
+    <line x1="-62" y1="10" x2="-12" y2="10" stroke="#0C6B63" stroke-width="0.8" opacity="0.2" />
+    <path d="M-58 15 L-48 8 L-38 12 L-28 2 L-18 -8 L-12 -20" fill="none" stroke="#4ADE80" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+    <circle cx="-12" cy="-20" r="3.5" fill="#4ADE80" />
+    <rect x="-58" y="5" width="7" height="14" rx="1.5" fill="#0C6B63" opacity="0.25" />
+    <rect x="-46" y="-2" width="7" height="21" rx="1.5" fill="#0C6B63" opacity="0.3" />
+    <rect x="-34" y="-8" width="7" height="27" rx="1.5" fill="#0C6B63" opacity="0.35" />
+    <rect x="-22" y="-16" width="7" height="35" rx="1.5" fill="#4ADE80" opacity="0.5" />
+    <line x1="-62" y1="-40" x2="-20" y2="-40" stroke="#0C6B63" stroke-width="1.5" opacity="0.3" />
+    <line x1="-62" y1="-30" x2="-35" y2="-30" stroke="#0C6B63" stroke-width="1.5" opacity="0.2" />
+
+    <!-- Sağ sayfa tutarlar -->
+    <text x="38" y="-30" text-anchor="middle" font-size="13" font-family="Quicksand, sans-serif" font-weight="700" fill="#0C6B63" opacity="0.7">₺380K</text>
+    <text x="38" y="-12" text-anchor="middle" font-size="13" font-family="Quicksand, sans-serif" font-weight="700" fill="#DC2626" opacity="0.6">-₺297K</text>
+    <line x1="15" y1="-3" x2="60" y2="-3" stroke="#0C6B63" stroke-width="1" opacity="0.3" />
+    <text x="38" y="15" text-anchor="middle" font-size="14" font-family="Quicksand, sans-serif" font-weight="800" fill="#4ADE80">₺83K</text>
+  </g>
+
+  <!-- Kalem -->
+  <g transform="translate(340, 230) rotate(30)">
+    <rect x="-4" y="-40" width="8" height="50" rx="2" fill="#F59E0B" />
+    <polygon points="0,14 -4,10 4,10" fill="#3D3528" />
+    <rect x="-4" y="-44" width="8" height="6" rx="1" fill="#FF6B6B" />
+  </g>
+</svg>
