@@ -181,7 +181,7 @@ function Modal({ title, onClose, children }) { return (<div style={{ position: "
 
 /* ═══ INFO POPUP ═══ */
 function InfoBtn({ onClick }) {
-  return <button onClick={e => { e.stopPropagation(); e.preventDefault(); onClick(); }} style={{ position: "absolute", top: 0, right: 0, width: 40, height: 40, background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, zIndex: 2 }}><span style={{ width: 20, height: 20, borderRadius: "50%", background: "rgba(0,0,0,0.12)", color: X.tm, fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: ff }}>i</span></button>;
+  return <button onClick={e => { e.stopPropagation(); e.preventDefault(); onClick(); }} style={{ position: "absolute", top: 2, right: 2, width: 26, height: 26, background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, zIndex: 2 }}><span style={{ width: 17, height: 17, borderRadius: "50%", background: "rgba(0,0,0,0.12)", color: X.tm, fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: ff }}>i</span></button>;
 }
 function InfoModal({ title, text, onClose }) {
   return <Modal title={`ℹ️ ${title}`} onClose={onClose}><div style={{ color: X.t, fontSize: 14, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{text}</div><Btn onClick={onClose} s={{ marginTop: 16 }}>Anladım</Btn></Modal>;
