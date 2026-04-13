@@ -2244,7 +2244,8 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
 
 /* ═══ ANALYSIS ═══ */
 function AnalysisScreen({ data, setData, mk: initialMk }) {
-  const [view, setView] = useState("trend");
+  const [view, setView] = useState("csv");
+  const [csvSub, setCsvSub] = useState("analysis"); // analysis | category
   const [selMk, setSelMk] = useState(initialMk);
   const [csvCardId, setCsvCardId] = useState("");
   const [expandedAsset, setExpandedAsset] = useState(null);
@@ -2606,9 +2607,9 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>
         {[
+          { id: "csv", l: "Ekstre Analizi", i: "🧾" },
           { id: "trend", l: "Harcama Trendi", i: "📈" },
           { id: "risk", l: "Risk & Yönlendirme", i: "⚠️" },
-          { id: "csv", l: "Banka Ekstresi", i: "🧾" },
           { id: "calendar", l: "Takvim", i: "📅" }
         ].map(t => (
           <button key={t.id} onClick={() => setView(t.id)} style={{ background: view === t.id ? X.gd : X.bg, border: `1px solid ${view === t.id ? X.g : X.border}`, borderRadius: 10, padding: "12px 8px", color: view === t.id ? X.g : X.tm, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: ff, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, lineHeight: 1.2 }}>
@@ -2620,15 +2621,15 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
 
       {/* ═══ HARCAMA TRENDİ ═══ */}
       {view === "trend" && (() => {
-        // Son 6 ayın verilerini hazırla
-        const months6 = [];
+        // Son 6 ayın verilerini hazırla — VERİSİ OLMAYAN AYLARI FİLTRELE
+        const allMonths = [];
         let m6 = mk;
-        for (let i = 0; i < 6; i++) { months6.unshift({ mk: m6, ...calcMonth(data, m6, null) }); m6 = pmk(m6); }
-        const maxSpent = Math.max(...months6.map(m => m.totalSpent), 1);
-        const maxBudget = Math.max(...months6.map(m => m.effectiveBudget), 1);
-        const chartMax = Math.max(maxSpent, maxBudget);
+        for (let i = 0; i < 6; i++) { allMonths.unshift({ mk: m6, ...calcMonth(data, m6, null), hasData: !!data.months[m6] }); m6 = pmk(m6); }
+        const months6 = allMonths.filter(m => m.hasData || m.mk === mk);
+        if (months6.length === 0) months6.push(allMonths[allMonths.length - 1]);
+        const chartMax = Math.max(...months6.map(m => Math.max(m.effectiveBudget, m.totalSpent)), 1);
 
-        // Kategori bazlı karşılaştırma (son 3 ay)
+        // Kategori bazlı karşılaştırma
         const catCompare = [];
         const ves = data.settings.variableExpenses || [];
         if (ves.length > 0) {
@@ -2654,34 +2655,44 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
 
         return (
           <>
-            {/* BÜTÇE vs HARCAMA CHART */}
+            {/* BÜTÇE vs HARCAMA + BİRİKİM CHART */}
             <Card s={{ marginBottom: 12 }}>
-              <div style={{ color: X.tm, fontSize: 12, fontWeight: 700, marginBottom: 12 }}>BÜTÇE vs HARCAMA (6 AY)</div>
-              <div style={{ display: "flex", alignItems: "flex-end", gap: 6, height: 120, marginBottom: 8 }}>
-                {months6.map((m, i) => {
-                  const budgetH = (m.effectiveBudget / chartMax) * 100;
+              <div style={{ color: X.tm, fontSize: 12, fontWeight: 700, marginBottom: 12 }}>BÜTÇE vs HARCAMA</div>
+              <div style={{ display: "flex", alignItems: "flex-end", gap: 8, height: 130, marginBottom: 6 }}>
+                {months6.map(m => {
+                  const spentPct = m.effectiveBudget > 0 ? Math.round((m.totalSpent / m.effectiveBudget) * 100) : 0;
+                  const savingsPct = m.effectiveBudget > 0 ? Math.max(0, Math.round((m.remaining / m.effectiveBudget) * 100)) : 0;
                   const spentH = (m.totalSpent / chartMax) * 100;
+                  const savingsH = m.remaining > 0 ? (m.remaining / chartMax) * 100 : 0;
                   const isOver = m.totalSpent > m.effectiveBudget;
                   return (
-                    <div key={m.mk} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-                      <div style={{ width: "100%", display: "flex", gap: 2, alignItems: "flex-end", height: 100 }}>
-                        <div style={{ flex: 1, background: "rgba(22,163,74,0.15)", borderRadius: "4px 4px 0 0", height: `${budgetH}%`, minHeight: 2 }} />
-                        <div style={{ flex: 1, background: isOver ? X.r : X.b, borderRadius: "4px 4px 0 0", height: `${spentH}%`, minHeight: 2, opacity: 0.7 }} />
+                    <div key={m.mk} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center" }}>
+                      <div style={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", height: 105 }}>
+                        {/* Birikim barı (turuncu, bütçenin fazlası) */}
+                        {savingsH > 0 && <div style={{ width: "70%", background: "#F59E0B", borderRadius: "4px 4px 0 0", height: `${savingsH}%`, minHeight: 2, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          {savingsPct >= 8 && <span style={{ color: "#fff", fontSize: 8, fontWeight: 800, fontFamily: fm }}>%{savingsPct}</span>}
+                        </div>}
+                        {/* Harcama barı */}
+                        <div style={{ width: "70%", background: isOver ? X.r : X.b, borderRadius: savingsH > 0 ? 0 : "4px 4px 0 0", height: `${spentH}%`, minHeight: 2, opacity: 0.75, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          {spentPct >= 20 && <span style={{ color: "#fff", fontSize: 8, fontWeight: 800, fontFamily: fm }}>%{spentPct}</span>}
+                        </div>
                       </div>
-                      <div style={{ color: m.mk === mk ? X.t : X.td, fontSize: 9, fontWeight: m.mk === mk ? 800 : 400 }}>
+                      <div style={{ color: m.mk === mk ? X.t : X.td, fontSize: 9, fontWeight: m.mk === mk ? 800 : 400, marginTop: 3 }}>
                         {ml(m.mk).split(" ")[0].slice(0, 3)}
                       </div>
                     </div>
                   );
                 })}
               </div>
-              <div style={{ display: "flex", gap: 16, justifyContent: "center", fontSize: 10 }}>
-                <span style={{ color: X.g }}>■ Bütçe</span>
+              <div style={{ display: "flex", gap: 14, justifyContent: "center", fontSize: 10 }}>
                 <span style={{ color: X.b }}>■ Harcama</span>
+                <span style={{ color: "#F59E0B" }}>■ Birikim</span>
+                <span style={{ color: X.r }}>■ Aşım</span>
               </div>
             </Card>
 
             {/* AYLIK DEĞİŞİM */}
+            {monthChanges.length > 0 && (
             <Card s={{ marginBottom: 12 }}>
               <div style={{ color: X.tm, fontSize: 12, fontWeight: 700, marginBottom: 10 }}>AYLIK DEĞİŞİM</div>
               {monthChanges.map((m, i) => (
@@ -2699,36 +2710,7 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
                 </div>
               ))}
             </Card>
-
-            {/* BÜTÇE PERFORMANSI */}
-            <Card s={{ marginBottom: 12 }}>
-              <div style={{ color: X.tm, fontSize: 12, fontWeight: 700, marginBottom: 10 }}>BÜTÇE PERFORMANSI</div>
-              {months6.map(m => {
-                const usagePct = m.effectiveBudget > 0 ? Math.round((m.totalSpent / m.effectiveBudget) * 100) : 0;
-                const savingsPct = m.effectiveBudget > 0 ? Math.max(0, Math.round((m.remaining / m.effectiveBudget) * 100)) : 0;
-                return (
-                  <div key={m.mk} style={{ marginBottom: 10 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
-                      <span style={{ color: m.mk === mk ? X.t : X.tm, fontSize: 12, fontWeight: m.mk === mk ? 700 : 400 }}>{ml(m.mk).split(" ")[0]}</span>
-                      <span style={{ fontSize: 11 }}>
-                        <span style={{ color: X.b, fontFamily: fm, fontWeight: 700 }}>%{usagePct}</span>
-                        <span style={{ color: X.td }}> kullanım · </span>
-                        <span style={{ color: savingsPct > 15 ? X.g : savingsPct > 5 ? X.w : X.r, fontFamily: fm, fontWeight: 700 }}>%{savingsPct}</span>
-                        <span style={{ color: X.td }}> birikim</span>
-                      </span>
-                    </div>
-                    <div style={{ height: 8, borderRadius: 4, background: X.border, overflow: "hidden", display: "flex" }}>
-                      <div style={{ height: "100%", background: usagePct > 100 ? X.r : X.b, width: `${Math.min(usagePct, 100)}%`, opacity: 0.6 }} />
-                      <div style={{ height: "100%", background: X.g, width: `${savingsPct}%`, opacity: 0.6 }} />
-                    </div>
-                  </div>
-                );
-              })}
-              <div style={{ display: "flex", gap: 16, justifyContent: "center", fontSize: 10, marginTop: 8 }}>
-                <span style={{ color: X.b }}>■ Harcama</span>
-                <span style={{ color: X.g }}>■ Birikim</span>
-              </div>
-            </Card>
+            )}
 
             {/* KATEGORİ KARŞILAŞTIRMA */}
             {catCompare.length > 0 && (
@@ -2753,13 +2735,16 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
             {(() => {
               const insights = [];
               const curTotal = months6[months6.length - 1]?.totalSpent || 0;
-              const avg3 = months6.slice(-4, -1).reduce((s, m) => s + m.totalSpent, 0) / 3;
+              const avg3 = months6.slice(-4, -1).reduce((s, m) => s + m.totalSpent, 0) / Math.max(months6.slice(-4, -1).length, 1);
               if (avg3 > 0 && curTotal > avg3 * 1.15) insights.push({ icon: "📊", text: `Bu ay harcamanız (${C(curTotal)}) son 3 ay ortalamasının (${C(Math.round(avg3))}) %${Math.round(((curTotal - avg3) / avg3) * 100)} üzerinde.`, color: X.r });
               else if (avg3 > 0 && curTotal < avg3 * 0.85) insights.push({ icon: "✨", text: `Bu ay harcamanız (${C(curTotal)}) son 3 ay ortalamasından (${C(Math.round(avg3))}) %${Math.round(((avg3 - curTotal) / avg3) * 100)} daha az. Tebrikler!`, color: X.g });
 
-              const bestMonth = months6.reduce((best, m) => m.remaining > best.remaining ? m : best, months6[0]);
-              const worstMonth = months6.reduce((worst, m) => m.remaining < worst.remaining ? m : worst, months6[0]);
-              if (months6.length >= 3) insights.push({ icon: "🏆", text: `En iyi ay: ${ml(bestMonth.mk)} (${C(bestMonth.remaining)} birikim). En zor ay: ${ml(worstMonth.mk)} (${C(worstMonth.remaining)}).`, color: X.b });
+              const withData = months6.filter(m => m.hasData);
+              if (withData.length >= 2) {
+                const bestMonth = withData.reduce((best, m) => m.remaining > best.remaining ? m : best, withData[0]);
+                const worstMonth = withData.reduce((worst, m) => m.remaining < worst.remaining ? m : worst, withData[0]);
+                insights.push({ icon: "🏆", text: `En iyi ay: ${ml(bestMonth.mk)} (${C(bestMonth.remaining)} birikim). En zor ay: ${ml(worstMonth.mk)} (${C(worstMonth.remaining)}).`, color: X.b });
+              }
 
               if (insights.length === 0) return null;
               return (
@@ -2778,20 +2763,20 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
       {view === "risk" && (
         <>
           <Card s={{ marginBottom: 12 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-              <div style={{ color: X.tm, fontSize: 13, fontWeight: 700 }}>RİSK SKORU DETAYI</div>
-              <div style={{ color: getRiskInfo(risk.score).color, fontSize: 24, fontWeight: 900, fontFamily: fm }}>{risk.score}<span style={{ fontSize: 12, color: X.td }}>/100</span></div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <div style={{ color: X.tm, fontSize: 12, fontWeight: 700 }}>RİSK SKORU DETAYI</div>
+              <div style={{ color: getRiskInfo(risk.score).color, fontSize: 22, fontWeight: 900, fontFamily: fm }}>{risk.score}<span style={{ fontSize: 11, color: X.td }}>/100</span></div>
             </div>
             {risk.details.map((d, i) => (
-              <div key={i} style={{ marginBottom: 10 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
-                  <span style={{ color: X.t, fontSize: 13 }}>{d.label}</span>
-                  <span style={{ color: X.tm, fontSize: 12, fontFamily: fm }}>{d.score}/{d.max}</span>
+              <div key={i} style={{ marginBottom: 6 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 2 }}>
+                  <span style={{ color: X.t, fontSize: 11, flex: 1 }}>{d.label}</span>
+                  <span style={{ color: X.tm, fontSize: 11, fontFamily: fm, flexShrink: 0 }}>{d.score}/{d.max}</span>
                 </div>
-                <div style={{ height: 4, borderRadius: 2, background: X.border }}>
+                <div style={{ height: 3, borderRadius: 2, background: X.border }}>
                   <div style={{ height: "100%", borderRadius: 2, background: d.score > d.max * 0.6 ? X.r : d.score > d.max * 0.3 ? X.w : X.g, width: `${(d.score / d.max) * 100}%` }} />
                 </div>
-                <div style={{ color: X.td, fontSize: 11, marginTop: 2 }}>{d.desc}</div>
+                <div style={{ color: X.td, fontSize: 10, marginTop: 1 }}>{d.desc}</div>
               </div>
             ))}
           </Card>
@@ -2947,168 +2932,182 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
           const v = ves.find(x => x.id === id);
           return v ? `${v.icon || "📋"} ${v.name}` : "Kategorisiz";
         };
+        const md2 = data.months[mk] || DM();
+        const receipts = md2.receipts || [];
+        const receiptAnalysis = analyzeReceipts(receipts);
+
+        // Ekstre yazılı analiz
+        const csvAnalysisLines = (() => {
+          if (csvTotal <= 0) return null;
+          const lines = [];
+          const allStats = Object.entries(allCsvData).map(([, cd]) => cd.matchStats).filter(Boolean);
+          const totalMatched = allStats.reduce((s, st) => s + (st.matched || 0), 0);
+          const totalUnmatched = allStats.reduce((s, st) => s + (st.unmatched || 0), 0);
+          const allTx = Object.values(allCsvData).flatMap(cd => cd.transactions || []);
+          const unmatchedEntries = allStats.flatMap(st => st.unmatchedEntries || []);
+          const matchRate = allTx.length > 0 ? Math.round((totalMatched / allTx.length) * 100) : 0;
+          const appTotal = c.ccSingleTotal + c.installmentTotal;
+          const diff = csvTotal - appTotal;
+          if (diff > 0) lines.push({ icon: "⚠️", text: `Banka ekstresi toplamı (${C(csvTotal)}) uygulama kayıtlarından ${C(diff)} fazla. Uygulamaya girilmeyen harcamalar olabilir.`, color: X.w });
+          else if (diff < -1000) lines.push({ icon: "ℹ️", text: `Uygulama kayıtları (${C(appTotal)}) ekstre toplamından ${C(Math.abs(diff))} fazla. Bazı işlemler henüz ekstreye yansımamış olabilir.`, color: X.b });
+          else lines.push({ icon: "✅", text: `Ekstre toplamı (${C(csvTotal)}) ile uygulama kayıtları uyumlu.`, color: X.g });
+          if (allTx.length > 0) {
+            if (matchRate >= 80) lines.push({ icon: "✅", text: `Eşleşme oranı %${matchRate}. Harcamalarınızı düzenli kaydediyorsunuz.`, color: X.g });
+            else if (matchRate >= 50) lines.push({ icon: "⚠️", text: `Eşleşme oranı %${matchRate}. ${totalUnmatched} işlem kayıtsız. Kayıt alışkanlığınızı güçlendirin.`, color: X.w });
+            else lines.push({ icon: "🚨", text: `Eşleşme oranı sadece %${matchRate}. Kayıtsız harcamalar bütçe kontrolünü zorlaştırıyor.`, color: X.r });
+          }
+          const uncatCount = allTx.filter(t => !t.categoryId).length;
+          if (uncatCount > 0) lines.push({ icon: "📋", text: `${uncatCount} işlem kategorisiz. Kategori atayarak gelecek ekstrelerde otomatik tanıma sağlayın.`, color: X.b });
+          if (totalUnmatched > 0) {
+            const unmatchedTotal = allTx.filter(t => !t.matchedEntryId).reduce((s, t) => s + t.amount, 0);
+            lines.push({ icon: "💡", text: `Ekstre'de ${totalUnmatched} kayıtsız işlem (toplam ${C(unmatchedTotal)}). Bunları girmeyi unutmuş olabilirsiniz.`, color: X.o });
+          }
+          if (unmatchedEntries.length > 0) lines.push({ icon: "ℹ️", text: `Uygulamada ${unmatchedEntries.length} kayıt ekstre'de bulunamadı. Henüz yansımamış veya farklı karta ait olabilir.`, color: X.td });
+          const catTotals = {};
+          allTx.forEach(t => { const cat = t.categoryId || "_unc"; catTotals[cat] = (catTotals[cat] || 0) + t.amount; });
+          const sortedCats = Object.entries(catTotals).filter(([k]) => k !== "_unc").sort((a, b) => b[1] - a[1]);
+          if (sortedCats.length > 0) {
+            const topVe = ves.find(v => v.id === sortedCats[0][0]);
+            const topPct = Math.round((sortedCats[0][1] / csvTotal) * 100);
+            if (topVe) lines.push({ icon: "📊", text: `En büyük kalem: ${topVe.icon || "📋"} ${topVe.name} (${C(sortedCats[0][1])}, %${topPct}).${topPct > 40 ? " Tasarruf fırsatlarını değerlendirin." : ""}`, color: X.b });
+          }
+          const prevCsvData = data.months[pmk(mk)]?.csvByCard || {};
+          const prevCsvTotal = Object.values(prevCsvData).reduce((s, cd) => (cd.transactions || []).reduce((s2, t) => s2 + t.amount, s), 0);
+          if (prevCsvTotal > 0) {
+            const csvChange = Math.round(((csvTotal - prevCsvTotal) / prevCsvTotal) * 100);
+            if (csvChange > 10) lines.push({ icon: "📈", text: `Ekstre toplamı geçen aya göre %${csvChange} arttı (${C(prevCsvTotal)} → ${C(csvTotal)}).`, color: X.r });
+            else if (csvChange < -10) lines.push({ icon: "📉", text: `Ekstre toplamı geçen aya göre %${Math.abs(csvChange)} azaldı. Tasarruf çabalarınız sonuç veriyor.`, color: X.g });
+          }
+          return lines;
+        })();
+
         return (
           <>
-            <Card s={{ marginBottom: 12 }}>
-              <div style={{ color: X.tm, fontSize: 13, fontWeight: 700, marginBottom: 8 }}>EKSTRE DÖKÜMÜ YÜKLE</div>
-              {cards.length === 0 ? (
-                <div style={{ color: X.w, fontSize: 13, padding: 10, background: X.wd, borderRadius: 8 }}>⚠️ Önce Ayarlar → Kartlarım'dan kart eklemelisiniz.</div>
-              ) : (
-                <>
-                  <Sel label="Hangi Kartın Ekstresi?" value={csvCardId} onChange={setCsvCardId} options={[{ v: "", l: "— Seçin —" }, ...cards.map(c => ({ v: c.id, l: c.name }))]} />
-                  <label style={{ display: "block", textAlign: "center" }}>
-                    <span style={{ display: "inline-block", background: csvCardId ? X.g : X.td, color: "#000", borderRadius: 10, padding: "12px 24px", fontSize: 14, fontWeight: 700, cursor: csvCardId ? "pointer" : "not-allowed" }}>📂 CSV Dosyası Yükle</span>
-                    <input type="file" accept=".csv" onChange={handleCSV} disabled={!csvCardId} style={{ display: "none" }} />
-                  </label>
-                </>
-              )}
-              {Object.keys(allCsvData).length > 0 && (
-                <div style={{ marginTop: 12, fontSize: 11, color: X.td }}>
-                  Yüklenen: {Object.keys(allCsvData).map(cid => cards.find(c => c.id === cid)?.name || "?").join(", ")}
-                </div>
-              )}
-            </Card>
+            {/* ALT SEKMELER */}
+            <div style={{ display: "flex", gap: 0, marginBottom: 14, borderRadius: 10, overflow: "hidden", border: `1px solid ${X.border}` }}>
+              <button onClick={() => setCsvSub("analysis")} style={{ flex: 1, padding: "10px 0", background: csvSub === "analysis" ? X.g : "transparent", color: csvSub === "analysis" ? "#fff" : X.tm, border: "none", fontSize: 12, fontWeight: 700, fontFamily: ff, cursor: "pointer" }}>🧾 Banka Ekstresi</button>
+              <button onClick={() => setCsvSub("category")} style={{ flex: 1, padding: "10px 0", background: csvSub === "category" ? X.g : "transparent", color: csvSub === "category" ? "#fff" : X.tm, border: "none", fontSize: 12, fontWeight: 700, fontFamily: ff, cursor: "pointer" }}>📊 Kategorik Analiz</button>
+            </div>
 
-            {csvTotal > 0 && (
+            {/* ═══ BANKA EKSTRESİ ═══ */}
+            {csvSub === "analysis" && (
               <>
-                {/* EŞLEŞME SONUÇLARI */}
+                {csvAnalysisLines && csvAnalysisLines.length > 0 && (
+                  <Card s={{ marginBottom: 12, borderLeft: `3px solid ${X.b}` }}>
+                    <div style={{ color: X.tm, fontSize: 12, fontWeight: 700, marginBottom: 10 }}>📝 HARCAMA DEĞERLENDİRMESİ</div>
+                    {csvAnalysisLines.map((line, i) => (
+                      <div key={i} style={{ color: line.color, fontSize: 12, fontWeight: 600, lineHeight: 1.6, padding: "4px 0", borderBottom: i < csvAnalysisLines.length - 1 ? "1px solid rgba(0,0,0,0.04)" : "none" }}>{line.icon} {line.text}</div>
+                    ))}
+                  </Card>
+                )}
+                <Card s={{ marginBottom: 12 }}>
+                  <div style={{ color: X.tm, fontSize: 12, fontWeight: 700, marginBottom: 8 }}>EKSTRE DÖKÜMÜ YÜKLE</div>
+                  {cards.length === 0 ? (
+                    <div style={{ color: X.w, fontSize: 13, padding: 10, background: X.wd, borderRadius: 8 }}>⚠️ Önce Ayarlar → Kartlarım'dan kart ekleyin.</div>
+                  ) : (
+                    <>
+                      <Sel label="Hangi Kartın Ekstresi?" value={csvCardId} onChange={setCsvCardId} options={[{ v: "", l: "— Seçin —" }, ...cards.map(c2 => ({ v: c2.id, l: c2.name }))]} />
+                      <label style={{ display: "block", textAlign: "center" }}>
+                        <span style={{ display: "inline-block", background: csvCardId ? X.g : X.td, color: "#000", borderRadius: 10, padding: "12px 24px", fontSize: 14, fontWeight: 700, cursor: csvCardId ? "pointer" : "not-allowed" }}>📂 CSV Dosyası Yükle</span>
+                        <input type="file" accept=".csv" onChange={handleCSV} disabled={!csvCardId} style={{ display: "none" }} />
+                      </label>
+                    </>
+                  )}
+                  {Object.keys(allCsvData).length > 0 && <div style={{ marginTop: 12, fontSize: 11, color: X.td }}>Yüklenen: {Object.keys(allCsvData).map(cid => cards.find(c2 => c2.id === cid)?.name || "?").join(", ")}</div>}
+                </Card>
+                {csvTotal > 0 && (
+                  <>
+                    {(() => {
+                      const allStats = Object.entries(allCsvData).map(([, cd]) => cd.matchStats).filter(Boolean);
+                      const totalMatched = allStats.reduce((s, st) => s + (st.matched || 0), 0);
+                      const totalUnmatched = allStats.reduce((s, st) => s + (st.unmatched || 0), 0);
+                      const allUnmatchedEntries = allStats.flatMap(st => st.unmatchedEntries || []);
+                      if (allStats.length === 0) return null;
+                      return (
+                        <Card s={{ marginBottom: 12, border: `1px solid ${totalUnmatched > 0 ? X.w : X.g}40` }}>
+                          <div style={{ color: X.tm, fontSize: 12, fontWeight: 700, marginBottom: 8 }}>EŞLEŞME SONUÇLARI</div>
+                          <div style={{ display: "flex", gap: 10, marginBottom: 8 }}>
+                            <div style={{ flex: 1, background: X.gd, borderRadius: 8, padding: "8px 10px", textAlign: "center" }}><div style={{ color: X.g, fontSize: 18, fontWeight: 800, fontFamily: fm }}>{totalMatched}</div><div style={{ color: X.g, fontSize: 10 }}>Eşleşen</div></div>
+                            <div style={{ flex: 1, background: totalUnmatched > 0 ? X.wd : X.gd, borderRadius: 8, padding: "8px 10px", textAlign: "center" }}><div style={{ color: totalUnmatched > 0 ? X.w : X.g, fontSize: 18, fontWeight: 800, fontFamily: fm }}>{totalUnmatched}</div><div style={{ color: totalUnmatched > 0 ? X.w : X.g, fontSize: 10 }}>Kayıtsız</div></div>
+                          </div>
+                          {Object.entries(allCsvData).map(([, cd]) => (cd.transactions || []).filter(t => t.matchedEntryId).map(t => (<div key={t.id} style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", borderBottom: "1px solid rgba(0,0,0,0.03)", fontSize: 11 }}><div style={{ flex: 1, minWidth: 0 }}><span style={{ color: X.g }}>✓ </span><span style={{ color: X.t }}>{t.matchedNote}</span><span style={{ color: X.td }}> ↔ {t.desc.slice(0, 25)}</span></div><span style={{ color: X.g, fontFamily: fm, fontWeight: 700, flexShrink: 0 }}>{C(t.amount)}</span></div>)))}
+                          {Object.entries(allCsvData).map(([, cd]) => (cd.transactions || []).filter(t => !t.matchedEntryId).map(t => (<div key={t.id} style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", borderBottom: "1px solid rgba(0,0,0,0.03)", fontSize: 11 }}><div style={{ flex: 1, minWidth: 0 }}><span style={{ color: X.w }}>? </span><span style={{ color: X.tm }}>{t.desc.slice(0, 30)}</span><span style={{ color: X.td }}> · {t.date}</span></div><span style={{ color: X.w, fontFamily: fm, fontWeight: 700, flexShrink: 0 }}>{C(t.amount)}</span></div>)))}
+                          {allUnmatchedEntries.length > 0 && (<div style={{ marginTop: 8, borderTop: "1px solid rgba(0,0,0,0.06)", paddingTop: 6 }}><div style={{ color: X.b, fontSize: 10, fontWeight: 700, marginBottom: 4 }}>UYGULAMADA VAR, EKSTRE'DE YOK</div>{allUnmatchedEntries.map(e2 => (<div key={e2.id} style={{ display: "flex", justifyContent: "space-between", padding: "3px 0", fontSize: 11 }}><span style={{ color: X.b }}>↳ {e2.note || "?"} · {e2.date}</span><span style={{ color: X.b, fontFamily: fm }}>{C(e2.amount)}</span></div>))}</div>)}
+                        </Card>
+                      );
+                    })()}
+                    <Card s={{ marginBottom: 12 }}><div style={{ color: X.g, fontSize: 12, fontWeight: 700, marginBottom: 4 }}>TOPLAM</div><div style={{ color: X.t, fontSize: 28, fontWeight: 800, fontFamily: fm }}>{C(csvTotal)}</div></Card>
+                    <Card s={{ marginBottom: 12 }}>
+                      <div style={{ color: X.tm, fontSize: 12, fontWeight: 700, marginBottom: 10 }}>KATEGORİ DAĞILIMI</div>
+                      {ves.map(ve => { const amt = csvCats[ve.id] || 0; if (amt === 0) return null; const pct2 = csvTotal > 0 ? (amt / csvTotal) * 100 : 0; return (<div key={ve.id} style={{ marginBottom: 10 }}><div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}><span style={{ color: X.t, fontSize: 12 }}>{ve.icon || "📋"} {ve.name}</span><span style={{ color: X.t, fontSize: 12, fontWeight: 700, fontFamily: fm }}>{C(amt)} <span style={{ color: X.td, fontSize: 10 }}>%{Math.round(pct2)}</span></span></div><div style={{ height: 5, borderRadius: 2, background: X.border }}><div style={{ height: "100%", borderRadius: 2, background: X.b, width: `${pct2}%` }} /></div></div>); })}
+                      {csvCats._uncategorized > 0 && (<div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${X.border}` }}><div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: X.td, fontSize: 12 }}>Kategorisiz</span><span style={{ color: X.td, fontSize: 12, fontWeight: 700, fontFamily: fm }}>{C(csvCats._uncategorized)}</span></div></div>)}
+                    </Card>
+                    {Object.entries(allCsvData).map(([cardId, cardData]) => { const cardName = cards.find(c2 => c2.id === cardId)?.name || "?"; const txs = cardData.transactions || []; if (txs.length === 0) return null; const sorted = [...txs].sort((a, b) => { if (!a.categoryId && b.categoryId) return -1; if (a.categoryId && !b.categoryId) return 1; return b.amount - a.amount; }); return (<Card key={cardId} s={{ marginBottom: 12 }}><div style={{ color: X.tm, fontSize: 12, fontWeight: 700, marginBottom: 10, paddingBottom: 8, borderBottom: `1px solid ${X.border}` }}>💳 {cardName} — {txs.length} işlem</div>{sorted.map(tx => (<div key={tx.id} style={{ padding: "8px 0", borderBottom: `1px solid ${X.border}` }}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}><span style={{ color: X.t, fontSize: 12, fontWeight: 600, flex: 1, marginRight: 8, wordBreak: "break-word" }}>{tx.desc || "—"}</span><span style={{ color: X.t, fontSize: 13, fontWeight: 700, fontFamily: fm, flexShrink: 0 }}>{C(tx.amount)}</span></div>{tx.date && <div style={{ color: X.td, fontSize: 10, marginBottom: 4 }}>{tx.date}</div>}<select value={tx.categoryId || ""} onChange={e => updateCsvTransaction(cardId, tx.id, e.target.value || null)} style={{ width: "100%", background: tx.categoryId ? X.bd : "rgba(255,255,255,0.5)", border: `1px solid ${tx.categoryId ? X.b : X.border}`, borderRadius: 6, padding: "6px 10px", color: tx.categoryId ? X.b : X.tm, fontSize: 11, fontFamily: ff, outline: "none", boxSizing: "border-box" }}><option value="">— Kategori Seçin —</option>{ves.map(ve => <option key={ve.id} value={ve.id}>{(ve.icon || "📋") + " " + ve.name}</option>)}</select></div>))}</Card>); })}
+                    {Object.keys(data.merchantMap || {}).length > 0 && (<Card s={{ marginBottom: 12, border: `1px solid ${X.g}30` }}><div style={{ color: X.g, fontSize: 12, fontWeight: 700, marginBottom: 4 }}>🧠 Öğrenilen Eşleşmeler</div><div style={{ color: X.tm, fontSize: 11 }}>{Object.keys(data.merchantMap).length} merchant öğrenildi.</div></Card>)}
+                  </>
+                )}
+              </>
+            )}
+
+            {/* ═══ KATEGORİK HARCAMA ANALİZİ ═══ */}
+            {csvSub === "category" && (
+              <>
+                <Card s={{ marginBottom: 12 }}>
+                  <div style={{ color: X.tm, fontSize: 12, fontWeight: 700, marginBottom: 8 }}>📊 KATEGORİK HARCAMA ÖZETİ</div>
+                  <div style={{ display: "flex", gap: 10 }}>
+                    <div style={{ flex: 1, background: X.bd, borderRadius: 10, padding: "10px", textAlign: "center" }}><div style={{ color: X.b, fontSize: 10, fontWeight: 700 }}>EKSTRE</div><div style={{ color: X.b, fontSize: 18, fontWeight: 800, fontFamily: fm }}>{C(csvTotal)}</div></div>
+                    <div style={{ flex: 1, background: X.od, borderRadius: 10, padding: "10px", textAlign: "center" }}><div style={{ color: X.o, fontSize: 10, fontWeight: 700 }}>FİŞLER</div><div style={{ color: X.o, fontSize: 18, fontWeight: 800, fontFamily: fm }}>{C(receiptAnalysis?.grandTotal || 0)}</div><div style={{ color: X.td, fontSize: 9 }}>{receipts.length} fiş</div></div>
+                  </div>
+                </Card>
+
+                {receiptAnalysis ? (
+                  <>
+                    <Card s={{ marginBottom: 12 }}>
+                      <div style={{ color: X.tm, fontSize: 12, fontWeight: 700, marginBottom: 10 }}>🛒 MARKET ALT KATEGORİ DAĞILIMI</div>
+                      {receiptAnalysis.catBreakdown.map(cat => (<div key={cat.cat} style={{ marginBottom: 8 }}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 2 }}><span style={{ color: X.t, fontSize: 12, fontWeight: 600 }}>{cat.icon} {cat.cat}</span><span style={{ color: X.t, fontSize: 12, fontWeight: 700, fontFamily: fm }}>{C(cat.total)} <span style={{ color: X.td, fontSize: 10 }}>%{cat.pct}</span></span></div><div style={{ height: 5, borderRadius: 3, background: "rgba(0,0,0,0.06)", overflow: "hidden" }}><div style={{ height: "100%", borderRadius: 3, background: X.o, width: `${cat.pct}%`, opacity: 0.7 }} /></div></div>))}
+                    </Card>
+                    {receiptAnalysis.repeating.length > 0 && (<Card s={{ marginBottom: 12 }}><div style={{ color: X.tm, fontSize: 12, fontWeight: 700, marginBottom: 8 }}>🔄 TEKRAR EDEN ÜRÜNLER</div>{receiptAnalysis.repeating.slice(0, 8).map((it, i) => (<div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px solid rgba(0,0,0,0.04)" }}><div style={{ flex: 1 }}><div style={{ color: X.t, fontSize: 12, fontWeight: 600 }}>{it.name}</div><div style={{ color: X.td, fontSize: 10 }}>{it.count} alışverişte {it.totalQty} adet{it.brand ? ` · ${it.brand}` : ""}</div></div><span style={{ color: X.w, fontSize: 12, fontWeight: 700, fontFamily: fm }}>{C(it.totalSpent)}</span></div>))}</Card>)}
+                    {receiptAnalysis.topBrands.length > 0 && (<Card s={{ marginBottom: 12 }}><div style={{ color: X.tm, fontSize: 12, fontWeight: 700, marginBottom: 8 }}>🏷️ MARKA TERCİHLERİ</div>{receiptAnalysis.topBrands.slice(0, 8).map((b, i) => (<div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px solid rgba(0,0,0,0.04)" }}><div><div style={{ color: X.t, fontSize: 12, fontWeight: 600 }}>{b.brand}</div><div style={{ color: X.td, fontSize: 10 }}>{b.category} · {b.count} kez</div></div><span style={{ color: X.p, fontSize: 12, fontWeight: 700, fontFamily: fm }}>{C(b.totalSpent)}</span></div>))}</Card>)}
+                    <Card s={{ marginBottom: 12, borderLeft: `3px solid ${X.o}` }}>
+                      <div style={{ color: X.tm, fontSize: 12, fontWeight: 700, marginBottom: 10 }}>💡 HARCAMA ALIŞKANLIKLARI & TAVSİYELER</div>
+                      {(() => {
+                        const tips = [];
+                        const { catBreakdown, repeating, topBrands, grandTotal } = receiptAnalysis;
+                        if (catBreakdown.length > 0 && catBreakdown[0].pct > 35) tips.push({ icon: "📊", text: `Market harcamanızın %${catBreakdown[0].pct}'i "${catBreakdown[0].cat}" kategorisinde. Bu alanda bilinçli alışveriş yaparak tasarruf edebilirsiniz.`, color: X.w });
+                        if (repeating.length >= 3) tips.push({ icon: "🔄", text: `"${repeating[0].name}" en sık aldığınız ürün (${repeating[0].count} kez, ${C(repeating[0].totalSpent)}). Toplu alım ile tasarruf yapabilirsiniz.`, color: X.b });
+                        if (topBrands.length > 0) { const brandTotal = topBrands.reduce((s, b) => s + b.totalSpent, 0); const brandPct = grandTotal > 0 ? Math.round((brandTotal / grandTotal) * 100) : 0; if (brandPct > 50) tips.push({ icon: "🏷️", text: `Markalı ürünler %${brandPct}. Market markası ile %15-25 tasarruf mümkün.`, color: X.g }); }
+                        const snackCat = catBreakdown.find(c2 => c2.cat === "atıştırmalık");
+                        if (snackCat && snackCat.pct > 10) tips.push({ icon: "🍫", text: `Atıştırmalık harcaması ${C(snackCat.total)} (%${snackCat.pct}). İsteğe bağlı kalem — kısıtlama ile doğrudan tasarruf.`, color: X.w });
+                        if (c.effectiveBudget > 0) { const marketPct = Math.round((grandTotal / c.effectiveBudget) * 100); tips.push({ icon: "💰", text: `Market harcaması (${C(grandTotal)}) bütçenizin %${marketPct}'i.${marketPct > 15 ? " Küçük tasarruflar toplamda büyük fark yaratır." : ""}`, color: X.b }); }
+                        if (tips.length === 0) tips.push({ icon: "ℹ️", text: "Daha fazla fiş yükledikçe detaylı analiz ve tasarruf önerileri burada oluşacak.", color: X.td });
+                        return tips.map((tip, i) => (<div key={i} style={{ color: tip.color, fontSize: 12, fontWeight: 600, lineHeight: 1.6, padding: "5px 0", borderBottom: i < tips.length - 1 ? "1px solid rgba(0,0,0,0.04)" : "none" }}>{tip.icon} {tip.text}</div>));
+                      })()}
+                    </Card>
+                  </>
+                ) : (
+                  <Card s={{ textAlign: "center", padding: "30px 0" }}>
+                    <div style={{ fontSize: 36, marginBottom: 8, opacity: 0.5 }}>📷</div>
+                    <div style={{ color: X.td, fontSize: 13 }}>Henüz market fişi yüklenmedi</div>
+                    <div style={{ color: X.td, fontSize: 11, marginTop: 4 }}>Güncel Durum → 📷 Market Fişi'nden fiş yükleyin</div>
+                  </Card>
+                )}
+
                 {(() => {
-                  const allStats = Object.entries(allCsvData).map(([cid, cd]) => cd.matchStats).filter(Boolean);
-                  const totalMatched = allStats.reduce((s, st) => s + (st.matched || 0), 0);
-                  const totalUnmatched = allStats.reduce((s, st) => s + (st.unmatched || 0), 0);
-                  const allUnmatchedEntries = allStats.flatMap(st => st.unmatchedEntries || []);
-                  if (allStats.length === 0) return null;
+                  const cats = categorizeMonthSpending(data, mk);
+                  const totalCat = Object.entries(cats).filter(([k]) => k !== "_uncategorized").reduce((s, [, v]) => s + v, 0);
+                  if (totalCat <= 0) return null;
                   return (
-                    <Card s={{ marginBottom: 12, border: `1px solid ${totalUnmatched > 0 ? X.w : X.g}40` }}>
-                      <div style={{ color: X.tm, fontSize: 12, fontWeight: 700, marginBottom: 8 }}>EŞLEŞME SONUÇLARI</div>
-                      <div style={{ display: "flex", gap: 10, marginBottom: 8 }}>
-                        <div style={{ flex: 1, background: X.gd, borderRadius: 8, padding: "8px 10px", textAlign: "center" }}>
-                          <div style={{ color: X.g, fontSize: 18, fontWeight: 800, fontFamily: fm }}>{totalMatched}</div>
-                          <div style={{ color: X.g, fontSize: 10 }}>Eşleşen</div>
-                        </div>
-                        <div style={{ flex: 1, background: totalUnmatched > 0 ? X.wd : X.gd, borderRadius: 8, padding: "8px 10px", textAlign: "center" }}>
-                          <div style={{ color: totalUnmatched > 0 ? X.w : X.g, fontSize: 18, fontWeight: 800, fontFamily: fm }}>{totalUnmatched}</div>
-                          <div style={{ color: totalUnmatched > 0 ? X.w : X.g, fontSize: 10 }}>Ekstre'de kayıtsız</div>
-                        </div>
-                      </div>
-                      {/* Eşleşen işlemler */}
-                      {Object.entries(allCsvData).map(([cid, cd]) => (cd.transactions || []).filter(t => t.matchedEntryId).map(t => (
-                        <div key={t.id} style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", borderBottom: "1px solid rgba(0,0,0,0.03)", fontSize: 11 }}>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <span style={{ color: X.g }}>✓ </span>
-                            <span style={{ color: X.t }}>{t.matchedNote}</span>
-                            <span style={{ color: X.td }}> ↔ {t.desc.slice(0, 25)}</span>
-                          </div>
-                          <span style={{ color: X.g, fontFamily: fm, fontWeight: 700, flexShrink: 0 }}>{C(t.amount)}</span>
-                        </div>
-                      )))}
-                      {/* Ekstre'de olup kayıtsız işlemler */}
-                      {Object.entries(allCsvData).map(([cid, cd]) => (cd.transactions || []).filter(t => !t.matchedEntryId).map(t => (
-                        <div key={t.id} style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", borderBottom: "1px solid rgba(0,0,0,0.03)", fontSize: 11 }}>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <span style={{ color: X.w }}>? </span>
-                            <span style={{ color: X.tm }}>{t.desc.slice(0, 30)}</span>
-                            <span style={{ color: X.td }}> · {t.date}</span>
-                          </div>
-                          <span style={{ color: X.w, fontFamily: fm, fontWeight: 700, flexShrink: 0 }}>{C(t.amount)}</span>
-                        </div>
-                      )))}
-                      {/* Uygulamada olup ekstre'de bulunmayan */}
-                      {allUnmatchedEntries.length > 0 && (
-                        <div style={{ marginTop: 8, borderTop: "1px solid rgba(0,0,0,0.06)", paddingTop: 6 }}>
-                          <div style={{ color: X.b, fontSize: 10, fontWeight: 700, marginBottom: 4 }}>UYGULAMADA VAR, EKSTRE'DE YOK</div>
-                          {allUnmatchedEntries.map(e2 => (
-                            <div key={e2.id} style={{ display: "flex", justifyContent: "space-between", padding: "3px 0", fontSize: 11 }}>
-                              <span style={{ color: X.b }}>↳ {e2.note || "?"} · {e2.date}</span>
-                              <span style={{ color: X.b, fontFamily: fm }}>{C(e2.amount)}</span>
-                            </div>
-                          ))}
-                          <div style={{ color: X.td, fontSize: 9, marginTop: 4 }}>Henüz ekstreye yansımamış olabilir.</div>
-                        </div>
-                      )}
+                    <Card s={{ marginBottom: 12 }}>
+                      <div style={{ color: X.tm, fontSize: 12, fontWeight: 700, marginBottom: 10 }}>💳 UYGULAMA KAYITLI KATEGORİLER</div>
+                      {ves.map(ve => { const amt = cats[ve.id] || 0; if (amt === 0) return null; const pct2 = totalCat > 0 ? (amt / totalCat) * 100 : 0; return (<div key={ve.id} style={{ marginBottom: 8 }}><div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}><span style={{ color: X.t, fontSize: 12 }}>{ve.icon || "📋"} {ve.name}</span><span style={{ color: X.t, fontSize: 12, fontWeight: 700, fontFamily: fm }}>{C(amt)} <span style={{ color: X.td, fontSize: 10 }}>%{Math.round(pct2)}</span></span></div><div style={{ height: 4, borderRadius: 2, background: X.border }}><div style={{ height: "100%", borderRadius: 2, background: X.b, width: `${Math.min(pct2, 100)}%` }} /></div></div>); })}
                     </Card>
                   );
                 })()}
-                <Card s={{ marginBottom: 12 }}>
-                  <div style={{ color: X.g, fontSize: 13, fontWeight: 700, marginBottom: 4 }}>TOPLAM (TÜM KARTLAR)</div>
-                  <div style={{ color: X.t, fontSize: 28, fontWeight: 800, fontFamily: fm }}>{C(csvTotal)}</div>
-                </Card>
-
-                <Card s={{ marginBottom: 12 }}>
-                  <div style={{ color: X.tm, fontSize: 13, fontWeight: 700, marginBottom: 10 }}>KATEGORİ DAĞILIMI</div>
-                  {ves.map(ve => {
-                    const amt = csvCats[ve.id] || 0;
-                    if (amt === 0) return null;
-                    const pct = csvTotal > 0 ? (amt / csvTotal) * 100 : 0;
-                    return (
-                      <div key={ve.id} style={{ marginBottom: 10 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                          <span style={{ color: X.t, fontSize: 13 }}>{ve.icon || "📋"} {ve.name}</span>
-                          <span style={{ color: X.t, fontSize: 13, fontWeight: 700, fontFamily: fm }}>{C(amt)}</span>
-                        </div>
-                        <div style={{ height: 5, borderRadius: 2, background: X.border }}>
-                          <div style={{ height: "100%", borderRadius: 2, background: X.b, width: `${pct}%` }} />
-                        </div>
-                      </div>
-                    );
-                  })}
-                  {csvCats._uncategorized > 0 && (
-                    <div style={{ marginBottom: 10, marginTop: 10, paddingTop: 10, borderTop: `1px solid ${X.border}` }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                        <span style={{ color: X.td, fontSize: 13 }}>Kategorisiz</span>
-                        <span style={{ color: X.td, fontSize: 13, fontWeight: 700, fontFamily: fm }}>{C(csvCats._uncategorized)}</span>
-                      </div>
-                      <div style={{ color: X.td, fontSize: 10 }}>Aşağıdaki listeden kategori atayabilirsiniz</div>
-                    </div>
-                  )}
-                </Card>
-
-                {Object.entries(allCsvData).map(([cardId, cardData]) => {
-                  const cardName = cards.find(c => c.id === cardId)?.name || "?";
-                  const txs = cardData.transactions || [];
-                  if (txs.length === 0) return null;
-                  // Kategorisiz olanları üste al
-                  const sorted = [...txs].sort((a, b) => {
-                    if (!a.categoryId && b.categoryId) return -1;
-                    if (a.categoryId && !b.categoryId) return 1;
-                    return b.amount - a.amount;
-                  });
-                  return (
-                    <Card key={cardId} s={{ marginBottom: 12 }}>
-                      <div style={{ color: X.tm, fontSize: 12, fontWeight: 700, marginBottom: 10, paddingBottom: 8, borderBottom: `1px solid ${X.border}` }}>
-                        💳 {cardName} — {txs.length} işlem
-                      </div>
-                      {sorted.map(tx => (
-                        <div key={tx.id} style={{ padding: "8px 0", borderBottom: `1px solid ${X.border}` }}>
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
-                            <span style={{ color: X.t, fontSize: 12, fontWeight: 600, flex: 1, marginRight: 8, wordBreak: "break-word" }}>{tx.desc || "—"}</span>
-                            <span style={{ color: X.t, fontSize: 13, fontWeight: 700, fontFamily: fm, flexShrink: 0 }}>{C(tx.amount)}</span>
-                          </div>
-                          {tx.date && <div style={{ color: X.td, fontSize: 10, marginBottom: 4 }}>{tx.date}</div>}
-                          <select value={tx.categoryId || ""} onChange={e => updateCsvTransaction(cardId, tx.id, e.target.value || null)} style={{ width: "100%", background: tx.categoryId ? X.bd : "rgba(255,255,255,0.5)", border: `1px solid ${tx.categoryId ? X.b : X.border}`, borderRadius: 6, padding: "6px 10px", color: tx.categoryId ? X.b : X.tm, fontSize: 11, fontFamily: ff, outline: "none", boxSizing: "border-box" }}>
-                            <option value="">— Kategorisiz —</option>
-                            {ves.map(ve => <option key={ve.id} value={ve.id}>{(ve.icon || "📋")} {ve.name}</option>)}
-                          </select>
-                        </div>
-                      ))}
-                    </Card>
-                  );
-                })}
-
-                {Object.keys(data.merchantMap || {}).length > 0 && (
-                  <Card s={{ background: X.gd, border: `1px solid ${X.g}` }}>
-                    <div style={{ color: X.g, fontSize: 12, fontWeight: 700, marginBottom: 4 }}>🧠 Öğrenilen Eşleşmeler</div>
-                    <div style={{ color: X.tm, fontSize: 11 }}>
-                      {Object.keys(data.merchantMap).length} merchant öğrenildi. Bir sonraki ekstrede bunlar otomatik kategorize olacak.
-                    </div>
-                  </Card>
-                )}
               </>
             )}
           </>
         );
       })()}
-
       {view === "variable" && (() => {
         const cats = categorizeMonthSpending(data, mk);
         const ves = data.settings.variableExpenses || [];
