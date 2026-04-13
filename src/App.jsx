@@ -4535,7 +4535,7 @@ function LoginScreen({ pendingInvite, setPendingInvite }) {
   };
 
   return (
-    <div style={{ background: _theme.gradient, minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: ff, padding: 16 }}>
+    <div style={{ background: THEMES[_tid].gradient, minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: ff, padding: 16 }}>
       <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
       <div style={{ ...glassSolid, borderRadius: 20, width: "100%", maxWidth: 380, padding: 28, boxShadow: neu }}>
         <div style={{ textAlign: "center", marginBottom: 24 }}>
