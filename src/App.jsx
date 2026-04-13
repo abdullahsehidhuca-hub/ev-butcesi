@@ -33,7 +33,7 @@ const CARD_LOAD_TOTAL_PCT = 0.15; // ay toplamı %15
 const CARD_LOAD_MIN = 40000; // kart yükleme kapasitesi bu tutarın altına düşmemeli
 const CARD_LOAD_MIN_TOLERANCE = 0.05; // %5 tolerans
 
-const DD = { settings: { monthlyBudget: 450000, fixedExpenses: [], variableExpenses: [], cards: [], emergencyFundTarget: null }, months: {}, installmentPlans: [], debts: [], merchantMap: {}, goldRates: {}, usdRates: {}, eurRates: {}, liveRates: { USD: null, EUR: null, XAU: null, fetchedAt: null }, savings: { TRY: [], USD: [], EUR: [], XAU: [] }, lastClosedMonth: null, lastBackup: null };
+const DD = { settings: { monthlyBudget: 450000, fixedExpenses: [], variableExpenses: [], cards: [], emergencyFundTarget: null, billBudgets: {} }, months: {}, installmentPlans: [], debts: [], merchantMap: {}, goldRates: {}, usdRates: {}, eurRates: {}, liveRates: { USD: null, EUR: null, XAU: null, fetchedAt: null }, savings: { TRY: [], USD: [], EUR: [], XAU: [] }, lastClosedMonth: null, lastBackup: null };
 const DM = () => ({ budget: null, fixedPaid: {}, variableEntries: {}, ccSingle: [], cardLoaded: 0, debtPayments: {}, ccTransferred: {}, csvByCard: {}, finalSavings: null, receipts: [] });
 
 const STORAGE_KEY = "ev-butce-v11";
@@ -302,6 +302,67 @@ function matchCategory(text, variableExpenses) {
     }
   }
   return null;
+}
+
+// Fatura alt-kategori tespiti: banka açıklamasından fatura türünü belirle
+const BILL_TYPES = {
+  telefon: { icon: "📱", label: "Telefon", keywords: ["turkcell", "vodafone", "turk telekom", "tt mobil", "superonline fatura", "avea", "telsim", "pttcell"] },
+  elektrik: { icon: "⚡", label: "Elektrik", keywords: ["enerjisa", "ck bogazici", "gediz elek", "dicle elek", "toroslar elek", "aydem", "baskent elek", "meram elek", "yesilirmak", "sakarya elek", "clk akdeniz", "osmangazi elek", "firat elek", "aras elek", "coruh elek", "vangolu elek", "kayseri elek", "edsm", "edas"] },
+  su: { icon: "💧", label: "Su", keywords: ["iski", "aski", "muski", "suski", "kaski", "koski", "beski", "buski", "meski", "saski", "deski", "tiski", "cski", "su idaresi", "su faturas"] },
+  dogalgaz: { icon: "🔥", label: "Doğalgaz", keywords: ["igdas", "baskentgaz", "izmirgaz", "esgaz", "kayserigaz", "kargaz", "palgaz", "aksa dogalgaz", "enerya", "armadas", "cingaz", "gazdas", "agdas"] },
+  internet: { icon: "🌐", label: "İnternet", keywords: ["superonline", "turknet", "turk telekom internet", "kablonet", "millenicom", "vodafone net", "d-smart", "turksat"] },
+  sigorta: { icon: "🛡️", label: "Sigorta", keywords: ["sigorta", "axa", "allianz", "anadolu sigorta", "mapfre", "zurich", "hdi sigorta", "sompo", "unico", "dask"] },
+  egitim: { icon: "🎓", label: "Eğitim", keywords: ["okul", "universite", "egitim", "kurs", "dershane", "kolej"] }
+};
+
+function detectBillSubType(desc) {
+  if (!desc) return null;
+  const lower = desc.toLowerCase();
+  for (const [type, cfg] of Object.entries(BILL_TYPES)) {
+    for (const kw of cfg.keywords) {
+      if (lower.includes(kw)) return type;
+    }
+  }
+  // Genel fatura tespiti
+  if (lower.includes("fatura")) return "_diger_fatura";
+  return null;
+}
+
+// Son N ayın fatura verisi (CSV'den): { mk, groups: {type: total}, total }
+function getBillHistory(data, currentMk, numMonths = 5) {
+  const result = [];
+  let m = currentMk;
+  for (let i = 0; i < numMonths; i++) {
+    m = pmk(m);
+    const csvByCard = data.months[m]?.csvByCard || {};
+    const groups = {};
+    let total = 0;
+    Object.values(csvByCard).forEach(cardData => {
+      (cardData.transactions || []).forEach(t => {
+        const sub = t.billSubType || detectBillSubType(t.desc);
+        if (!sub) return;
+        groups[sub] = (groups[sub] || 0) + t.amount;
+        total += t.amount;
+      });
+    });
+    if (Object.keys(groups).length > 0) result.unshift({ mk: m, groups, total });
+  }
+  return result;
+}
+
+// Anomali: mevcut ay değeri son N ayın ortalamasının %25+ üzerindeyse
+function isBillAnomaly(current, histAmounts) {
+  if (histAmounts.length < 2 || current === 0) return false;
+  const avg = histAmounts.reduce((s, v) => s + v, 0) / histAmounts.length;
+  return avg > 0 && current > avg * 1.25;
+}
+
+// Mini trend bar (unicode blok karakterler): 5 değer → ▁▂▃▄▅▆▇█
+function sparkLine(vals) {
+  if (!vals || vals.length === 0) return "";
+  const bars = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"];
+  const max = Math.max(...vals, 1);
+  return vals.map(v => bars[Math.min(7, Math.floor((v / max) * 7))]).join("");
 }
 
 // Bir aydaki tüm harcamaları kategorilerine göre topla
@@ -2422,7 +2483,14 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
             categoryId = matchCategory(tx.desc, ves);
           }
 
-          return { ...tx, categoryId, matchedEntryId, matchedNote };
+          // 5. Fatura otomatik tespiti: kategori yoksa ama fatura ise "Faturalar" kategorisine ata
+          const billSub = detectBillSubType(tx.desc);
+          if (!categoryId && billSub) {
+            const faturaVe = ves.find(ve => ve.name && ve.name.toLowerCase().includes("fatura"));
+            if (faturaVe) categoryId = faturaVe.id;
+          }
+
+          return { ...tx, categoryId, matchedEntryId, matchedNote, billSubType: billSub };
         });
 
         // Eşleşmeyen uygulama kayıtları (CSV'de bulunmayan)
@@ -2474,6 +2542,52 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
     return merged;
   }, [allCsvData, data.settings.variableExpenses]);
   const csvTotal = Object.values(csvCats).reduce((s, v) => s + v, 0);
+
+  // Fatura alt-kategori dağılımı — gelişmiş: trend + tür bazlı bütçe + anomali
+  const billBreakdown = useMemo(() => {
+    const groups = {};
+    const ves = data.settings.variableExpenses || [];
+    const billBudgets = data.settings.billBudgets || {};
+    const faturaVe = ves.find(ve => ve.name && ve.name.toLowerCase().includes("fatura"));
+    Object.values(allCsvData).forEach(cardData => {
+      (cardData.transactions || []).forEach(t => {
+        const subType = t.billSubType || detectBillSubType(t.desc);
+        if (!subType) return;
+        if (t.categoryId && faturaVe && t.categoryId !== faturaVe.id) return;
+        if (!groups[subType]) groups[subType] = { total: 0, count: 0, items: [] };
+        groups[subType].total += t.amount;
+        groups[subType].count += 1;
+        groups[subType].items.push({ desc: t.desc, amount: t.amount, date: t.date });
+      });
+    });
+    const grandTotal = Object.values(groups).reduce((s, g) => s + g.total, 0);
+    const estimate = faturaVe?.estimate || 0;
+
+    // Tarihsel veri: son 5 ay
+    const history = getBillHistory(data, mk, 5);
+
+    // Her tür için: bütçe, ortalama, anomali, trend
+    const typeStats = {};
+    const allTypes = new Set([...Object.keys(groups), ...Object.keys(billBudgets)]);
+    allTypes.forEach(type => {
+      if (type === "_diger_fatura") return;
+      const budget = billBudgets[type] || 0;
+      const current = groups[type]?.total || 0;
+      const histAmounts = history.map(h => h.groups[type] || 0);
+      const histWithData = history.filter(h => h.groups[type]).map(h => h.groups[type]);
+      const avg = histWithData.length > 0 ? histWithData.reduce((s, v) => s + v, 0) / histWithData.length : 0;
+      const isAnomaly = isBillAnomaly(current, histWithData);
+      const spark = sparkLine([...histAmounts, current]);
+      typeStats[type] = { budget, current, avg, isAnomaly, spark, histAmounts, histWithData };
+    });
+
+    // Toplam bütçe: tür bazlı bütçelerin toplamı (varsa) veya faturaVe.estimate
+    const totalBudget = Object.keys(billBudgets).length > 0
+      ? Object.values(billBudgets).reduce((s, v) => s + v, 0)
+      : estimate;
+
+    return { groups, grandTotal, estimate, faturaVeId: faturaVe?.id, history, typeStats, billBudgets, totalBudget };
+  }, [allCsvData, data.settings.variableExpenses, data.settings.billBudgets, data.months, mk]);
 
   // Kategori güncelleme ve öğrenme
   const updateCsvTransaction = (cardId, txId, newCategoryId) => {
@@ -3076,6 +3190,10 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
                       {ves.map(ve => { const amt = csvCats[ve.id] || 0; if (amt === 0) return null; const pct2 = csvTotal > 0 ? (amt / csvTotal) * 100 : 0; return (<div key={ve.id} style={{ marginBottom: 10 }}><div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}><span style={{ color: X.t, fontSize: 12 }}>{ve.icon || "📋"} {ve.name}</span><span style={{ color: X.t, fontSize: 12, fontWeight: 700, fontFamily: fm }}>{C(amt)} <span style={{ color: X.td, fontSize: 10 }}>%{Math.round(pct2)}</span></span></div><div style={{ height: 5, borderRadius: 2, background: X.border }}><div style={{ height: "100%", borderRadius: 2, background: X.b, width: `${pct2}%` }} /></div></div>); })}
                       {csvCats._uncategorized > 0 && (<div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${X.border}` }}><div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: X.td, fontSize: 12 }}>Kategorisiz</span><span style={{ color: X.td, fontSize: 12, fontWeight: 700, fontFamily: fm }}>{C(csvCats._uncategorized)}</span></div></div>)}
                     </Card>
+                    {/* Fatura analizi — Banka Ekstresi sekmesinde */}
+                    {Object.keys(billBreakdown.groups).length > 0 && (
+                      <BillAnalysisCard billBreakdown={billBreakdown} compact={true} />
+                    )}
                     {Object.entries(allCsvData).map(([cardId, cardData]) => { const cardName = cards.find(c2 => c2.id === cardId)?.name || "?"; const txs = cardData.transactions || []; if (txs.length === 0) return null; const sorted = [...txs].sort((a, b) => { if (!a.categoryId && b.categoryId) return -1; if (a.categoryId && !b.categoryId) return 1; return b.amount - a.amount; }); return (<Card key={cardId} s={{ marginBottom: 12 }}><div style={{ color: X.tm, fontSize: 12, fontWeight: 700, marginBottom: 10, paddingBottom: 8, borderBottom: `1px solid ${X.border}` }}>💳 {cardName} — {txs.length} işlem</div>{sorted.map(tx => (<div key={tx.id} style={{ padding: "8px 0", borderBottom: `1px solid ${X.border}` }}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}><span style={{ color: X.t, fontSize: 12, fontWeight: 600, flex: 1, marginRight: 8, wordBreak: "break-word" }}>{tx.desc || "—"}</span><span style={{ color: X.t, fontSize: 13, fontWeight: 700, fontFamily: fm, flexShrink: 0 }}>{C(tx.amount)}</span></div>{tx.date && <div style={{ color: X.td, fontSize: 10, marginBottom: 4 }}>{tx.date}</div>}<select value={tx.categoryId || ""} onChange={e => updateCsvTransaction(cardId, tx.id, e.target.value || null)} style={{ width: "100%", background: tx.categoryId ? X.bd : "rgba(255,255,255,0.5)", border: `1px solid ${tx.categoryId ? X.b : X.border}`, borderRadius: 6, padding: "6px 10px", color: tx.categoryId ? X.b : X.tm, fontSize: 11, fontFamily: ff, outline: "none", boxSizing: "border-box" }}><option value="">— Kategori Seçin —</option>{ves.map(ve => <option key={ve.id} value={ve.id}>{(ve.icon || "📋") + " " + ve.name}</option>)}</select></div>))}</Card>); })}
                     {Object.keys(data.merchantMap || {}).length > 0 && (<Card s={{ marginBottom: 12, border: `1px solid ${X.g}30` }}><div style={{ color: X.g, fontSize: 12, fontWeight: 700, marginBottom: 4 }}>🧠 Öğrenilen Eşleşmeler</div><div style={{ color: X.tm, fontSize: 11 }}>{Object.keys(data.merchantMap).length} merchant öğrenildi.</div></Card>)}
                   </>
@@ -3093,6 +3211,11 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
                     <div style={{ flex: 1, background: X.od, borderRadius: 10, padding: "10px", textAlign: "center" }}><div style={{ color: X.o, fontSize: 10, fontWeight: 700 }}>FİŞLER</div><div style={{ color: X.o, fontSize: 18, fontWeight: 800, fontFamily: fm }}>{C(receiptAnalysis?.grandTotal || 0)}</div><div style={{ color: X.td, fontSize: 9 }}>{receipts.length} fiş</div></div>
                   </div>
                 </Card>
+
+                {/* FATURA ANALİZİ — Kategorik Analiz sekmesi */}
+                {Object.keys(billBreakdown.groups).length > 0 && (
+                  <BillAnalysisCard billBreakdown={billBreakdown} compact={false} />
+                )}
 
                 {receiptAnalysis ? (
                   <>
@@ -3833,6 +3956,172 @@ function FamilyManagement({ isAdmin, family, onBack }) {
   );
 }
 
+// ═══════════════════════════════════════════════════════════
+// GELİŞMİŞ FATURA ANALİZ KARTI
+// ═══════════════════════════════════════════════════════════
+function BillAnalysisCard({ billBreakdown, compact }) {
+  const [expanded, setExpanded] = useState(null);
+  const { groups, grandTotal, typeStats, billBudgets, history, totalBudget } = billBreakdown;
+
+  const hasBudgets = Object.keys(billBudgets).length > 0;
+  const hasHistory = history.length > 0;
+  const anomalies = Object.entries(typeStats).filter(([, s]) => s.isAnomaly);
+
+  // Toplam bütçe farkı rengi
+  const totalDiff = grandTotal - totalBudget;
+  const totalColor = totalBudget === 0 ? X.b : totalDiff > 0 ? X.r : X.g;
+  const totalBg = totalBudget === 0 ? X.bd : totalDiff > 0 ? X.rd : X.gd;
+
+  // Tüm türler: mevcut ay verisı olanlar + bütçe tanımlılar
+  const allTypes = [...new Set([
+    ...Object.keys(groups).filter(t => t !== "_diger_fatura"),
+    ...Object.keys(billBudgets)
+  ])].sort((a, b) => (groups[b]?.total || 0) - (groups[a]?.total || 0));
+
+  return (
+    <Card s={{ marginBottom: 12, border: `1px solid ${X.b}20` }}>
+      {/* Başlık + toplam */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+        <div>
+          <div style={{ color: X.tm, fontSize: 12, fontWeight: 700 }}>🧾 FATURA ANALİZİ</div>
+          {anomalies.length > 0 && (
+            <div style={{ color: X.r, fontSize: 10, fontWeight: 700, marginTop: 2 }}>
+              ⚠️ {anomalies.length} anormal fatura
+            </div>
+          )}
+        </div>
+        <div style={{ textAlign: "right" }}>
+          <div style={{ color: X.b, fontSize: 17, fontWeight: 800, fontFamily: fm }}>{C(grandTotal)}</div>
+          {totalBudget > 0 && (
+            <div style={{ fontSize: 10, color: totalColor, fontWeight: 700 }}>
+              {totalDiff > 0 ? "+" : ""}{C(totalDiff)} bütçeye göre
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Toplam bütçe vs gerçek */}
+      {totalBudget > 0 && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, padding: "8px 10px", borderRadius: 8, background: totalBg }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ height: 6, borderRadius: 3, background: "rgba(0,0,0,0.08)", overflow: "hidden" }}>
+              <div style={{ height: "100%", borderRadius: 3, background: totalColor, width: `${Math.min(100, (grandTotal / totalBudget) * 100)}%`, transition: "width 0.4s" }} />
+            </div>
+          </div>
+          <span style={{ color: totalColor, fontSize: 11, fontWeight: 700, flexShrink: 0 }}>
+            %{Math.round((grandTotal / totalBudget) * 100)}
+          </span>
+        </div>
+      )}
+
+      {/* Her tür satırı */}
+      {allTypes.map(type => {
+        const cfg = BILL_TYPES[type] || { icon: "📋", label: "Diğer Fatura" };
+        const grp = groups[type];
+        const stats = typeStats[type] || {};
+        const { budget, current, avg, isAnomaly, spark } = stats;
+        const hasBudget = budget > 0;
+        const pctOfBudget = hasBudget ? Math.min(150, (current / budget) * 100) : 0;
+        const barColor = !hasBudget ? X.b : current > budget ? X.r : current > budget * 0.85 ? X.w : X.g;
+        const isOpen = expanded === type;
+
+        return (
+          <div key={type} style={{ marginBottom: 10, borderBottom: `1px solid ${X.border}`, paddingBottom: 10 }}>
+            {/* Tür başlığı */}
+            <div
+              style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: hasBudget ? 5 : 0, cursor: (grp?.items?.length > 0 || hasHistory) ? "pointer" : "default" }}
+              onClick={() => setExpanded(isOpen ? null : type)}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1 }}>
+                <span style={{ fontSize: 16 }}>{cfg.icon}</span>
+                <div>
+                  <span style={{ color: X.t, fontSize: 12, fontWeight: 700 }}>{cfg.label}</span>
+                  {grp && <span style={{ color: X.td, fontSize: 10, marginLeft: 4 }}>({grp.count} adet)</span>}
+                  {isAnomaly && <span style={{ marginLeft: 6, background: `${X.r}20`, color: X.r, fontSize: 9, fontWeight: 800, padding: "1px 5px", borderRadius: 4 }}>⚠️ YÜKSEK</span>}
+                </div>
+              </div>
+              <div style={{ textAlign: "right", flexShrink: 0 }}>
+                <div style={{ color: isAnomaly ? X.r : X.t, fontSize: 13, fontWeight: 800, fontFamily: fm }}>{C(current)}</div>
+                {hasBudget && <div style={{ color: X.td, fontSize: 9 }}>/ {C(budget)}</div>}
+              </div>
+            </div>
+
+            {/* Bütçe progress bar */}
+            {hasBudget && (
+              <div style={{ height: 5, borderRadius: 2, background: X.border, overflow: "hidden", marginBottom: 4 }}>
+                <div style={{ height: "100%", borderRadius: 2, background: barColor, width: `${pctOfBudget}%`, transition: "width 0.4s" }} />
+              </div>
+            )}
+
+            {/* Trend satırı */}
+            {(hasHistory || avg > 0) && (
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                {spark && (
+                  <span style={{ color: X.td, fontSize: 13, letterSpacing: 1, fontFamily: "monospace" }}>{spark}</span>
+                )}
+                {avg > 0 && (
+                  <span style={{ color: X.td, fontSize: 9 }}>3ay ort: {C(Math.round(avg))}</span>
+                )}
+              </div>
+            )}
+
+            {/* Genişletilmiş detay */}
+            {isOpen && (
+              <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${X.border}20` }}>
+                {/* İşlem detayları */}
+                {grp?.items?.length > 0 && (
+                  <div style={{ marginBottom: 8 }}>
+                    {grp.items.sort((a, b) => b.amount - a.amount).map((item, idx) => (
+                      <div key={idx} style={{ display: "flex", justifyContent: "space-between", padding: "3px 0", fontSize: 10 }}>
+                        <span style={{ color: X.td, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginRight: 8 }}>{item.desc}</span>
+                        <span style={{ color: X.tm, fontWeight: 600, fontFamily: fm, flexShrink: 0 }}>{C(item.amount)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {/* Aylık tarihsel */}
+                {history.length > 0 && (
+                  <div>
+                    <div style={{ color: X.td, fontSize: 9, fontWeight: 700, marginBottom: 4 }}>SON {history.length} AY</div>
+                    {history.map(h => {
+                      const amt = h.groups[type] || 0;
+                      if (amt === 0) return null;
+                      return (
+                        <div key={h.mk} style={{ display: "flex", justifyContent: "space-between", padding: "2px 0", fontSize: 10 }}>
+                          <span style={{ color: X.td }}>{ml(h.mk)}</span>
+                          <span style={{ color: X.tm, fontFamily: fm, fontWeight: 600 }}>{C(amt)}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                {isAnomaly && avg > 0 && (
+                  <div style={{ marginTop: 6, padding: "5px 8px", borderRadius: 6, background: `${X.r}10`, color: X.r, fontSize: 10 }}>
+                    Bu ay geçmiş aylara göre %{Math.round((current / avg - 1) * 100)} yüksek (ort: {C(Math.round(avg))})
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      {/* Genel toplam */}
+      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4, paddingTop: 2 }}>
+        <span style={{ color: X.t, fontSize: 13, fontWeight: 700 }}>Toplam Fatura</span>
+        <span style={{ color: X.b, fontSize: 15, fontWeight: 800, fontFamily: fm }}>{C(grandTotal)}</span>
+      </div>
+
+      {/* Bütçe tanımlı değilse yönlendirme */}
+      {!hasBudgets && !compact && (
+        <div style={{ marginTop: 10, padding: "8px 10px", borderRadius: 8, background: X.bd, color: X.b, fontSize: 11 }}>
+          💡 Ayarlar → Fatura Bütçeleri'nden her fatura türü için hedef belirleyebilirsiniz.
+        </div>
+      )}
+    </Card>
+  );
+}
+
 function Settings({ data, setData, isAdmin, family }) {
   const [sec, setSec] = useState(null); const [form, setForm] = useState({}); const mk = cmk();
   const secs = [
@@ -3840,6 +4129,7 @@ function Settings({ data, setData, isAdmin, family }) {
     { id: "cards", l: "Kartlarım", i: "💳", d: `${(data.settings.cards || []).length} kart` },
     { id: "fixed", l: "Sabit Giderler", i: "🔒", d: `${data.settings.fixedExpenses.length} kalem` },
     { id: "variable", l: "Harcama Kategorileri", i: "🔄", d: `${data.settings.variableExpenses.length} kategori` },
+    { id: "billbudgets", l: "Fatura Bütçeleri", i: "🧾", d: (() => { const bb = data.settings.billBudgets || {}; const n = Object.values(bb).filter(v => v > 0).length; return n > 0 ? `${n} tür tanımlı` : "Henüz belirlenmedi"; })() },
     { id: "debts", l: "Borçlar", i: "📌", d: `${data.debts.filter(d => d.remainingMonths > 0).length} aktif` },
     { id: "emergency", l: "Acil Durum Fonu", i: "🛡️", d: data.settings.emergencyFundTarget ? C(data.settings.emergencyFundTarget) : "Henüz belirlenmedi" },
     { id: "rates", l: "Güncel Kurlar", i: "💱", d: data.liveRates?.USD ? `$${data.liveRates.USD.toFixed(2)}` : "Henüz girilmedi" },
@@ -3856,6 +4146,7 @@ function Settings({ data, setData, isAdmin, family }) {
   if (sec === "fixed") return <FixedSettings data={data} setData={setData} onBack={() => setSec(null)} />;
   if (sec === "cards") return <CardsSettings data={data} setData={setData} onBack={() => setSec(null)} />;
   if (sec === "variable") return <VariableSettings data={data} setData={setData} onBack={() => setSec(null)} />;
+  if (sec === "billbudgets") return <BillBudgetsSettings data={data} setData={setData} onBack={() => setSec(null)} />;
   if (sec === "debts") return <DebtSettings data={data} setData={setData} onBack={() => setSec(null)} />;
   if (sec === "emergency") return <EmergencyFundSettings data={data} setData={setData} onBack={() => setSec(null)} />;
   if (sec === "rates") return <RatesSettings data={data} setData={setData} onBack={() => setSec(null)} />;
@@ -3930,6 +4221,48 @@ function Settings({ data, setData, isAdmin, family }) {
   if (sec === "logout") return (<div style={{ padding: "20px 16px 100px" }}><BackBtn /><Card s={{ textAlign: "center", padding: 24 }}><div style={{ fontSize: 36, marginBottom: 8 }}>🚪</div><div style={{ color: X.t, fontSize: 14, marginBottom: 8 }}>Giriş: <strong>{family?.name || auth.currentUser?.email}</strong></div><div style={{ color: X.tm, fontSize: 12, marginBottom: 16 }}>Çıkış yaptığınızda verileriniz bulutta güvende kalır. İsminiz ve şifrenizle tekrar giriş yapabilirsiniz.</div><Btn c={X.r} onClick={() => signOut(auth)}>Çıkış Yap</Btn></Card></div>);
   return null;
 }
+function BillBudgetsSettings({ data, setData, onBack }) {
+  const [form, setForm] = useState(() => {
+    const bb = data.settings.billBudgets || {};
+    const init = {};
+    Object.keys(BILL_TYPES).forEach(t => { init[t] = bb[t] ? String(bb[t]) : ""; });
+    return init;
+  });
+  const save = () => {
+    const budgets = {};
+    Object.entries(form).forEach(([k, v]) => { const n = parseFloat(v); if (n > 0) budgets[k] = n; });
+    setData(d => ({ ...d, settings: { ...d.settings, billBudgets: budgets } }));
+    onBack();
+  };
+  const BackBtn = () => <button onClick={onBack} style={{ background: "none", border: "none", color: X.g, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff, padding: 0, marginBottom: 16 }}>← Geri</button>;
+  return (
+    <div style={{ padding: "20px 16px 100px" }}>
+      <BackBtn />
+      <h3 style={{ color: X.t, fontSize: 16, margin: "0 0 6px", fontFamily: ff }}>🧾 Fatura Bütçeleri</h3>
+      <p style={{ color: X.td, fontSize: 12, marginBottom: 20, lineHeight: 1.5 }}>
+        Her fatura türü için aylık beklenen tutarı girin. Bu değerler Analiz ekranında bütçe vs gerçek karşılaştırması ve anomali tespiti için kullanılır. Boş bırakılan türler hesaba katılmaz.
+      </p>
+      {Object.entries(BILL_TYPES).map(([type, cfg]) => (
+        <Inp
+          key={type}
+          label={`${cfg.icon} ${cfg.label} (₺/ay)`}
+          type="number"
+          value={form[type]}
+          onChange={v => setForm(f => ({ ...f, [type]: v }))}
+          suffix="₺"
+        />
+      ))}
+      <div style={{ marginTop: 4, padding: "10px 14px", borderRadius: 10, background: X.bd, marginBottom: 20 }}>
+        <div style={{ color: X.b, fontSize: 11, fontWeight: 700, marginBottom: 2 }}>Toplam Fatura Bütçesi</div>
+        <div style={{ color: X.t, fontSize: 18, fontWeight: 800, fontFamily: fm }}>
+          {C(Object.values(form).reduce((s, v) => s + (parseFloat(v) || 0), 0))}
+        </div>
+      </div>
+      <Btn onClick={save}>Kaydet</Btn>
+    </div>
+  );
+}
+
 function FixedSettings({ data, setData, onBack }) {
   const [editing, setEditing] = useState(null);
   const [n, sn] = useState(""); const [a, sa] = useState(""); const [m, sm] = useState("account"); const [d, sd] = useState(""); const [cardId, setCardId] = useState("");
