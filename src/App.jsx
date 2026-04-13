@@ -2080,13 +2080,13 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
           <InfoBtn onClick={() => setInfo("ccSingle")} />
           <div style={{ fontSize: 24, marginBottom: 4 }}>💳</div>
           <div style={{ color: X.b, fontSize: 13, fontWeight: 800 }}>Kredi Kartı Tek Çekim</div>
-          <TapAmt color={X.t} onTap={() => { setDetail({ title: "💳 CC Tek Çekim Dökümü", rows: (md.ccSingle || []).map(e => ({ label: e.note || "İşlem", value: e.amount, sign: "", sub: e.date, color: X.b })), total: c.ccSingleTotal, totalLabel: `Toplam (${(md.ccSingle || []).length} işlem)`, totalColor: X.b, note: c.ccSingleTotal === 0 ? "Bu ay henüz CC tek çekim harcaması yok." : "" }); }}><div style={{ color: X.t, fontSize: 18, fontWeight: 800, fontFamily: fm, marginTop: 2 }}>{C(c.ccSingleTotal)}</div></TapAmt>
+          <div style={{ color: X.t, fontSize: 18, fontWeight: 800, fontFamily: fm, marginTop: 2 }}>{C(c.ccSingleTotal)}</div>
         </div>
         <div onClick={() => setModal("ccInstall")} style={{ background: "rgba(124,58,237,0.20)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(124,58,237,0.26)", borderRadius: 16, padding: "14px 12px", cursor: "pointer", textAlign: "center", position: "relative", boxShadow: neu }}>
           <InfoBtn onClick={() => setInfo("ccInstall")} />
           <div style={{ fontSize: 24, marginBottom: 4 }}>📅</div>
           <div style={{ color: X.p, fontSize: 13, fontWeight: 800 }}>Kredi Kartı Taksitli</div>
-          <TapAmt color={X.t} onTap={() => { setDetail({ title: "📅 CC Taksitli Dökümü", rows: activePlans.map(p => ({ label: p.note || "Taksitli harcama açıklaması", value: p.monthlyPayment, sign: "", sub: `${ml(p.startMonth)}'dan · ${p.months} taksit`, color: X.p })), total: c.installmentTotal, totalLabel: "Bu ay toplam taksit", totalColor: X.p, note: activePlans.length === 0 ? "Aktif taksit planı yok." : `${activePlans.length} plan · genel toplam: ${C(totalCommitted)}` }); }}><div style={{ color: X.t, fontSize: 18, fontWeight: 800, fontFamily: fm, marginTop: 2 }}>Bu ay: {C(c.installmentTotal)}</div></TapAmt>
+          <div style={{ color: X.t, fontSize: 18, fontWeight: 800, fontFamily: fm, marginTop: 2 }}>{C(c.installmentTotal)}</div>
           {activePlans.length > 0 && (
             <div style={{ marginTop: 4 }}>
               {c.installmentTotal === 0 && nextMonthInst > 0 && (
@@ -2106,7 +2106,7 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
           <InfoBtn onClick={() => setInfo("debt")} />
           <div style={{ fontSize: 24, marginBottom: 4 }}>📌</div>
           <div style={{ color: X.w, fontSize: 13, fontWeight: 800 }}>Borç Ödemeleri</div>
-          <TapAmt color={X.t} onTap={() => { const activeDebts = data.debts.filter(d2 => d2.remainingMonths > 0); setDetail({ title: "📌 Borç Ödemeleri Dökümü", rows: activeDebts.map(d2 => { const sym = debtCurSymbol(d2.currency); const tlVal = debtTLValue(d2, data, mk); return { label: d2.name, value: tlVal, sign: "", sub: d2.currency !== "TRY" ? `${d2.monthlyPayment} ${sym}/ay · ${d2.remainingMonths} ay kaldı` : `${d2.remainingMonths} ay kaldı`, color: X.w }; }), total: c.debtTotal, totalLabel: "Aylık toplam borç ödemesi", totalColor: X.w }); }}><div style={{ color: X.t, fontSize: 18, fontWeight: 800, fontFamily: fm, marginTop: 2 }}>{C(c.debtTotal)}</div></TapAmt>
+          <div style={{ color: X.t, fontSize: 18, fontWeight: 800, fontFamily: fm, marginTop: 2 }}>{C(c.debtTotal)}</div>
         </div>
 
         {/* Receipt + Simulation half width */}
