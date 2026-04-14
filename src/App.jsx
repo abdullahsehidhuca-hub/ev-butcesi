@@ -28,10 +28,10 @@ const nmk = mk => { let [y, m] = mk.split("-").map(Number); m++; if (m > 12) { m
 const pmk = mk => { let [y, m] = mk.split("-").map(Number); m--; if (m < 1) { m = 12; y--; } return `${y}-${String(m).padStart(2, "0")}`; };
 const PM = [{ id: "account", label: "Hesaptan", icon: "🏦" }, { id: "cc", label: "Kredi Kartı", icon: "💳" }];
 
-const CARD_LOAD_PER_TX_PCT = 0.10; // tek seferde %10
-const CARD_LOAD_TOTAL_PCT = 0.15; // ay toplamı %15
-const CARD_LOAD_MIN = 40000; // kart yükleme kapasitesi bu tutarın altına düşmemeli
-const CARD_LOAD_MIN_TOLERANCE = 0.05; // %5 tolerans
+const CARD_USABLE_PCT = 0.75;      // serbest bütçenin en fazla %75'i karta aktarılabilir
+const CARD_SINGLE_MAX_PCT = 0.70;  // kullanılabilir tutarın tek seferde en fazla %70'i
+const EMERGENCY_BUFFER_PCT = 0.25; // serbest bütçenin %25'i acil tampon
+const MIN_TL_SAVINGS_PCT = 0.15;   // toplam birikimin en az %15'i TL olmalı
 
 const DD = { settings: { monthlyBudget: 450000, fixedExpenses: [], variableExpenses: [], cards: [], emergencyFundTarget: null, billTypes: [] }, months: {}, installmentPlans: [], debts: [], merchantMap: {}, goldRates: {}, usdRates: {}, eurRates: {}, liveRates: { USD: null, EUR: null, XAU: null, fetchedAt: null }, savings: { TRY: [], USD: [], EUR: [], XAU: [] }, lastClosedMonth: null, lastBackup: null };
 const DM = () => ({ budget: null, fixedPaid: {}, variableEntries: {}, ccSingle: [], cardLoaded: 0, debtPayments: {}, ccTransferred: {}, csvByCard: {}, finalSavings: null, receipts: [] });
@@ -406,33 +406,37 @@ function categorizeMonthSpending(data, mk) {
     return matchCategory(text, ves);
   };
 
+  // Sadece CC tek çekim harcamaları — taksitler SAYILMAZ (ayrı katman)
   (md.ccSingle || []).forEach(e => {
     const cat = tryMatch(e, (e.note || "") + " " + (e.merchantName || ""));
     if (cat && result[cat] !== undefined) result[cat] += e.amount;
     else result._uncategorized += e.amount;
   });
 
+  // Taksitlerin kategori bilgisi ayrı döndürülür (bilgi amaçlı, toplama dahil değil)
+  const instByCategory = {};
   data.installmentPlans.forEach(p => {
     let cur = p.startMonth;
     for (let i = 0; i < p.months; i++) {
       if (cur === mk) {
         const cat = tryMatch(p, (p.note || "") + " " + (p.merchantName || ""));
-        if (cat && result[cat] !== undefined) result[cat] += p.monthlyPayment;
-        else result._uncategorized += p.monthlyPayment;
+        if (cat && cat !== "_uncategorized") {
+          instByCategory[cat] = (instByCategory[cat] || 0) + p.monthlyPayment;
+        }
         break;
       }
       cur = nmk(cur);
     }
   });
 
-  return result;
+  return { categories: result, instByCategory };
 }
 
 // Geçmiş 3 ayın kategorize harcama ortalaması
 function getCategorizedAvg(data, mk) {
   const past = [pmk(mk), pmk(pmk(mk)), pmk(pmk(pmk(mk)))];
   const totals = past.map(pm => {
-    const cats = categorizeMonthSpending(data, pm);
+    const { categories: cats } = categorizeMonthSpending(data, pm);
     return Object.entries(cats).filter(([k]) => k !== "_uncategorized").reduce((s, [, v]) => s + v, 0);
   }).filter(t => t > 0);
   return totals.length > 0 ? Math.round(totals.reduce((a, b) => a + b, 0) / totals.length) : 0;
@@ -440,7 +444,7 @@ function getCategorizedAvg(data, mk) {
 
 // Bir aydaki kategorize edilmiş toplam (analiz amaçlı, totalSpent'a EKLENMEZ)
 function getCategorizedTotal(data, mk) {
-  const cats = categorizeMonthSpending(data, mk);
+  const { categories: cats } = categorizeMonthSpending(data, mk);
   return Object.entries(cats).filter(([k]) => k !== "_uncategorized").reduce((s, [, v]) => s + v, 0);
 }
 
@@ -461,71 +465,69 @@ function calcMonth(data, m, extraInst) {
   const fixedTotal = data.settings.fixedExpenses.reduce((s, e) => s + e.amount, 0);
   const fixedCC = data.settings.fixedExpenses.filter(e => e.paymentMethod === "cc").reduce((s, e) => s + e.amount, 0);
   const variableTotal = getCategorizedTotal(data, m);
-  const variableCC = Object.values(md.variableEntries || {}).filter(e => e.method === "cc").reduce((s, e) => s + (e.amount || 0), 0);
   const ccSingleTotal = (md.ccSingle || []).reduce((s, e) => s + e.amount, 0);
   let installmentTotal = data.installmentPlans.reduce((s, p) => { let c = p.startMonth; for (let i = 0; i < p.months; i++) { if (c === m) return s + p.monthlyPayment; c = nmk(c); } return s; }, 0);
   if (extraInst) { let c = extraInst.startMonth; for (let i = 0; i < extraInst.months; i++) { if (c === m) { installmentTotal += extraInst.monthlyPayment; break; } c = nmk(c); } }
   const debtTotal = data.debts.filter(d => d.remainingMonths > 0).reduce((s, d) => {
     if (d.currency === "TRY") return s + d.monthlyPayment;
-    if (d.currency === "USD") {
-      const rate = data.liveRates?.USD || data.usdRates?.[m] || 0;
-      return s + d.monthlyPayment * rate;
-    }
-    if (d.currency === "EUR") {
-      const rate = data.liveRates?.EUR || data.eurRates?.[m] || 0;
-      return s + d.monthlyPayment * rate;
-    }
-    if (d.currency === "XAU") {
-      const rate = data.liveRates?.XAU || data.goldRates?.[m] || data.goldRates?.[cmk()] || 0;
-      return s + d.monthlyPayment * rate;
-    }
+    if (d.currency === "USD") { const rate = data.liveRates?.USD || data.usdRates?.[m] || 0; return s + d.monthlyPayment * rate; }
+    if (d.currency === "EUR") { const rate = data.liveRates?.EUR || data.eurRates?.[m] || 0; return s + d.monthlyPayment * rate; }
+    if (d.currency === "XAU") { const rate = data.liveRates?.XAU || data.goldRates?.[m] || data.goldRates?.[cmk()] || 0; return s + d.monthlyPayment * rate; }
     return s;
   }, 0);
   const cardLoaded = md.cardLoaded || 0;
 
-  // Değişken zorunlu giderler: geçmiş 3 ay ortalaması varsa onu kullan, yoksa beklenen tutarları kullan
-  const hasActualSpending = ccSingleTotal > 0 || cardLoaded > 0 || Object.keys(md.variableEntries || {}).length > 0;
+  // === ZARF (ENVELOPE) MANTIĞI ===
+  // Değişken gider tahmini: 3 ay ortalaması veya beklenen tutarlar
   const expectedVariableBase = (data.settings.variableExpenses || []).reduce((s, ve) => s + (ve.expectedAmount || 0), 0);
-  // Son 3 ayın gerçek değişken harcama ortalaması (sadece CC tek çekim — kart yükleme ayrı sayılır)
   const past3 = [pmk(pmk(pmk(m))), pmk(pmk(m)), pmk(m)]
     .map(pm => { const pmd = data.months[pm] || DM(); return (pmd.ccSingle || []).reduce((s2, e) => s2 + e.amount, 0); })
     .filter(t => t > 0);
   const variableEstimate = past3.length >= 2 ? Math.round(past3.reduce((s, t) => s + t, 0) / past3.length) : expectedVariableBase;
-  // Kısmi harcama varsa: tahmin - gerçekleşen CC = kalan beklenen (cardLoaded ayrı sayılır)
-  const expectedVariable = hasActualSpending ? Math.max(0, variableEstimate - ccSingleTotal) : variableEstimate;
 
-  // Card load limits
-  const cardLoadMaxPerTx = Math.floor(baseBudget * CARD_LOAD_PER_TX_PCT);
-  const cardLoadPctMax = Math.floor(baseBudget * CARD_LOAD_TOTAL_PCT);
+  // Kategorili CC harcamaları zarftan düşer, kategorisiz CC ek harcama olarak bütçeden düşer
+  const { categories: cats } = categorizeMonthSpending(data, m);
+  const categorizedCC = Object.entries(cats).filter(([k]) => k !== "_uncategorized").reduce((s, [, v]) => s + v, 0);
+  const uncategorizedCC = cats._uncategorized || 0;
 
-  // Gerçek kart yükleme kapasitesi: bütçe - sabit - taksit - borç - değişken gider tahmini
-  const committedExpenses = fixedTotal + installmentTotal + debtTotal + variableEstimate;
-  const availableForCard = Math.max(0, effectiveBudget - committedExpenses);
-  const cardLoadMaxTotal = Math.min(cardLoadPctMax, availableForCard);
-  const cardLoadRemaining = Math.max(0, cardLoadMaxTotal - cardLoaded);
+  // Zarflarda kalan tahmin: toplam tahmin - zarflardan harcanan (kategorili CC)
+  const envelopeRemaining = Math.max(0, variableEstimate - categorizedCC);
+  // Zarf taşması: kategorili harcama tahminden fazlaysa fark serbest bütçeden düşer
+  const envelopeOverflow = Math.max(0, categorizedCC - variableEstimate);
 
-  // Total spent and remaining — cardLoaded fiili harcama olarak sayılır
-  const totalSpent = fixedTotal + ccSingleTotal + installmentTotal + debtTotal + cardLoaded + expectedVariable;
+  // Toplam harcama: sabit + taksit + borç + kategorili CC + kategorisiz CC + kart + kalan zarf tahmini + taşma
+  const totalSpent = fixedTotal + installmentTotal + debtTotal + categorizedCC + uncategorizedCC + cardLoaded + envelopeRemaining + envelopeOverflow;
   const remaining = effectiveBudget - totalSpent;
 
-  // Mevcut ay için: henüz yapılmamış değişken gider tahmini (bilgi amaçlı)
-  const pendingVariable = hasActualSpending ? Math.max(0, variableEstimate - ccSingleTotal) : 0;
+  // === GENEL HARCAMA KARTI — yeni model ===
+  const cardUsable = Math.max(0, Math.floor(remaining * CARD_USABLE_PCT));
+  const cardLoadMaxPerTx = Math.floor(cardUsable * CARD_SINGLE_MAX_PCT);
+  const cardLoadMaxTotal = cardUsable;
+  const cardLoadRemaining = Math.max(0, cardLoadMaxTotal - cardLoaded);
 
-  // Birikim hedefi: kalan bütçeden henüz yapılması beklenen CC harcamalarını çıkar
-  // cardLoaded zaten totalSpent'e dahil — az yüklemek birikimi artırır
+  // === ACİL TAMPON ===
+  const emergencyBuffer = Math.max(0, Math.floor(remaining * EMERGENCY_BUFFER_PCT));
+
+  // === BİRİKİM HEDEFİ ===
+  // Acil tampon harcanmazsa ay sonunda birikime eklenir
+  const savingsTarget = emergencyBuffer;
+
+  // CC transfer needed (sabit CC + CC tek çekim + taksitler)
+  const ccTransferNeeded = fixedCC + ccSingleTotal + installmentTotal;
+
+  // Geriye uyumluluk alanları
+  const hasActualSpending = ccSingleTotal > 0 || cardLoaded > 0;
+  const expectedVariable = envelopeRemaining + envelopeOverflow;
+  const pendingVariable = envelopeRemaining;
+  const availableForCard = cardUsable;
   const expectedCCSingle = hasActualSpending ? getCCSingleAvg(data, m) : 0;
-  const savingsTarget = Math.max(0, remaining - expectedCCSingle);
 
-  // CC transfer needed
-  const ccTransferNeeded = fixedCC + variableCC + ccSingleTotal + installmentTotal;
-
-  return { effectiveBudget, baseBudget, carryoverDeficit, fixedTotal, variableTotal, ccSingleTotal, installmentTotal, debtTotal, cardLoaded, cardLoadMaxPerTx, cardLoadMaxTotal, cardLoadRemaining, availableForCard, totalSpent, remaining, savingsTarget, expectedCCSingle, ccTransferNeeded, expectedVariable, pendingVariable, variableEstimate };
+  return { effectiveBudget, baseBudget, carryoverDeficit, fixedTotal, variableTotal, ccSingleTotal, installmentTotal, debtTotal, cardLoaded, cardLoadMaxPerTx, cardLoadMaxTotal, cardLoadRemaining, availableForCard, totalSpent, remaining, savingsTarget, expectedCCSingle, ccTransferNeeded, expectedVariable, pendingVariable, variableEstimate, categorizedCC, uncategorizedCC, envelopeRemaining, envelopeOverflow, emergencyBuffer, cardUsable };
 }
 function calcFlat(data, m, extraInst) {
   const md = data.months[m] || DM();
   const b = md.budget || data.settings.monthlyBudget;
   const ft = data.settings.fixedExpenses.reduce((s, e) => s + e.amount, 0);
-  const cc = (md.ccSingle || []).reduce((s, e) => s + e.amount, 0);
   let inst = data.installmentPlans.reduce((s, p) => { let c = p.startMonth; for (let i = 0; i < p.months; i++) { if (c === m) return s + p.monthlyPayment; c = nmk(c); } return s; }, 0);
   if (extraInst) { let c = extraInst.startMonth; for (let i = 0; i < extraInst.months; i++) { if (c === m) { inst += extraInst.monthlyPayment; break; } c = nmk(c); } }
   const dt = data.debts.filter(d => d.remainingMonths > 0).reduce((s, d) => {
@@ -536,15 +538,18 @@ function calcFlat(data, m, extraInst) {
     return s;
   }, 0);
   const cl = md.cardLoaded || 0;
-  // Değişken giderler: 3 ay ortalaması varsa onu kullan, yoksa beklenen tutarları kullan
-  const hasActualData = cc > 0 || cl > 0;
+  // Zarf mantığı: categorizedCC + uncategorizedCC + kalan tahmin
   const expectedVariableBase = (data.settings.variableExpenses || []).reduce((s, ve) => s + (ve.expectedAmount || 0), 0);
   const past3 = [pmk(pmk(pmk(m))), pmk(pmk(m)), pmk(m)]
     .map(pm => { const pmd = data.months[pm] || DM(); return (pmd.ccSingle || []).reduce((s2, e) => s2 + e.amount, 0); })
     .filter(t => t > 0);
   const variableEstimate = past3.length >= 2 ? Math.round(past3.reduce((s, t) => s + t, 0) / past3.length) : expectedVariableBase;
-  const expectedVariable = hasActualData ? Math.max(0, variableEstimate - cc) : variableEstimate;
-  const totalSpent = ft + cc + inst + dt + cl + expectedVariable;
+  const { categories: cats } = categorizeMonthSpending(data, m);
+  const categorizedCC = Object.entries(cats).filter(([k]) => k !== "_uncategorized").reduce((s, [, v]) => s + v, 0);
+  const uncategorizedCC = cats._uncategorized || 0;
+  const envelopeRemaining = Math.max(0, variableEstimate - categorizedCC);
+  const envelopeOverflow = Math.max(0, categorizedCC - variableEstimate);
+  const totalSpent = ft + inst + dt + cl + categorizedCC + uncategorizedCC + envelopeRemaining + envelopeOverflow;
   return { remaining: b - totalSpent, totalSpent };
 }
 
@@ -660,6 +665,18 @@ function generateICS(data) {
     );
   });
 
+  // Taksitler → kalan ay kadar tekrarlayan etkinlik (15'inde varsayılan)
+  data.installmentPlans.forEach(plan => {
+    let remaining = 0;
+    let cur = plan.startMonth;
+    for (let i = 0; i < plan.months; i++) { if (cur >= cmk()) remaining++; cur = nmk(cur); }
+    if (remaining <= 0) return;
+    const uid2 = `inst-${plan.id}@ev-butcesi`;
+    events.push(
+      `BEGIN:VEVENT\nDTSTART;VALUE=DATE:${icsDate(year, now.getMonth(), 15)}\nSUMMARY:📅 Taksit: ${plan.note || "Taksitli harcama"} ${C(plan.monthlyPayment)}\nDESCRIPTION:${plan.months} taksit - ${remaining} ay kaldı - Ev Bütçesi\nRRULE:FREQ=MONTHLY;BYMONTHDAY=15;COUNT=${remaining}\nBEGIN:VALARM\nTRIGGER:-PT12H\nACTION:DISPLAY\nDESCRIPTION:Yarın: ${plan.note || "Taksit"} ${C(plan.monthlyPayment)}\nEND:VALARM\nUID:${uid2}\nEND:VEVENT`
+    );
+  });
+
   const ics = `BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//Ev Bütçesi//TR\nCALSCALE:GREGORIAN\nMETHOD:PUBLISH\nX-WR-CALNAME:Ev Bütçesi Ödemeleri\n${events.join("\n")}\nEND:VCALENDAR`;
   return ics;
 }
@@ -684,33 +701,38 @@ function getMonthBreakdown(data, m) {
   const rows = [];
   rows.push({ label: "Aylık bütçe", value: mc.effectiveBudget, color: X.g });
   if (mc.carryoverDeficit > 0) rows.push({ label: "Önceki aydan devir", value: mc.carryoverDeficit, sign: "−", color: X.o });
-  // Sabit giderler detay
   if (mc.fixedTotal > 0) {
     rows.push({ label: `Sabit giderler (${data.settings.fixedExpenses.length} kalem)`, value: mc.fixedTotal, sign: "−" });
   }
-  // Taksitler detay
   if (mc.installmentTotal > 0) {
     const planCount = data.installmentPlans.filter(p => { let c = p.startMonth; for (let i = 0; i < p.months; i++) { if (c === m) return true; c = nmk(c); } return false; }).length;
     rows.push({ label: `Taksitler (${planCount} plan)`, value: mc.installmentTotal, sign: "−", color: X.p });
   }
-  // Borç ödemeleri detay
   if (mc.debtTotal > 0) {
     const activeDebts = data.debts.filter(d => d.remainingMonths > 0);
     const debtNames = activeDebts.map(d => d.name).join(", ");
     rows.push({ label: `Borç ödemeleri (${debtNames})`, value: mc.debtTotal, sign: "−", color: X.w });
   }
-  // CC tek çekim (mevcut ay)
-  if (mc.ccSingleTotal > 0) {
-    rows.push({ label: `CC tek çekim (${(md.ccSingle || []).length} işlem)`, value: mc.ccSingleTotal, sign: "−", color: X.b });
+  // Kategorili CC harcamaları (zarflardan harcanan)
+  if (mc.categorizedCC > 0) {
+    rows.push({ label: `Kategorili harcamalar`, value: mc.categorizedCC, sign: "−", color: X.b });
+  }
+  // Kategorisiz CC harcamaları
+  if (mc.uncategorizedCC > 0) {
+    rows.push({ label: `Kategorisiz harcamalar`, value: mc.uncategorizedCC, sign: "−", color: X.o });
   }
   // Kart yükleme
   if (mc.cardLoaded > 0) {
     rows.push({ label: "Genel harcama kartı", value: mc.cardLoaded, sign: "−", color: X.g });
   }
-  // Değişken gider tahmini
-  if (mc.expectedVariable > 0) {
+  // Değişken gider kalan tahmini
+  if (mc.envelopeRemaining > 0) {
     const hasAvg = mc.variableEstimate !== (data.settings.variableExpenses || []).reduce((s, ve) => s + (ve.expectedAmount || 0), 0);
-    rows.push({ label: hasAvg ? "Değişken giderler (3 ay ort.)" : "Değişken giderler (tahmini)", value: mc.expectedVariable, sign: "−" });
+    rows.push({ label: hasAvg ? "Kalan değişken gider (3 ay ort.)" : "Kalan değişken gider (tahmini)", value: mc.envelopeRemaining, sign: "−", sub: "henüz harcanmamış" });
+  }
+  // Zarf taşması
+  if (mc.envelopeOverflow > 0) {
+    rows.push({ label: "Kategori taşması", value: mc.envelopeOverflow, sign: "−", color: X.r });
   }
   return { rows, mc };
 }
@@ -769,27 +791,26 @@ function calcRisk(data, mk) {
   score += f2;
   details.push({ label: "12 aylık sürdürülebilirlik durumu", score: f2, max: 25, desc: mudm > 12 ? "Önümüzdeki 12 ay bütçe aşımı yok" : `${mudm} ay sonra bütçe aşımı oluşabilir` });
 
-  // F3: Genel Harcama Kartı Kapasitesi (20 puan)
-  // İlke: Tüm zorunlu giderler (sabit + değişken + borç + taksit) düşüldükten
-  // sonra genel harcama kartına yüklenebilir tutar. Alt limit: 40.000₺
+  // F3: Serbest Bütçe Kapasitesi (20 puan)
+  // İlke: Tüm giderler düşüldükten sonra kalan serbest bütçe — harcama esnekliği
   let f3 = 0;
-  const currentCardAvail = c.availableForCard;
+  const currentCardAvail = c.cardUsable;
   // Gelecek 6 ayın en kötü durumunu da kontrol et
   let worstCardAvail = currentCardAvail;
   let wm = nmk(mk);
   for (let i = 0; i < 6; i++) {
     const fc = calcMonth(data, wm, null);
-    if (fc.availableForCard < worstCardAvail) worstCardAvail = fc.availableForCard;
+    if (fc.cardUsable < worstCardAvail) worstCardAvail = fc.cardUsable;
     wm = nmk(wm);
   }
   const effectiveCardAvail = Math.min(currentCardAvail, worstCardAvail);
   if (effectiveCardAvail < 0) f3 = 20;
-  else if (effectiveCardAvail < CARD_LOAD_MIN * 0.5) f3 = 17; // < 20k
-  else if (effectiveCardAvail < CARD_LOAD_MIN * 0.75) f3 = 13; // < 30k
-  else if (effectiveCardAvail < CARD_LOAD_MIN) f3 = 8; // < 40k
-  else if (effectiveCardAvail < CARD_LOAD_MIN * 1.25) f3 = 3; // < 50k
+  else if (effectiveCardAvail < 10000) f3 = 17;
+  else if (effectiveCardAvail < 20000) f3 = 13;
+  else if (effectiveCardAvail < 30000) f3 = 8;
+  else if (effectiveCardAvail < 40000) f3 = 3;
   score += f3;
-  details.push({ label: "Genel harcama kartı kapasitesi", score: f3, max: 20, desc: `${C(effectiveCardAvail)} (alt limit: ${C(CARD_LOAD_MIN)})` });
+  details.push({ label: "Serbest bütçe kapasitesi", score: f3, max: 20, desc: `Kullanılabilir: ${C(effectiveCardAvail)}` });
 
   // F4: Harcama Eğilimi (15 puan)
   // İlke: Son 3 ayın harcama ortalamasına göre bu ayın trendi.
@@ -843,12 +864,11 @@ function genWarnings(data, mk) {
   data.settings.fixedExpenses.forEach(exp => { if (exp.increaseDate) { const i = up3.indexOf(exp.increaseDate.slice(0, 7)); if (i >= 0) w.push({ icon: "📈", msg: `"${exp.name}" ${i + 1} ay sonra artış yapacak.`, color: X.o }); } });
   let m = nmk(mk); for (let i = 0; i < 6; i++) { const fc = calcMonth(data, m, null); if (fc.remaining < 0) { w.push({ icon: "🚨", msg: `${i + 1} ay sonra (${ml(m)}) bütçe ${C(Math.abs(fc.remaining))} açık verecek!`, color: X.r }); break; } m = nmk(m); }
   const c = calcMonth(data, mk, null); if (c.remaining < 0) w.push({ icon: "🚨", msg: `Bu ay ${C(Math.abs(c.remaining))} açık!`, color: X.r }); else if (c.remaining < c.effectiveBudget * 0.1) w.push({ icon: "⚠️", msg: "Kalan bütçe %10'un altında.", color: X.w });
-  const md = data.months[mk] || DM(); Object.values(md.variableEntries || {}).forEach(entry => { const ve = data.settings.variableExpenses.find(v => v.id === entry.expenseId); if (ve && ve.expectedAmount > 0 && entry.amount > ve.expectedAmount * 1.1) w.push({ icon: "⚠️", msg: `${ve.name}: ${C(entry.amount)} (beklenen ${C(ve.expectedAmount)})`, color: X.w }); });
+  // Zarf taşması uyarısı
+  if (c.envelopeOverflow > 0) w.push({ icon: "⚠️", msg: `Değişken gider kategorilerinde ${C(c.envelopeOverflow)} taşma var.`, color: X.w });
   if (c.carryoverDeficit > 0) w.push({ icon: "📉", msg: `Geçen aydan ${C(c.carryoverDeficit)} devir.`, color: X.o });
-  if (c.cardLoadRemaining < CARD_LOAD_MIN) {
-    const isHard = c.cardLoadRemaining < CARD_LOAD_MIN * (1 - CARD_LOAD_MIN_TOLERANCE);
-    w.push({ icon: isHard ? "🚨" : "⚠️", msg: `Genel harcama kartına yüklenebilir tutar ${C(c.cardLoadRemaining)} — ${C(CARD_LOAD_MIN)} limitinin ${isHard ? "altında" : "sınırında"}.`, color: isHard ? X.r : X.w });
-  }
+  // Acil tampon uyarısı
+  if (c.emergencyBuffer < 5000 && c.remaining > 0) w.push({ icon: "⚠️", msg: `Acil tampon ${C(c.emergencyBuffer)} — beklenmeyen giderler için yetersiz.`, color: X.w });
   return w;
 }
 
@@ -856,10 +876,10 @@ function genWarnings(data, mk) {
 const INFO = {
   ccSingle: { title: "Kredi Kartı Tek Çekim", text: "Kredi kartınızla tek seferde yaptığınız harcamaları buraya kaydedersiniz. Bu tutar anında bütçenizden düşer ve aynı zamanda ay sonunda kredi kartı hesabınıza aktarmanız gereken tutara eklenir.\n\nÖrnek: Marketten 500 ₺'lik bir alışveriş yaptınız, kredi kartıyla tek çekim ödediyseniz buraya 500 ₺ girersiniz." },
   ccInstall: { title: "Kredi Kartı Taksitli", text: "Kredi kartıyla taksitli yaptığınız harcamalarınızın toplam aylık taksit yükünü gösterir. Yeni bir taksitli alışveriş eklediğinizde, ilk taksit gelecek aydan itibaren bütçenize otomatik yansır.\n\nÖrnek: 30.000 ₺ × 6 taksit alırsanız, 6 ay boyunca her ay 5.000 ₺ bütçenizden düşülür." },
-  cardLoad: { title: "Genel Harcama Kartı", text: "Aylık zorunlu olmayan harcamalar için kullandığınız banka kartı. Restoran, kıyafet, çocuk harcamaları, ufak tefek alımlar gibi zorunlu olmayan ev dışı harcamalar buradan yapılır.\n\nKuralı: Tek seferde toplam bütçenin en fazla %10'u, ay toplamında en fazla %15'i bu karta yüklenebilir. Bu kuralın amacı, hesabınızda kredi kartı ödemeleri için tampon bırakmak.\n\nÖrnek: 450.000 ₺ bütçede tek seferde en fazla 45.000 ₺, ay toplamında en fazla 67.500 ₺." },
+  cardLoad: { title: "Genel Harcama Kartı", text: "Aylık harcamalar için kullandığınız banka kartı. Restoran, kıyafet, çocuk harcamaları, ufak tefek alımlar buradan yapılır.\n\nKuralı: Serbest bütçenin (kalan) en fazla %75'i karta aktarılabilir. Tek seferde bu tutarın en fazla %70'i yüklenebilir. Kalan %25 acil tampon olarak korunur.\n\nHaftalık parça parça yükleme yaparak bütçe kontrolünü artırabilirsiniz." },
   debt: { title: "Borç Ödemeleri", text: "Aktif borçlarınızın bu ay ödemeniz gereken toplam tutarını gösterir. Türk Lirası, dolar veya altın bazlı borçlarınız olabilir. Dolar ve altın borçları için güncel kur kullanılır.\n\nHer borç ödemesi yaptığınızda 'Ödedim' butonuna basarak teyit edersiniz, kalan taksit sayısı azalır." },
   simulate: { title: "Taksit Simülasyonu", text: "Yeni bir taksitli alım yapmadan önce 'şu kadar X taksitle alırsam bütçem nasıl etkilenir' sorusunu test etmek için kullanılır.\n\nTutar ve taksit sayısını girin, 'Simüle Et' deyin. Uygulama gelecek 6-8 ayın bütçenizin durumunu hem mevcut hem de bu taksitli alımla birlikte gösterir. Güvenliyse 'Onayla ve Kaydet' diyerek doğrudan kredi kartı taksitli kısmına ekleyebilirsiniz." },
-  savings: { title: "Birikim", text: "Bugüne kadar bu ay biriktirebildiğiniz para ile bu ayın birikim hedefini gösterir.\n\nBirikim Hedefi şöyle hesaplanır:\nKalan Para − Beklenen Kredi Kartı Tek Çekim (son 3 ay ortalaması) − Henüz Yüklenmemiş Kart Rezervi (toplam %15'in kalan kısmı)\n\nYani sistem size 'eğer beklenen harcamalarını yaparsan ay sonunda bu kadar birikim yapmış olursun' diyor. Hedefe ne kadar yakınsanız o kadar başarılı bir aydır." },
+  savings: { title: "Birikim", text: "Bu ayın birikim potansiyelini gösterir.\n\nSerbest bütçenin %25'i acil tampon olarak ayrılır. Bu tampon ay içinde harcanmazsa ay sonunda otomatik olarak TL birikim havuzuna eklenir.\n\nAcil durumda (araç kazası, hastane vb.) tampon yetmezse TL birikimden kullanılabilir. Ancak toplam birikiminizin en az %15'i TL olarak tutulmak zorundadır." },
   fixed: { title: "Sabit Zorunlu Giderler", text: "Her ay sabit ve zorunlu olarak ödenen giderler. Kira, aidat, ev yardımcısı, burslar, sabit destek tutarları gibi.\n\nBu giderlerin tutarları belirli ve değişmez. Artış tarihleri tanımlanmışsa uygulama o tarih yaklaştığında uyarı verir. Her birini ödediğinizde 'Ödedim' butonuyla teyit edersiniz." },
   variable: { title: "Değişken Zorunlu Giderler", text: "Her ay ödemek zorunda olduğunuz ama tutarı değişen giderler. Elektrik, su, doğalgaz, internet, telefon, akaryakıt, yemek kartı yüklemesi gibi.\n\nHer kalem için bir 'beklenen tutar' belirlersiniz. Eğer girdiğiniz tutar beklenen tutarın %10'undan fazla aşarsa uygulama uyarı verir — böylece anormal faturaları erken yakalarsınız." },
   risk: { title: "Risk Skoru", text: "0-100 arası bir puan. 0 en güvenli, 100 en kritik durum.\n\nBeş faktöre bakılarak hesaplanır:\n\n1. Bu Ay Kalan Bütçe Oranı (25 puan): Bu ayın kalan bütçesinin toplam bütçeye oranı. Beklenmedik harcamalara karşı tampon gücünüzü gösterir. %50 üstü güvenli, %10 altı kritik.\n\n2. 12 Aylık Sürdürülebilirlik Durumu (25 puan): Mevcut harcama düzeniyle gelecek 12 ay içinde bütçe aşımı oluşup oluşmayacağını hesaplar. Değişken gider tahminlerini de içerir.\n\n3. Genel Harcama Kartı Kapasitesi (20 puan): Tüm zorunlu çıkışlar düşüldükten sonra genel harcama kartına yüklenebilecek aylık tutarı ölçer. Alt limit: 40.000 ₺. Gelecek 6 ayın en kötü durumunu da hesaba katar.\n\n4. Harcama Eğilimi (15 puan): Son 3 ayın harcama ortalamasına göre bu ayın artış/azalış yönünü analiz eder. Sürekli artan harcama eğilimi bütçeyi tehdit eder.\n\n5. Yaklaşan Gider Artışları (15 puan): Önümüzdeki 6 ay içinde bilinen sabit gider artışlarını ve bunların bütçeye toplam etkisini değerlendirir.\n\nSeviyeler: 0-14 GÜVENLİ, 15-29 DÜŞÜK, 30-49 ORTA, 50-69 YÜKSEK, 70-100 KRİTİK." },
@@ -998,8 +1018,12 @@ function DebtPayModal({ debts, debtPayments, data, mk, onClose, onPay, onUndo })
 }
 function EmergencyFundSettings({ data, setData, onBack }) {
   const fixedTotal = data.settings.fixedExpenses.reduce((s, e) => s + e.amount, 0);
-  const suggested3x = fixedTotal * 3;
-  const suggested6x = fixedTotal * 6;
+  const variableTotal2 = (data.settings.variableExpenses || []).reduce((s, ve) => s + (ve.expectedAmount || 0), 0);
+  const instTotal = data.installmentPlans.reduce((s, p) => s + p.monthlyPayment, 0);
+  const debtTotal2 = data.debts.filter(d => d.remainingMonths > 0).reduce((s, d) => { if (d.currency === "TRY") return s + d.monthlyPayment; if (d.currency === "XAU") return s + d.monthlyPayment * (data.liveRates?.XAU || 0); if (d.currency === "USD") return s + d.monthlyPayment * (data.liveRates?.USD || 0); if (d.currency === "EUR") return s + d.monthlyPayment * (data.liveRates?.EUR || 0); return s; }, 0);
+  const monthlyTotal = fixedTotal + variableTotal2 + instTotal + debtTotal2;
+  const suggested3x = Math.round(monthlyTotal * 3);
+  const suggested6x = Math.round(monthlyTotal * 6);
   const current = data.settings.emergencyFundTarget;
   const [val, setVal] = useState(current ? String(current) : "");
 
@@ -1526,17 +1550,17 @@ function CCInstallModal({ data, mk, cards, variableExpenses, onClose, onSave, on
           {(() => {
             const minMonth = sim.withS.reduce((min, ws) => ws.remaining < min.remaining ? ws : min, sim.withS[0]);
             const hasDeficit = sim.deficit;
-            const cardLoadTight = !hasDeficit && minMonth.remaining < CARD_LOAD_MIN;
-            const cardLoadHard = cardLoadTight && minMonth.remaining < CARD_LOAD_MIN * (1 - CARD_LOAD_MIN_TOLERANCE);
+            const budgetTight = !hasDeficit && minMonth.remaining < minMonth.effectiveBudget * 0.05;
+            const budgetHard = budgetTight && minMonth.remaining < 0;
 
             if (hasDeficit) {
               const defMonth = sim.withS.find(ws => ws.remaining < 0);
               return <div style={{ color: X.r, fontSize: 13, fontWeight: 600, marginBottom: 10, lineHeight: 1.5 }}>🚨 Bu taksitli işlem bütçenizi zorlar. {ml(sim.deficit)} ayında {C(Math.abs(defMonth?.remaining || 0))} açık oluşuyor. İşlemi onaylamadan önce o ayın giderlerini gözden geçirin.</div>;
             }
-            if (cardLoadTight) {
-              return <div style={{ color: cardLoadHard ? X.r : X.w, fontSize: 13, fontWeight: 600, marginBottom: 10, lineHeight: 1.5 }}>⚠️ Bu taksitli işlem aylık serbest bütçenizi daraltır. {ml(minMonth.mk)} ayında kalan bütçe {C(minMonth.remaining)} olacak — genel harcama kartına yükleyebileceğiniz tutar {C(CARD_LOAD_MIN)} alt limitinin altına düşüyor. Genel harcama kartına yükleyebileceğiniz tutar alt limitin altına düşüyor.</div>;
+            if (budgetTight) {
+              return <div style={{ color: budgetHard ? X.r : X.w, fontSize: 13, fontWeight: 600, marginBottom: 10, lineHeight: 1.5 }}>⚠️ Bu taksitli işlem serbest bütçenizi daraltır. {ml(minMonth.mk)} ayında kalan bütçe {C(minMonth.remaining)} olacak — acil tampon ve genel harcama alanı çok daralıyor.</div>;
             }
-            return <div style={{ color: X.g, fontSize: 13, fontWeight: 600, marginBottom: 10, lineHeight: 1.5 }}>✅ Bu taksitli işlemi yapabilirsiniz. Taksit sonrası en düşük aylık birikim: {C(minMonth.remaining)} ({ml(minMonth.mk)}). Hiçbir ayda bütçe açığı veya serbest bütçe sıkışması oluşmuyor.</div>;
+            return <div style={{ color: X.g, fontSize: 13, fontWeight: 600, marginBottom: 10, lineHeight: 1.5 }}>✅ Bu taksitli işlemi yapabilirsiniz. Taksit sonrası en düşük aylık kalan: {C(minMonth.remaining)} ({ml(minMonth.mk)}). Hiçbir ayda bütçe açığı oluşmuyor.</div>;
           })()}
           <div style={{ display: "flex", gap: 8 }}>
             <Btn onClick={save} c={X.g} s={{ flex: 1 }} disabled={!cardId}>✓ Taksiti Onayla ve Kaydet</Btn>
@@ -2022,7 +2046,7 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
   const [detail, setDetail] = useState(null);
 
   const md = gmd(mk); const c = calcMonth(data, mk, null);
-  const showMonthDetail = () => { const bd = getMonthBreakdown(data, mk); setDetail({ title: `${ml(mk)} — Bütçe Dökümü`, rows: bd.rows, total: bd.mc.remaining, totalLabel: "Serbest bütçe", totalColor: bd.mc.remaining >= CARD_LOAD_MIN ? X.g : bd.mc.remaining >= 0 ? X.w : X.r }); };
+  const showMonthDetail = () => { const bd = getMonthBreakdown(data, mk); setDetail({ title: `${ml(mk)} — Bütçe Dökümü`, rows: bd.rows, total: bd.mc.remaining, totalLabel: "Serbest bütçe", totalColor: bd.mc.remaining > bd.mc.effectiveBudget * 0.1 ? X.g : bd.mc.remaining >= 0 ? X.w : X.r }); };
   const risk = useMemo(() => calcRisk(data, mk), [data, mk]);
   const pct = c.effectiveBudget > 0 ? (c.totalSpent / c.effectiveBudget) * 100 : 0;
   const toggle = id => setExpanded(expanded === id ? null : id);
@@ -2147,7 +2171,7 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
 
         const allItems = [...ccOverdue, ...filteredUpcoming];
         if (allItems.length === 0) return null;
-        const totalAmt = filteredUpcoming.reduce((s, u) => s + (u.amountRaw || 0), 0);
+        const totalAmt = [...ccOverdue, ...filteredUpcoming].reduce((s, u) => s + (u.amountRaw || 0), 0);
         const topColor = ccOverdue.length > 0 ? X.r : (filteredUpcoming[0]?.color || X.w);
         return (
           <Card s={{ marginBottom: 8, border: `1px solid ${topColor}40`, background: ccOverdue.length > 0 ? X.rd : filteredUpcoming[0]?.diff === 0 ? X.rd : X.wd, padding: "10px 14px" }}>
@@ -2312,48 +2336,30 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
             <div style={{ color: X.tm, fontSize: 11, fontWeight: 700, marginBottom: 10 }}>BU AY YÜKLENEBİLİR TUTAR HESABI</div>
             <div style={{ borderRadius: 10, padding: "12px 14px", background: "rgba(160,190,200,0.35)" }}>
               {[
-                { label: "Aylık bütçe", value: c.effectiveBudget, sign: "" },
-                ...data.settings.fixedExpenses.length > 0 ? [{ label: `Sabit giderler (${data.settings.fixedExpenses.length} kalem)`, value: c.fixedTotal, sign: "−" }] : [],
-                ...c.debtTotal > 0 ? [{ label: "Borç ödemeleri", value: c.debtTotal, sign: "−" }] : [],
-                ...c.installmentTotal > 0 ? [{ label: "Taksitler", value: c.installmentTotal, sign: "−" }] : [],
-                ...(() => {
-                  const veTotal = c.variableEstimate || (data.settings.variableExpenses || []).reduce((s, ve) => s + (ve.expectedAmount || 0), 0);
-                  const past3Count = [pmk(pmk(pmk(mk))), pmk(pmk(mk)), pmk(mk)].map(pm => { const pmd = data.months[pm] || DM(); return (pmd.ccSingle || []).reduce((s2, e) => s2 + e.amount, 0) + (pmd.cardLoaded || 0); }).filter(t => t > 0).length;
-                  const label = past3Count >= 2 ? `Değişken giderler (son ${past3Count} ay ortalaması)` : "Değişken giderler (tahmini)";
-                  return veTotal > 0 ? [{ label, value: veTotal, sign: "−" }] : [];
-                })(),
+                { label: "Serbest bütçe (kalan)", value: c.remaining, sign: "", hl: true },
+                { label: `Kullanılabilir (%${Math.round(CARD_USABLE_PCT * 100)})`, value: c.cardUsable, sign: "" },
+                { label: "Bu ay yüklenen", value: md.cardLoaded || 0, sign: "−" },
               ].map((row, i) => (
-                <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderBottom: i === 0 ? `1px solid rgba(0,0,0,0.06)` : "none", fontSize: 13 }}>
-                  <span style={{ color: i === 0 ? X.t : X.tm }}>{row.sign} {row.label}</span>
-                  <span style={{ color: i === 0 ? X.g : X.tm, fontFamily: fm, fontWeight: 700 }}>{row.sign}{C(row.value)}</span>
+                <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderBottom: i === 0 ? "1px solid rgba(0,0,0,0.06)" : "none", fontSize: 13 }}>
+                  <span style={{ color: row.hl ? X.t : X.tm }}>{row.sign} {row.label}</span>
+                  <span style={{ color: row.hl ? X.g : X.tm, fontFamily: fm, fontWeight: 700 }}>{row.sign}{C(row.value)}</span>
                 </div>
               ))}
               <div style={{ borderTop: "1px solid rgba(0,0,0,0.1)", marginTop: 6, paddingTop: 6 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
-                  <span style={{ color: X.t, fontWeight: 700 }}>Serbest tutar</span>
-                  <span style={{ color: c.availableForCard >= CARD_LOAD_MIN ? X.g : X.r, fontFamily: fm, fontWeight: 800 }}>{C(c.availableForCard)}</span>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14 }}>
+                  <span style={{ color: X.t, fontWeight: 800 }}>Kalan kapasite</span>
+                  <span style={{ color: c.cardLoadRemaining > 0 ? X.g : X.r, fontFamily: fm, fontWeight: 800 }}>{C(c.cardLoadRemaining)}</span>
                 </div>
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "4px 0", color: X.td }}>
-                  <span>Yüzdelik tavan (%15)</span>
-                  <span style={{ fontFamily: fm }}>{C(Math.floor(c.baseBudget * CARD_LOAD_TOTAL_PCT))}</span>
+                  <span>Tek seferde max (%{Math.round(CARD_SINGLE_MAX_PCT * 100)})</span>
+                  <span style={{ fontFamily: fm }}>{C(c.cardLoadMaxPerTx)}</span>
                 </div>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, borderTop: "1px solid rgba(0,0,0,0.06)", paddingTop: 6, marginTop: 4 }}>
-                  <span style={{ color: X.t, fontWeight: 700 }}>Yüklenebilir limit</span>
-                  <span style={{ color: X.t, fontFamily: fm, fontWeight: 800 }}>{C(c.cardLoadMaxTotal)}</span>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "4px 0", color: X.tm }}>
-                  <span>Bu ay yüklenen</span>
-                  <span style={{ fontFamily: fm }}>−{C(md.cardLoaded || 0)}</span>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, borderTop: "1px solid rgba(0,0,0,0.1)", paddingTop: 6, marginTop: 4 }}>
-                  <span style={{ color: X.t, fontWeight: 800 }}>Kalan kapasite</span>
-                  <span style={{ color: c.cardLoadRemaining >= CARD_LOAD_MIN ? X.g : c.cardLoadRemaining > 0 ? X.w : X.r, fontFamily: fm, fontWeight: 800 }}>{C(c.cardLoadRemaining)}</span>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "4px 0", color: X.td }}>
+                  <span>Acil tampon (%{Math.round(EMERGENCY_BUFFER_PCT * 100)})</span>
+                  <span style={{ fontFamily: fm }}>{C(c.emergencyBuffer)}</span>
                 </div>
               </div>
             </div>
-            {c.cardLoadRemaining < CARD_LOAD_MIN && (
-              <div style={{ color: X.r, fontSize: 12, fontWeight: 600, marginTop: 10 }}>⚠️ Kalan kapasite {C(CARD_LOAD_MIN)} alt limitinin altında.</div>
-            )}
           </div>
           <div style={{ color: X.t, fontSize: 13, lineHeight: 1.6 }}>{INFO.cardLoad.text}</div>
           <Btn onClick={() => setInfo(null)} s={{ marginTop: 16 }}>Anladım</Btn>
@@ -2755,14 +2761,14 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
     }
 
     // Kart yükleme kapasitesi kontrolü
-    const cardLoadCapacity = c.cardLoadMaxTotal - (data.months[mk]?.cardLoaded || 0);
-    if (cardLoadCapacity < CARD_LOAD_MIN) {
-      const isHard = cardLoadCapacity < CARD_LOAD_MIN * (1 - CARD_LOAD_MIN_TOLERANCE);
+    const cardLoadCapacity = c.cardLoadRemaining;
+    if (c.cardUsable < 15000) {
+      const isHard = c.cardUsable < 5000;
       tips.push({
         title: isHard ? "🚨 Aylık Serbest Bütçe Yetersiz" : "⚠️ Aylık Serbest Bütçe Azalıyor",
         text: isHard
-          ? `Genel harcama kartına bu ay yükleyebileceğiniz tutar ${C(cardLoadCapacity)} seviyesine düştü. Bu, ${C(CARD_LOAD_MIN)} alt limitinin altında. Aylık zorunlu harcamalarınız (market, akaryakıt, fatura) için yeterli alan kalmıyor. Kredi kartı tek çekim harcamalarınızı veya taksit yükünüzü gözden geçirin.`
-          : `Genel harcama kartına bu ay yükleyebileceğiniz tutar ${C(cardLoadCapacity)} seviyesinde ve ${C(CARD_LOAD_MIN)} alt limitine yaklaşıyor. Yeni tek çekim veya taksitli işlem yapmadan önce bu dengeyi göz önünde bulundurun.`,
+          ? `Genel harcama kartına bu ay yükleyebileceğiniz tutar ${C(cardLoadCapacity)} seviyesine düştü. Bu, ₺15.000 alt limitinin altında. Aylık zorunlu harcamalarınız (market, akaryakıt, fatura) için yeterli alan kalmıyor. Kredi kartı tek çekim harcamalarınızı veya taksit yükünüzü gözden geçirin.`
+          : `Genel harcama kartına bu ay yükleyebileceğiniz tutar ${C(cardLoadCapacity)} seviyesinde ve ₺15.000 alt limitine yaklaşıyor. Yeni tek çekim veya taksitli işlem yapmadan önce bu dengeyi göz önünde bulundurun.`,
         color: isHard ? X.r : X.w
       });
     }
@@ -3125,7 +3131,7 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
           const allTx = Object.values(allCsvData).flatMap(cd => cd.transactions || []);
           const unmatchedEntries = allStats.flatMap(st => st.unmatchedEntries || []);
           const matchRate = allTx.length > 0 ? Math.round((totalMatched / allTx.length) * 100) : 0;
-          const appTotal = c.ccSingleTotal + c.installmentTotal;
+          const appTotal = c.fixedTotal > 0 ? (data.settings.fixedExpenses.filter(e => e.paymentMethod === "cc").reduce((s, e) => s + e.amount, 0) + c.ccSingleTotal + c.installmentTotal) : (c.ccSingleTotal + c.installmentTotal);
           const diff = csvTotal - appTotal;
           if (diff > 0) lines.push({ icon: "⚠️", text: `Banka ekstresi toplamı (${C(csvTotal)}) uygulama kayıtlarından ${C(diff)} fazla. Uygulamaya girilmeyen harcamalar olabilir.`, color: X.w });
           else if (diff < -1000) lines.push({ icon: "ℹ️", text: `Uygulama kayıtları (${C(appTotal)}) ekstre toplamından ${C(Math.abs(diff))} fazla. Bazı işlemler henüz ekstreye yansımamış olabilir.`, color: X.b });
@@ -3281,7 +3287,7 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
                 )}
 
                 {(() => {
-                  const cats = categorizeMonthSpending(data, mk);
+                  const { categories: cats, instByCategory } = categorizeMonthSpending(data, mk);
                   const totalCat = Object.entries(cats).filter(([k]) => k !== "_uncategorized").reduce((s, [, v]) => s + v, 0);
                   if (totalCat <= 0) return null;
                   return (
@@ -3297,7 +3303,7 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
         );
       })()}
       {view === "variable" && (() => {
-        const cats = categorizeMonthSpending(data, mk);
+        const { categories: cats, instByCategory } = categorizeMonthSpending(data, mk);
         const ves = data.settings.variableExpenses || [];
         const totalCat = Object.entries(cats).filter(([k]) => k !== "_uncategorized").reduce((s, [, v]) => s + v, 0);
         const uncat = cats._uncategorized || 0;
@@ -3452,6 +3458,16 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
             if (debt) addTx(info.date || (mk + "-01"), "Borç", debtTLValue(debt, data, mk), debt.name);
           }
         });
+        // Taksit ödemeleri (bu ayda aktif olanlar)
+        data.installmentPlans.forEach(p => {
+          let cur = p.startMonth;
+          for (let i = 0; i < p.months; i++) {
+            if (cur === mk) { addTx(p.createdDate || (mk + "-01"), "Taksit", p.monthlyPayment, p.note || "Taksit"); break; }
+            cur = nmk(cur);
+          }
+        });
+        // Kart yüklemeleri (tarih bilgisi yok, ay başı varsay)
+        if ((md.cardLoaded || 0) > 0) addTx(mk + "-01", "Kart", md.cardLoaded, "Genel harcama kartı");
 
         const weekDays = ["Pz", "Sl", "Çr", "Pr", "Cm", "Ct", "Pa"];
         const cells = [];
@@ -3651,7 +3667,7 @@ function PlanningScreen({ data, setData, mk }) {
                   rows,
                   total: m2.remaining,
                   totalLabel: "Kullanılabilir genel harcama limiti",
-                  totalColor: m2.remaining >= CARD_LOAD_MIN ? X.g : m2.remaining >= 0 ? X.w : X.r
+                  totalColor: m2.remaining > m2.effectiveBudget * 0.1 ? X.g : m2.remaining >= 0 ? X.w : X.r
                 });
               };
               return (
@@ -3664,8 +3680,8 @@ function PlanningScreen({ data, setData, mk }) {
                     </TapAmt>
                   </div>
                   <div style={{ textAlign: "right" }}>
-                    <TapAmt onTap={showBreakdown} color={m2.remaining >= CARD_LOAD_MIN ? X.g : m2.remaining >= 0 ? X.w : X.r}>
-                      <span style={{ color: m2.remaining >= CARD_LOAD_MIN ? X.g : m2.remaining >= 0 ? X.w : X.r, fontWeight: 800, fontFamily: fm, fontSize: 16 }}>{C(m2.remaining)}</span>
+                    <TapAmt onTap={showBreakdown} color={m2.remaining > m2.effectiveBudget * 0.1 ? X.g : m2.remaining >= 0 ? X.w : X.r}>
+                      <span style={{ color: m2.remaining > m2.effectiveBudget * 0.1 ? X.g : m2.remaining >= 0 ? X.w : X.r, fontWeight: 800, fontFamily: fm, fontSize: 16 }}>{C(m2.remaining)}</span>
                     </TapAmt>
                     <div style={{ color: X.td, fontSize: 8 }}>kullanılabilir limit</div>
                   </div>
@@ -3701,8 +3717,8 @@ function PlanningScreen({ data, setData, mk }) {
               <span style={{ color: yearMap.filter(m2 => m2.remaining < 0).length > 0 ? X.r : X.g, fontFamily: fm, fontWeight: 700 }}>{yearMap.filter(m2 => m2.remaining < 0).length} ay</span>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: 12 }}>
-              <span style={{ color: X.tm }}>₺{(CARD_LOAD_MIN/1000).toFixed(0)}k altı ay sayısı</span>
-              <span style={{ color: yearMap.filter(m2 => m2.remaining < CARD_LOAD_MIN).length > 0 ? X.w : X.g, fontFamily: fm, fontWeight: 700 }}>{yearMap.filter(m2 => m2.remaining < CARD_LOAD_MIN).length} ay</span>
+              <span style={{ color: X.tm }}>Sıkışık ay sayısı</span>
+              <span style={{ color: yearMap.filter(m2 => m2.remaining < m2.effectiveBudget * 0.05).length > 0 ? X.w : X.g, fontFamily: fm, fontWeight: 700 }}>{yearMap.filter(m2 => m2.remaining < m2.effectiveBudget * 0.05).length} ay</span>
             </div>
           </Card>
         </>
@@ -4272,7 +4288,6 @@ function Settings({ data, setData, isAdmin, family }) {
 
         {resetItem("Borç Ödemeleri", "💸", "Ödeme işaretleri (borçlar silinmez)", () => clearMonthField("debtPayments", {}))}
 
-        {resetItem("Değişken Gider Girişleri", "📊", "Tüm aylardaki değişken gider kayıtları", () => clearMonthField("variableEntries", {}))}
 
         {resetItem("CSV Ekstre Verileri", "🧾", "Yüklenen banka ekstresi verileri", () => clearMonthField("csvByCard", {}))}
 
@@ -5199,7 +5214,7 @@ export default function App() {
   const memberLocked = !isAdmin && backupNeeded;
 
     const c = calcMonth(data, mk, null);
-  const showHeaderDetail = () => { const bd = getMonthBreakdown(data, mk); setHeaderDetail({ title: `${ml(mk)} — Bütçe Dökümü`, rows: bd.rows, total: bd.mc.remaining, totalLabel: "Kalan bütçe", totalColor: bd.mc.remaining >= CARD_LOAD_MIN ? X.g : bd.mc.remaining >= 0 ? X.w : X.r }); };
+  const showHeaderDetail = () => { const bd = getMonthBreakdown(data, mk); setHeaderDetail({ title: `${ml(mk)} — Bütçe Dökümü`, rows: bd.rows, total: bd.mc.remaining, totalLabel: "Kalan bütçe", totalColor: bd.mc.remaining > bd.mc.effectiveBudget * 0.1 ? X.g : bd.mc.remaining >= 0 ? X.w : X.r }); };
 
   return (
     <div style={{ background: _theme.gradient, minHeight: "100vh", color: X.t, fontFamily: ff, maxWidth: 480, margin: "0 auto", position: "relative" }}>
