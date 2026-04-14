@@ -486,13 +486,13 @@ function calcMonth(data, m, extraInst) {
   // Değişken zorunlu giderler: geçmiş 3 ay ortalaması varsa onu kullan, yoksa beklenen tutarları kullan
   const hasActualSpending = ccSingleTotal > 0 || cardLoaded > 0 || Object.keys(md.variableEntries || {}).length > 0;
   const expectedVariableBase = (data.settings.variableExpenses || []).reduce((s, ve) => s + (ve.expectedAmount || 0), 0);
-  // Son 3 ayın gerçek değişken harcama ortalaması (CC tek çekim + kart yükleme)
+  // Son 3 ayın gerçek değişken harcama ortalaması (sadece CC tek çekim — kart yükleme ayrı sayılır)
   const past3 = [pmk(pmk(pmk(m))), pmk(pmk(m)), pmk(m)]
-    .map(pm => { const pmd = data.months[pm] || DM(); return (pmd.ccSingle || []).reduce((s2, e) => s2 + e.amount, 0) + (pmd.cardLoaded || 0); })
+    .map(pm => { const pmd = data.months[pm] || DM(); return (pmd.ccSingle || []).reduce((s2, e) => s2 + e.amount, 0); })
     .filter(t => t > 0);
   const variableEstimate = past3.length >= 2 ? Math.round(past3.reduce((s, t) => s + t, 0) / past3.length) : expectedVariableBase;
-  // Kısmi harcama varsa: tahmin - gerçekleşen = kalan beklenen
-  const expectedVariable = hasActualSpending ? Math.max(0, variableEstimate - ccSingleTotal - cardLoaded) : variableEstimate;
+  // Kısmi harcama varsa: tahmin - gerçekleşen CC = kalan beklenen (cardLoaded ayrı sayılır)
+  const expectedVariable = hasActualSpending ? Math.max(0, variableEstimate - ccSingleTotal) : variableEstimate;
 
   // Card load limits
   const cardLoadMaxPerTx = Math.floor(baseBudget * CARD_LOAD_PER_TX_PCT);
@@ -504,17 +504,17 @@ function calcMonth(data, m, extraInst) {
   const cardLoadMaxTotal = Math.min(cardLoadPctMax, availableForCard);
   const cardLoadRemaining = Math.max(0, cardLoadMaxTotal - cardLoaded);
 
-  // Total spent and remaining
+  // Total spent and remaining — cardLoaded fiili harcama olarak sayılır
   const totalSpent = fixedTotal + ccSingleTotal + installmentTotal + debtTotal + cardLoaded + expectedVariable;
   const remaining = effectiveBudget - totalSpent;
 
   // Mevcut ay için: henüz yapılmamış değişken gider tahmini (bilgi amaçlı)
-  const pendingVariable = hasActualSpending ? Math.max(0, variableEstimate - ccSingleTotal - cardLoaded) : 0;
+  const pendingVariable = hasActualSpending ? Math.max(0, variableEstimate - ccSingleTotal) : 0;
 
-  // Savings target = remaining - expected future CC singles - unused card capacity
-  // NOT: pendingVariable zaten expectedVariable üzerinden totalSpent'e dahil, tekrar çıkarmaya gerek yok
+  // Birikim hedefi: kalan bütçeden henüz yapılması beklenen CC harcamalarını çıkar
+  // cardLoaded zaten totalSpent'e dahil — az yüklemek birikimi artırır
   const expectedCCSingle = hasActualSpending ? getCCSingleAvg(data, m) : 0;
-  const savingsTarget = Math.max(0, remaining - expectedCCSingle - (hasActualSpending ? cardLoadRemaining : 0));
+  const savingsTarget = Math.max(0, remaining - expectedCCSingle);
 
   // CC transfer needed
   const ccTransferNeeded = fixedCC + variableCC + ccSingleTotal + installmentTotal;
@@ -540,10 +540,10 @@ function calcFlat(data, m, extraInst) {
   const hasActualData = cc > 0 || cl > 0;
   const expectedVariableBase = (data.settings.variableExpenses || []).reduce((s, ve) => s + (ve.expectedAmount || 0), 0);
   const past3 = [pmk(pmk(pmk(m))), pmk(pmk(m)), pmk(m)]
-    .map(pm => { const pmd = data.months[pm] || DM(); return (pmd.ccSingle || []).reduce((s2, e) => s2 + e.amount, 0) + (pmd.cardLoaded || 0); })
+    .map(pm => { const pmd = data.months[pm] || DM(); return (pmd.ccSingle || []).reduce((s2, e) => s2 + e.amount, 0); })
     .filter(t => t > 0);
   const variableEstimate = past3.length >= 2 ? Math.round(past3.reduce((s, t) => s + t, 0) / past3.length) : expectedVariableBase;
-  const expectedVariable = hasActualData ? Math.max(0, variableEstimate - cc - cl) : variableEstimate;
+  const expectedVariable = hasActualData ? Math.max(0, variableEstimate - cc) : variableEstimate;
   const totalSpent = ft + cc + inst + dt + cl + expectedVariable;
   return { remaining: b - totalSpent, totalSpent };
 }
@@ -4226,7 +4226,76 @@ function Settings({ data, setData, isAdmin, family }) {
       </div>
     );
   }
-  if (sec === "reset") return (<div style={{ padding: "20px 16px 100px" }}><BackBtn /><Card s={{ border: `1px solid ${X.r}`, background: X.rd, textAlign: "center", padding: 24 }}><div style={{ fontSize: 36, marginBottom: 8 }}>⚠️</div><Btn c={X.r} onClick={async () => { await deleteDB(family?.familyId); setData({ ...DD }); setSec(null); }}>Tüm Verileri Sil</Btn></Card></div>);
+  if (sec === "reset") {
+    const mk = cmk();
+    const resetItem = (label, icon, desc, action) => (
+      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderRadius: 10, background: glassSolid.background, border: `1px solid ${X.border}`, marginBottom: 8, cursor: "pointer" }} onClick={() => { if (confirm(`"${label}" sıfırlansın mı? Bu işlem geri alınamaz.`)) { action(); } }}>
+        <span style={{ fontSize: 20, flexShrink: 0 }}>{icon}</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ color: X.t, fontSize: 13, fontWeight: 700 }}>{label}</div>
+          <div style={{ color: X.td, fontSize: 11, marginTop: 2 }}>{desc}</div>
+        </div>
+        <span style={{ color: X.r, fontSize: 12, fontWeight: 700, flexShrink: 0 }}>Sıfırla</span>
+      </div>
+    );
+    const clearMonthField = (field, empty) => {
+      setData(d => {
+        const ms = { ...d.months };
+        Object.keys(ms).forEach(m => { ms[m] = { ...ms[m], [field]: empty }; });
+        return { ...d, months: ms };
+      });
+    };
+    return (
+      <div style={{ padding: "20px 16px 100px" }}>
+        <BackBtn />
+        <h3 style={{ color: X.t, fontSize: 16, margin: "0 0 6px" }}>🗑️ Sıfırlama Seçenekleri</h3>
+        <p style={{ color: X.td, fontSize: 12, marginBottom: 16 }}>Seçtiğiniz veri grubunu sıfırlayabilirsiniz. Ayar ve yapılandırma verileri korunur.</p>
+
+        <Card s={{ border: `1px solid ${X.g}`, background: X.gd, padding: 16, marginBottom: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+            <span style={{ fontSize: 22 }}>🚀</span>
+            <div>
+              <div style={{ color: X.g, fontSize: 14, fontWeight: 800 }}>Temiz Başlat</div>
+              <div style={{ color: X.tm, fontSize: 11, marginTop: 2 }}>Ayarları, kartları, sabit giderleri, taksitleri, borçları ve kurları korur. Sadece ay içi deneme verilerini (harcamalar, birikim, ekstre, fiş, kapanış) temizler.</div>
+            </div>
+          </div>
+          <Btn c={X.g} onClick={() => { if (confirm("Temiz başlat: Tüm ay içi veriler, birikim havuzu ve kapanış bilgileri sıfırlanacak. Ayarlar ve yükümlülükler korunacak. Onaylıyor musunuz?")) { setData(d => ({ ...d, months: {}, savings: { TRY: [], USD: [], EUR: [], XAU: [] }, lastClosedMonth: null, lastBackup: null })); setSec(null); } }} s={{ marginTop: 4 }}>Temiz Başlat</Btn>
+        </Card>
+
+        {resetItem("Kredi Kartı Tek Çekim", "💳", "Tüm aylardaki CC tek çekim harcamaları", () => clearMonthField("ccSingle", []))}
+
+        {resetItem("Kredi Kartı Taksitli", "📅", "Tüm taksit planları", () => setData(d => ({ ...d, installmentPlans: [] })))}
+
+        {resetItem("Genel Harcama Kartı", "🛒", "Tüm aylardaki kart yüklemeleri", () => clearMonthField("cardLoaded", 0))}
+
+        {resetItem("Sabit Gider Ödemeleri", "📌", "Ödendi işaretleri (giderler silinmez)", () => clearMonthField("fixedPaid", {}))}
+
+        {resetItem("Borç Ödemeleri", "💸", "Ödeme işaretleri (borçlar silinmez)", () => clearMonthField("debtPayments", {}))}
+
+        {resetItem("Değişken Gider Girişleri", "📊", "Tüm aylardaki değişken gider kayıtları", () => clearMonthField("variableEntries", {}))}
+
+        {resetItem("CSV Ekstre Verileri", "🧾", "Yüklenen banka ekstresi verileri", () => clearMonthField("csvByCard", {}))}
+
+        {resetItem("CC Aktarım İşaretleri", "🔄", "Kredi kartı hesabına aktarım işaretleri", () => clearMonthField("ccTransferred", {}))}
+
+        {resetItem("Market Fişi Kayıtları", "📷", "Tüm aylardaki fiş verileri", () => clearMonthField("receipts", []))}
+
+        {resetItem("Birikim Havuzu", "💰", "TL, USD, EUR ve altın birikim kayıtları", () => setData(d => ({ ...d, savings: { TRY: [], USD: [], EUR: [], XAU: [] } })))}
+
+        {resetItem("Mağaza Eşleştirme Hafızası", "🏪", "CSV'den öğrenilen mağaza→kategori eşleşmeleri", () => setData(d => ({ ...d, merchantMap: {} })))}
+
+        {resetItem("Ay Kapanış & Yedekleme", "🔒", "Son kapatılan ay ve yedekleme tarihi", () => setData(d => ({ ...d, lastClosedMonth: null, lastBackup: null })))}
+
+        <div style={{ marginTop: 16 }}>
+          <Card s={{ border: `1px solid ${X.r}`, background: X.rd, textAlign: "center", padding: 20 }}>
+            <div style={{ fontSize: 28, marginBottom: 8 }}>⚠️</div>
+            <div style={{ color: X.r, fontSize: 13, fontWeight: 700, marginBottom: 12 }}>Tüm verileri siler. Ayarlar dahil her şey sıfırlanır.</div>
+            <Btn c={X.r} onClick={async () => { if (confirm("TÜM VERİLER SİLİNECEK. Ayarlar, giderler, kartlar, borçlar dahil her şey. Emin misiniz?")) { await deleteDB(family?.familyId); setData({ ...DD }); setSec(null); } }}>Tümünü Sıfırla</Btn>
+          </Card>
+        </div>
+      </div>
+    );
+  }
   if (sec === "theme") return (
     <div style={{ padding: "20px 16px 100px" }}>
       <BackBtn />
