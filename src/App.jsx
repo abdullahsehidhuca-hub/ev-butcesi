@@ -888,30 +888,13 @@ const INFO = {
 
 /* ═══ RISK BAR ═══ */
 function RiskBar({ score, onInfo, warnings }) {
-  const info = getRiskInfo(score);
   const hasWarnings = warnings && warnings.length > 0;
+  if (!hasWarnings) return null;
   return (
-    <div style={{ margin: "0 0 12px", padding: hasWarnings ? "10px 14px 12px" : "10px 14px", borderRadius: 14, ...glass, position: "relative" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-        <div style={{ width: 34, height: 34, borderRadius: 10, background: info.color, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 14, fontWeight: 900, fontFamily: fm, boxShadow: `0 2px 8px ${info.color}40`, flexShrink: 0 }}>{score}</div>
-        <div style={{ flex: 1 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-            <span style={{ color: info.color, fontSize: 12, fontWeight: 800 }}>{info.label}</span>
-            <span style={{ color: info.color, fontSize: 12, fontWeight: 700, marginRight: 18 }}>{info.sub}</span>
-          </div>
-          <div style={{ height: 5, borderRadius: 3, background: "linear-gradient(to right, #16A34A, #D97706, #DC2626)", position: "relative", overflow: "visible", boxShadow: neuIn }}>
-            <div style={{ position: "absolute", top: -3, left: `${score}%`, transform: "translateX(-50%)", width: 11, height: 11, borderRadius: "50%", background: info.color, border: `2px solid ${X.bg}`, boxShadow: `0 1px 4px ${info.color}60` }} />
-          </div>
-        </div>
-        <InfoBtn onClick={onInfo} />
-      </div>
-      {hasWarnings && (
-        <div style={{ marginTop: 10, paddingTop: 8, borderTop: "1px solid rgba(0,0,0,0.06)" }}>
-          {warnings.map((w, i) => (
-            <div key={i} style={{ color: w.color, fontSize: 12, fontWeight: 600, lineHeight: 1.5, padding: "3px 0" }}>{w.icon} {w.msg}</div>
-          ))}
-        </div>
-      )}
+    <div style={{ margin: "0 0 12px", padding: "10px 14px", borderRadius: 14, ...glass }}>
+      {warnings.map((w, i) => (
+        <div key={i} style={{ color: w.color, fontSize: 12, fontWeight: 600, lineHeight: 1.5, padding: "3px 0" }}>{w.icon} {w.msg}</div>
+      ))}
     </div>
   );
 }
@@ -2173,35 +2156,51 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
         if (allItems.length === 0) return null;
         const totalAmt = [...ccOverdue, ...filteredUpcoming].reduce((s, u) => s + (u.amountRaw || 0), 0);
         const topColor = ccOverdue.length > 0 ? X.r : (filteredUpcoming[0]?.color || X.w);
+        const hasTodayOrOverdue = ccOverdue.length > 0 || filteredUpcoming.some(u => u.diff === 0);
         return (
-          <Card s={{ marginBottom: 8, border: `1px solid ${topColor}40`, background: ccOverdue.length > 0 ? X.rd : filteredUpcoming[0]?.diff === 0 ? X.rd : X.wd, padding: "10px 14px" }}>
-            <div style={{ color: topColor, fontSize: 12, fontWeight: 700, marginBottom: 6 }}>📅 ÖDEME HATIRLATICI</div>
-            {ccOverdue.map(u => (
-              <div key={u.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "5px 0", borderBottom: "1px solid rgba(220,38,38,0.12)" }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <span style={{ color: X.r, fontSize: 12, fontWeight: 800 }}>{u.icon} {u.name}</span>
-                </div>
-                <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 8 }}>
-                  <span style={{ color: X.r, fontSize: 12, fontWeight: 800, fontFamily: fm }}>{u.amount}</span>
-                  <span style={{ color: X.r, fontSize: 10, marginLeft: 4 }}>{u.label}</span>
-                </div>
-              </div>
-            ))}
-            {filteredUpcoming.map(u => (
-              <div key={u.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 0", borderBottom: "1px solid rgba(0,0,0,0.04)" }}>
+          <div style={{ margin: "0 0 10px" }}>
+            <div onClick={() => toggle("payments")} style={{ background: hasTodayOrOverdue ? X.rd : X.wd, border: `1px solid ${topColor}40`, borderRadius: expanded === "payments" ? "14px 14px 0 0" : 14, padding: "14px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 20 }}>📅</span>
                 <div>
-                  <span style={{ fontSize: 12 }}>{u.icon} </span>
-                  <span style={{ color: X.t, fontSize: 12, fontWeight: 600 }}>{u.name}</span>
-                  {u.auto && <span style={{ color: X.g, fontSize: 9, marginLeft: 4 }}>⚡oto</span>}
-                </div>
-                <div style={{ textAlign: "right" }}>
-                  <span style={{ color: u.color, fontSize: 12, fontWeight: 700, fontFamily: fm }}>{u.amount}</span>
-                  <span style={{ color: u.color, fontSize: 10, marginLeft: 4 }}>{u.label}</span>
+                  <div style={{ color: topColor, fontSize: 14, fontWeight: 800 }}>Ödeme Hatırlatıcı</div>
+                  <div style={{ color: X.tm, fontSize: 11, marginTop: 1 }}>{allItems.length} kalem · {ccOverdue.length > 0 ? `${ccOverdue.length} gecikmiş` : filteredUpcoming[0]?.diff === 0 ? "Bugün ödeme var" : `${filteredUpcoming[0]?.diff} gün içinde`}</div>
                 </div>
               </div>
-            ))}
-            {filteredUpcoming.length > 1 && <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 6, marginTop: 4, borderTop: "1px solid rgba(0,0,0,0.08)" }}><span style={{ color: X.tm, fontSize: 11, fontWeight: 700 }}>Toplam</span><span style={{ color: X.t, fontSize: 13, fontWeight: 800, fontFamily: fm }}>{C(totalAmt)}</span></div>}
-          </Card>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ color: topColor, fontSize: 16, fontWeight: 800, fontFamily: fm }}>{C(totalAmt)}</span>
+                <span style={{ color: X.td, fontSize: 12, transform: expanded === "payments" ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>▼</span>
+              </div>
+            </div>
+            {expanded === "payments" && (
+              <div style={{ background: hasTodayOrOverdue ? X.rd : X.wd, border: `1px solid ${topColor}40`, borderTop: `1px solid ${topColor}20`, borderRadius: "0 0 14px 14px", padding: "6px 16px 12px" }}>
+                {ccOverdue.map(u => (
+                  <div key={u.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px solid rgba(220,38,38,0.12)" }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ color: X.r, fontSize: 12, fontWeight: 800 }}>{u.icon} {u.name}</span>
+                    </div>
+                    <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 8 }}>
+                      <span style={{ color: X.r, fontSize: 12, fontWeight: 800, fontFamily: fm }}>{u.amount}</span>
+                      <span style={{ color: X.r, fontSize: 10, marginLeft: 4 }}>{u.label}</span>
+                    </div>
+                  </div>
+                ))}
+                {filteredUpcoming.map(u => (
+                  <div key={u.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "5px 0", borderBottom: "1px solid rgba(0,0,0,0.04)" }}>
+                    <div>
+                      <span style={{ fontSize: 12 }}>{u.icon} </span>
+                      <span style={{ color: X.t, fontSize: 12, fontWeight: 600 }}>{u.name}</span>
+                      {u.auto && <span style={{ color: X.g, fontSize: 9, marginLeft: 4 }}>⚡oto</span>}
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <span style={{ color: u.color, fontSize: 12, fontWeight: 700, fontFamily: fm }}>{u.amount}</span>
+                      <span style={{ color: u.color, fontSize: 10, marginLeft: 4 }}>{u.label}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         );
       })()}
 
@@ -2282,6 +2281,68 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
           </div>
         </div>
       </div>
+        );
+      })()}
+
+      {/* DEĞİŞKEN GİDER TAKİBİ */}
+      {(() => {
+        const ves = data.settings.variableExpenses || [];
+        if (ves.length === 0) return null;
+        const { categories: cats, instByCategory } = categorizeMonthSpending(data, mk);
+        const totalBudget = ves.reduce((s, ve) => s + (ve.expectedAmount || 0), 0);
+        const totalSpentEnv = Object.entries(cats).filter(([k]) => k !== "_uncategorized").reduce((s, [, v]) => s + v, 0);
+        const uncat = cats._uncategorized || 0;
+        return (
+          <div style={{ margin: "10px 0" }}>
+            <div onClick={() => toggle("envelopes")} style={{ ...glassSolid, borderRadius: 14, padding: "12px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 16 }}>📊</span>
+                <span style={{ color: X.t, fontSize: 13, fontWeight: 700 }}>Değişken Gider Takibi</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ color: totalSpentEnv > totalBudget ? X.r : X.t, fontSize: 14, fontWeight: 800, fontFamily: fm }}>{C(totalSpentEnv)}</span>
+                <span style={{ color: X.td, fontSize: 11 }}>/ {C(totalBudget)}</span>
+                <span style={{ color: X.td, fontSize: 12, transform: expanded === "envelopes" ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>▼</span>
+              </div>
+            </div>
+            {expanded === "envelopes" && (
+              <div style={{ ...glassSolid, borderRadius: "0 0 14px 14px", marginTop: -1, padding: "8px 16px 12px", borderTop: `1px solid ${X.border}` }}>
+                {ves.map(ve => {
+                  const spent = cats[ve.id] || 0;
+                  const instAmt = instByCategory[ve.id] || 0;
+                  const budget = ve.expectedAmount || 0;
+                  const over = budget > 0 && spent > budget;
+                  return (
+                    <div key={ve.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: `1px solid ${X.border}` }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1, minWidth: 0 }}>
+                        <span style={{ fontSize: 14 }}>{ve.icon || "📋"}</span>
+                        <span style={{ color: X.t, fontSize: 12, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ve.name}</span>
+                        {instAmt > 0 && <span style={{ color: X.p, fontSize: 9, fontWeight: 700, background: X.pd, padding: "1px 4px", borderRadius: 4 }}>+taksit</span>}
+                      </div>
+                      <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 8 }}>
+                        <span style={{ color: over ? X.r : X.t, fontSize: 13, fontWeight: 800, fontFamily: fm }}>{C(spent)}</span>
+                        {budget > 0 && <span style={{ color: X.td, fontSize: 10 }}> / {C(budget)}</span>}
+                        {budget === 0 && spent > 0 && <span style={{ color: X.w, fontSize: 9, marginLeft: 4 }}>tahmin yok</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+                {uncat > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: `1px solid ${X.border}` }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ fontSize: 14 }}>❓</span>
+                      <span style={{ color: X.o, fontSize: 12, fontWeight: 600 }}>Kategorisiz</span>
+                    </div>
+                    <span style={{ color: X.o, fontSize: 13, fontWeight: 800, fontFamily: fm }}>{C(uncat)}</span>
+                  </div>
+                )}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0 2px" }}>
+                  <span style={{ color: X.tm, fontSize: 11, fontWeight: 700 }}>Kalan tahmin</span>
+                  <span style={{ color: X.g, fontSize: 13, fontWeight: 800, fontFamily: fm }}>{C(Math.max(0, totalBudget - totalSpentEnv))}</span>
+                </div>
+              </div>
+            )}
+          </div>
         );
       })()}
 
@@ -2373,7 +2434,7 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
 
 /* ═══ ANALYSIS ═══ */
 function AnalysisScreen({ data, setData, mk: initialMk }) {
-  const [view, setView] = useState("csv");
+  const [view, setView] = useState("risk");
   const [csvSub, setCsvSub] = useState("analysis"); // analysis | category
   const [selMk, setSelMk] = useState(initialMk);
   const [csvCardId, setCsvCardId] = useState("");
