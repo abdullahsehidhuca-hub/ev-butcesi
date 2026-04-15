@@ -5275,7 +5275,7 @@ export default function App() {
   const memberLocked = !isAdmin && backupNeeded;
 
     const c = calcMonth(data, mk, null);
-  const headerRisk = useMemo(() => calcRisk(data, mk), [data, mk]);
+  let headerRisk = { score: 0 }; try { headerRisk = calcRisk(data, mk); } catch(e) { console.warn("Risk hesaplama hatası:", e); }
   const headerRiskColor = (() => { const s = headerRisk.score; if (s >= 70) return "#DC2626"; if (s >= 50) return "#D97706"; if (s >= 30) return "#B45309"; if (s >= 15) return "#84CC16"; return "#0F766E"; })();
   const showHeaderDetail = () => { const bd = getMonthBreakdown(data, mk); setHeaderDetail({ title: `${ml(mk)} — Bütçe Dökümü`, rows: bd.rows, total: bd.mc.remaining, totalLabel: "Kalan bütçe", totalColor: bd.mc.remaining > bd.mc.effectiveBudget * 0.1 ? X.g : bd.mc.remaining >= 0 ? X.w : X.r }); };
 
