@@ -5275,6 +5275,8 @@ export default function App() {
   const memberLocked = !isAdmin && backupNeeded;
 
     const c = calcMonth(data, mk, null);
+  const headerRisk = useMemo(() => calcRisk(data, mk), [data, mk]);
+  const headerRiskColor = (() => { const s = headerRisk.score; if (s >= 70) return "#DC2626"; if (s >= 50) return "#D97706"; if (s >= 30) return "#B45309"; if (s >= 15) return "#84CC16"; return "#0F766E"; })();
   const showHeaderDetail = () => { const bd = getMonthBreakdown(data, mk); setHeaderDetail({ title: `${ml(mk)} — Bütçe Dökümü`, rows: bd.rows, total: bd.mc.remaining, totalLabel: "Kalan bütçe", totalColor: bd.mc.remaining > bd.mc.effectiveBudget * 0.1 ? X.g : bd.mc.remaining >= 0 ? X.w : X.r }); };
 
   return (
@@ -5284,17 +5286,28 @@ export default function App() {
       <div style={{ position: "fixed", top: 60, left: -50, width: 200, height: 200, borderRadius: "50%", background: "rgba(22,163,74,0.07)", filter: "blur(60px)", pointerEvents: "none" }} />
       <div style={{ position: "fixed", top: 280, right: -40, width: 170, height: 170, borderRadius: "50%", background: "rgba(37,99,235,0.06)", filter: "blur(50px)", pointerEvents: "none" }} />
       <div style={{ position: "fixed", bottom: 250, left: 10, width: 140, height: 140, borderRadius: "50%", background: "rgba(124,58,237,0.05)", filter: "blur(45px)", pointerEvents: "none" }} />
-      <div style={{ ...glassSolid, borderBottom: "none", borderRadius: "0 0 18px 18px", padding: "calc(12px + env(safe-area-inset-top)) 20px 12px", display: "flex", justifyContent: "space-between", alignItems: "center", position: "sticky", top: 0, zIndex: 50, boxShadow: "0 4px 16px rgba(0,0,0,0.06)" }}>
+      <div style={{ ...glassSolid, borderBottom: "none", borderRadius: "0 0 18px 18px", padding: "calc(12px + env(safe-area-inset-top)) 16px 12px", display: "flex", justifyContent: "space-between", alignItems: "center", position: "sticky", top: 0, zIndex: 50, boxShadow: "0 4px 16px rgba(0,0,0,0.06)" }}>
         <div><div style={{ fontSize: 15, fontWeight: 800, letterSpacing: "-0.3px", color: X.t }}>EV BÜTÇESİ</div><div style={{ fontSize: 11, color: X.td }}>{ml(mk)}</div></div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }} onClick={showHeaderDetail}>
-          <div style={{ textAlign: "center" }}>
-            <div style={{ fontSize: 9, color: X.tm, fontWeight: 700, letterSpacing: 0.3, marginBottom: 2 }}>AYLIK BÜTÇE</div>
-            <div style={{ fontSize: 15, fontWeight: 800, color: X.t, fontFamily: fm }}>{C(c.effectiveBudget)}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {/* Risk Circle */}
+          <div onClick={() => setTab("report")} style={{ position: "relative", width: 36, height: 36, cursor: "pointer", flexShrink: 0 }}>
+            <svg width="36" height="36" viewBox="0 0 36 36">
+              <circle cx="18" cy="18" r="15" fill="none" stroke="rgba(0,0,0,0.08)" strokeWidth="3" />
+              <circle cx="18" cy="18" r="15" fill="none" stroke={headerRiskColor} strokeWidth="3" strokeDasharray={`${94.2}`} strokeDashoffset={`${94.2 * (1 - headerRisk.score / 100)}`} strokeLinecap="round" transform="rotate(-90 18 18)" />
+            </svg>
+            <span style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", fontSize: 11, fontWeight: 800, color: headerRiskColor, fontFamily: fm }}>{headerRisk.score}</span>
           </div>
-          <div style={{ color: X.td, fontSize: 16, fontWeight: 300 }}>/</div>
-          <div style={{ textAlign: "center" }}>
-            <div style={{ fontSize: 9, color: X.tm, fontWeight: 700, letterSpacing: 0.3, marginBottom: 2 }}>KALAN BÜTÇE</div>
-            <div style={{ fontSize: 15, fontWeight: 800, fontFamily: fm, borderBottom: "1px dotted rgba(0,0,0,0.2)", paddingBottom: 1, color: (() => { const pct = c.effectiveBudget > 0 ? c.remaining / c.effectiveBudget : 0; if (c.remaining < 0) return X.r; if (pct < 0.1) return X.r; if (pct < 0.2) return "#FF6B35"; if (pct < 0.35) return X.w; if (pct < 0.5) return "#84CC16"; return X.g; })() }}>{C(c.remaining)}</div>
+          {/* Bütçe rakamları */}
+          <div style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }} onClick={showHeaderDetail}>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 9, color: X.tm, fontWeight: 700, letterSpacing: 0.3, marginBottom: 2 }}>AYLIK BÜTÇE</div>
+              <div style={{ fontSize: 14, fontWeight: 800, color: X.t, fontFamily: fm }}>{C(c.effectiveBudget)}</div>
+            </div>
+            <div style={{ color: X.td, fontSize: 14, fontWeight: 300 }}>/</div>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 9, color: X.tm, fontWeight: 700, letterSpacing: 0.3, marginBottom: 2 }}>KALAN BÜTÇE</div>
+              <div style={{ fontSize: 14, fontWeight: 800, fontFamily: fm, borderBottom: "1px dotted rgba(0,0,0,0.2)", paddingBottom: 1, color: (() => { const pct = c.effectiveBudget > 0 ? c.remaining / c.effectiveBudget : 0; if (c.remaining < 0) return X.r; if (pct < 0.1) return X.r; if (pct < 0.2) return "#FF6B35"; if (pct < 0.35) return X.w; if (pct < 0.5) return "#84CC16"; return X.g; })() }}>{C(c.remaining)}</div>
+            </div>
           </div>
         </div>
       </div>
