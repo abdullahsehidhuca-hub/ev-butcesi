@@ -2038,7 +2038,7 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
 
   const handleFixedPay = expId => { setMonthField(mk, "fixedPaid", { ...md.fixedPaid, [expId]: { paid: true, date: td() } }); };
   const handleFixedUnpay = expId => { const fp = { ...md.fixedPaid }; delete fp[expId]; setMonthField(mk, "fixedPaid", fp); };
-  const handleCCSingle = entry => { setMonthField(mk, "ccSingle", [...md.ccSingle, entry]); flash("✓"); };
+  const handleCCSingle = entry => { setMonthField(mk, "ccSingle", [...(md.ccSingle || []), entry]); flash("✓"); };
   const deleteCCSingle = id => { setMonthField(mk, "ccSingle", (md.ccSingle || []).filter(e => e.id !== id)); };
   const editCCSingle = id => {
     const entry = (md.ccSingle || []).find(e => e.id === id); if (!entry) return;
