@@ -34,7 +34,7 @@ const EMERGENCY_BUFFER_PCT = 0.25; // serbest bütçenin %25'i acil tampon
 const MIN_TL_SAVINGS_PCT = 0.15;   // toplam birikimin en az %15'i TL olmalı
 
 const DD = { settings: { monthlyBudget: 450000, fixedExpenses: [], variableExpenses: [], cards: [], emergencyFundTarget: null, billTypes: [] }, months: {}, installmentPlans: [], debts: [], merchantMap: {}, goldRates: {}, usdRates: {}, eurRates: {}, liveRates: { USD: null, EUR: null, XAU: null, fetchedAt: null }, savings: { TRY: [], USD: [], EUR: [], XAU: [] }, lastClosedMonth: null, lastBackup: null };
-const DM = () => ({ budget: null, fixedPaid: {}, variableEntries: {}, ccSingle: [], cardLoaded: 0, debtPayments: {}, ccTransferred: {}, csvByCard: {}, finalSavings: null, receipts: [] });
+const DM = () => ({ budget: null, fixedPaid: {}, variableEntries: {}, ccSingle: [], accountEntries: [], cardLoaded: 0, debtPayments: {}, ccTransferred: {}, csvByCard: {}, finalSavings: null, receipts: [] });
 
 const STORAGE_KEY = "ev-butce-v11";
 
@@ -476,6 +476,7 @@ function calcMonth(data, m, extraInst) {
     return s;
   }, 0);
   const cardLoaded = md.cardLoaded || 0;
+  const accountTotal = (md.accountEntries || []).reduce((s, e) => s + e.amount, 0);
 
   // === ZARF (ENVELOPE) MANTIĞI ===
   // Değişken gider tahmini: 3 ay ortalaması veya beklenen tutarlar
@@ -496,7 +497,7 @@ function calcMonth(data, m, extraInst) {
   const envelopeOverflow = Math.max(0, categorizedCC - variableEstimate);
 
   // Toplam harcama: sabit + taksit + borç + kategorili CC + kategorisiz CC + kart + kalan zarf tahmini + taşma
-  const totalSpent = fixedTotal + installmentTotal + debtTotal + categorizedCC + uncategorizedCC + cardLoaded + envelopeRemaining + envelopeOverflow;
+  const totalSpent = fixedTotal + installmentTotal + debtTotal + categorizedCC + uncategorizedCC + cardLoaded + accountTotal + envelopeRemaining + envelopeOverflow;
   const remaining = effectiveBudget - totalSpent;
 
   // === GENEL HARCAMA KARTI — yeni model ===
@@ -522,7 +523,7 @@ function calcMonth(data, m, extraInst) {
   const availableForCard = cardUsable;
   const expectedCCSingle = hasActualSpending ? getCCSingleAvg(data, m) : 0;
 
-  return { effectiveBudget, baseBudget, carryoverDeficit, fixedTotal, variableTotal, ccSingleTotal, installmentTotal, debtTotal, cardLoaded, cardLoadMaxPerTx, cardLoadMaxTotal, cardLoadRemaining, availableForCard, totalSpent, remaining, savingsTarget, expectedCCSingle, ccTransferNeeded, expectedVariable, pendingVariable, variableEstimate, categorizedCC, uncategorizedCC, envelopeRemaining, envelopeOverflow, emergencyBuffer, cardUsable };
+  return { effectiveBudget, baseBudget, carryoverDeficit, fixedTotal, variableTotal, ccSingleTotal, accountTotal, installmentTotal, debtTotal, cardLoaded, cardLoadMaxPerTx, cardLoadMaxTotal, cardLoadRemaining, availableForCard, totalSpent, remaining, savingsTarget, expectedCCSingle, ccTransferNeeded, expectedVariable, pendingVariable, variableEstimate, categorizedCC, uncategorizedCC, envelopeRemaining, envelopeOverflow, emergencyBuffer, cardUsable };
 }
 function calcFlat(data, m, extraInst) {
   const md = data.months[m] || DM();
@@ -1520,11 +1521,12 @@ function CCInstallModal({ data, mk, cards, variableExpenses, onClose, onSave, on
       {sim && (
         <>
           <Card s={{ marginBottom: 10, background: "rgba(160,190,200,0.50)", border: `1px solid ${X.border}` }}>
-            <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 4, fontSize: 11, marginBottom: 4 }}>
-              <span style={{ color: X.td }}>Ay</span><span style={{ color: X.td, textAlign: "right" }}>Şu Anki Kalan</span><span style={{ color: X.p, textAlign: "right" }}>Taksit Sonrası Kalan</span>
+            <div style={{ background: "rgba(160,190,200,0.50)", borderRadius: 10, padding: "8px 10px", marginBottom: 10, fontSize: 11, color: X.tm, lineHeight: 1.5 }}><span style={{ fontWeight: 700, color: X.t }}>Harcanabilir bütçe: </span>Aylık bütçeden sabit giderler, taksitler ve borç ödemeleri düşüldükten sonra kalan tutardır.</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr", gap: 4, fontSize: 10, marginBottom: 6, paddingBottom: 8, borderBottom: `1px solid rgba(0,0,0,0.08)`, alignItems: "end" }}>
+              <span style={{ color: X.td }}>Ay</span><span style={{ color: X.td, textAlign: "right" }}>Şu anki harcanabilir</span><span style={{ color: X.p, textAlign: "right" }}>Taksit sonrası harcanabilir</span>
             </div>
             {sim.withS.map((ws, i) => { const wo = sim.without[i]; return (
-              <div key={ws.mk} style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 4, padding: "5px 0", borderBottom: `1px solid ${X.border}`, fontSize: 12 }}>
+              <div key={ws.mk} style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr", gap: 4, padding: "5px 0", borderBottom: `1px solid ${X.border}`, fontSize: 12 }}>
                 <span style={{ color: X.t }}>{ml(ws.mk).split(" ")[0]}</span>
                 <span style={{ color: wo.remaining >= 0 ? X.g : X.r, textAlign: "right", fontFamily: fm, fontWeight: 700 }}>{C(wo.remaining)}</span>
                 <span style={{ color: ws.remaining >= 0 ? X.g : X.r, textAlign: "right", fontFamily: fm, fontWeight: 700 }}>{C(ws.remaining)}</span>
@@ -1549,6 +1551,225 @@ function CCInstallModal({ data, mk, cards, variableExpenses, onClose, onSave, on
             <Btn onClick={save} c={X.g} s={{ flex: 1 }} disabled={!cardId}>✓ Taksiti Onayla ve Kaydet</Btn>
             <Btn onClick={() => setSim(null)} v="outline" c={X.td} s={{ flex: 1 }}>Geri</Btn>
           </div>
+        </>
+      )}
+    </Modal>
+  );
+}
+
+function AccountPayModal({ variableExpenses, onClose, onSave }) {
+  const [a, sa] = useState(""); const [n, sn] = useState(""); const [d, sd] = useState(td());
+  const [categoryId, setCategoryId] = useState(""); const [userChanged, setUserChanged] = useState(false);
+
+  useEffect(() => {
+    if (userChanged) return;
+    const matched = matchCategory(n, variableExpenses || []);
+    if (matched) setCategoryId(matched);
+  }, [n, userChanged, variableExpenses]);
+
+  return (
+    <Modal title="🏦 Hesaptan Ödeme" onClose={onClose}>
+      <Inp label="Tutar" type="number" value={a} onChange={sa} suffix="₺" />
+      <Inp label="Açıklama" value={n} onChange={sn} placeholder="Örn: Elektrik faturası, Vodafone" />
+      {(variableExpenses || []).length > 0 && (
+        <Sel label="Kategori" value={categoryId} onChange={v => { setCategoryId(v); setUserChanged(true); }} options={[{ v: "", l: "— Otomatik / Kategorisiz —" }, ...(variableExpenses || []).map(ve => ({ v: ve.id, l: (ve.icon || "📋") + " " + ve.name }))]} />
+      )}
+      {categoryId && !userChanged && <div style={{ color: X.g, fontSize: 11, marginTop: -8, marginBottom: 12 }}>✓ Anahtar kelime eşleşmesi bulundu</div>}
+      <Inp label="Tarih" type="date" value={d} onChange={sd} />
+      <Btn onClick={() => { if (!a) return; onSave({ id: uid(), amount: parseFloat(a), note: n, date: d, categoryId: categoryId || null }); onClose(); }}>🏦 Kaydet</Btn>
+    </Modal>
+  );
+}
+
+function CCCombinedModal({ data, mk, cards, variableExpenses, onClose, onSaveSingle, onSaveInstall, onDeletePlan, onEditPlan }) {
+  const [tab, setTab] = useState("single");
+  const [a, sa] = useState(""); const [n, sn] = useState(""); const [d, sd] = useState(td());
+  const [cardId, setCardId] = useState(cards[0]?.id || "");
+  const [categoryId, setCategoryId] = useState(""); const [userChanged, setUserChanged] = useState(false);
+  const [ia, sia] = useState(""); const [mo, smo] = useState("3");
+  const [iCardId, setICardId] = useState(cards[0]?.id || "");
+  const [iCategoryId, setICategoryId] = useState(""); const [iUserChanged, setIUserChanged] = useState(false);
+  const [iNote, setINote] = useState("");
+  const [startMk, setStartMk] = useState(nmk(mk));
+  const [sim, setSim] = useState(null);
+  const [editingId, setEditingId] = useState(null);
+  const [editNote, setEditNote] = useState(""); const [editTotal, setEditTotal] = useState("");
+  const [editMonths, setEditMonths] = useState(""); const [editStartMk, setEditStartMk] = useState("");
+  const [editCardId, setEditCardId] = useState("");
+
+  const t = parseFloat(ia) || 0; const m2 = parseInt(mo) || 1; const mp = Math.ceil(t / m2);
+  const startOptions = []; let sm = mk;
+  for (let i = 0; i < 4; i++) { startOptions.push({ v: sm, l: ml(sm) + (i === 0 ? " (bu ay)" : "") }); sm = nmk(sm); }
+
+  useEffect(() => {
+    if (userChanged) return;
+    const matched = matchCategory(n, variableExpenses || []);
+    if (matched) setCategoryId(matched);
+  }, [n, userChanged, variableExpenses]);
+
+  useEffect(() => {
+    if (iUserChanged) return;
+    const matched = matchCategory(iNote, variableExpenses || []);
+    if (matched) setICategoryId(matched);
+  }, [iNote, iUserChanged, variableExpenses]);
+
+  const doSim = () => {
+    if (!t || !m2) return;
+    const plan = { startMonth: startMk, months: m2, monthlyPayment: mp, totalAmount: t };
+    const without = [], withS = []; let m3 = startMk;
+    for (let i = 0; i < Math.min(m2 + 2, 8); i++) { without.push({ mk: m3, ...calcMonth(data, m3, null) }); withS.push({ mk: m3, ...calcMonth(data, m3, plan) }); m3 = nmk(m3); }
+    let deficit = null; withS.forEach(ws => { if (ws.remaining < 0 && !deficit) deficit = ws.mk; });
+    setSim({ plan, without, withS, deficit });
+  };
+
+  const saveInstall = () => {
+    if (!t || !iCardId) return;
+    onSaveInstall({ id: uid(), totalAmount: t, monthlyPayment: mp, months: m2, rate: 0, startMonth: startMk, remainingMonths: m2, note: iNote, merchantName: "", cardId: iCardId, categoryId: iCategoryId || null, createdDate: td() });
+    onClose();
+  };
+
+  const activePlans = data.installmentPlans.filter(p => {
+    let cur = p.startMonth;
+    for (let i = 0; i < p.months; i++) { if (cur >= mk) return true; cur = nmk(cur); }
+    return false;
+  });
+
+  const tabStyle = (active, color) => ({
+    flex: 1, padding: "8px", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700,
+    cursor: "pointer", fontFamily: ff,
+    background: active ? "#fff" : "transparent",
+    color: active ? color : X.td,
+    boxShadow: active ? "0 1px 4px rgba(0,0,0,0.1)" : "none"
+  });
+
+  return (
+    <Modal title="💳 Kredi Kartı" onClose={onClose}>
+      <div style={{ display: "flex", background: "rgba(160,190,200,0.50)", borderRadius: 10, padding: 3, marginBottom: 16, gap: 3 }}>
+        <button onClick={() => setTab("single")} style={tabStyle(tab === "single", X.b)}>Tek Çekim</button>
+        <button onClick={() => setTab("install")} style={tabStyle(tab === "install", X.p)}>Taksitli</button>
+      </div>
+
+      {tab === "single" && (
+        <>
+          {cards.length === 0
+            ? <div style={{ color: X.w, fontSize: 13, marginBottom: 12, padding: 10, background: X.wd, borderRadius: 8 }}>⚠️ Önce Ayarlar → Kartlarım'dan en az bir kart eklemelisiniz.</div>
+            : <Sel label="Hangi Kart" value={cardId} onChange={setCardId} options={cards.map(c => ({ v: c.id, l: c.name }))} />}
+          <Inp label="Tutar" type="number" value={a} onChange={sa} suffix="₺" />
+          <Inp label="Harcama Açıklaması" value={n} onChange={sn} placeholder="Örn: Shell Çumra, File market" />
+          {(variableExpenses || []).length > 0 && (
+            <Sel label="Kategori" value={categoryId} onChange={v => { setCategoryId(v); setUserChanged(true); }} options={[{ v: "", l: "— Otomatik / Kategorisiz —" }, ...(variableExpenses || []).map(ve => ({ v: ve.id, l: (ve.icon || "📋") + " " + ve.name }))]} />
+          )}
+          {categoryId && !userChanged && <div style={{ color: X.g, fontSize: 11, marginTop: -8, marginBottom: 12 }}>✓ Anahtar kelime eşleşmesi bulundu</div>}
+          <Inp label="Tarih" type="date" value={d} onChange={sd} />
+          <Btn onClick={() => { if (!a || !cardId) return; onSaveSingle({ id: uid(), amount: parseFloat(a), note: n, merchantName: "", date: d, cardId, categoryId: categoryId || null }); onClose(); }} disabled={!cardId}>💳 Kaydet</Btn>
+        </>
+      )}
+
+      {tab === "install" && (
+        <>
+          {activePlans.length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ color: X.tm, fontSize: 11, fontWeight: 700, marginBottom: 8 }}>AKTİF TAKSİT PLANLARI</div>
+              {activePlans.map(p => {
+                const cardName = cards.find(c2 => c2.id === p.cardId)?.name || "—";
+                let paidCount = 0; let cur = p.startMonth;
+                for (let i = 0; i < p.months; i++) { if (cur < mk) paidCount++; else break; cur = nmk(cur); }
+                const remainingCount = p.months - paidCount;
+                const isEditing = editingId === p.id;
+                const startEdit = () => { setEditingId(p.id); setEditNote(p.note || ""); setEditTotal(String(p.totalAmount || 0)); setEditMonths(String(p.months || 1)); setEditStartMk(p.startMonth || mk); setEditCardId(p.cardId || cards[0]?.id || ""); };
+                const cancelEdit = () => setEditingId(null);
+                const saveEdit = () => {
+                  const newTotal = parseFloat(editTotal) || p.totalAmount;
+                  const newMonths = parseInt(editMonths) || p.months;
+                  const newMp = Math.ceil(newTotal / newMonths);
+                  const newRemaining = (() => { let r = 0; let c2 = editStartMk; for (let i = 0; i < newMonths; i++) { if (c2 >= mk) r++; c2 = nmk(c2); } return r; })();
+                  onEditPlan({ ...p, note: editNote, totalAmount: newTotal, months: newMonths, monthlyPayment: newMp, startMonth: editStartMk, cardId: editCardId, remainingMonths: newRemaining });
+                  setEditingId(null);
+                };
+                return (
+                  <Card key={p.id} s={{ marginBottom: 8, background: "rgba(124,58,237,0.08)", border: `1px solid rgba(124,58,237,0.15)` }}>
+                    {isEditing ? (
+                      <>
+                        <Inp label="Açıklama" value={editNote} onChange={setEditNote} />
+                        <Inp label="Toplam Tutar" type="number" value={editTotal} onChange={setEditTotal} suffix="₺" />
+                        <Inp label="Taksit Sayısı" type="number" value={editMonths} onChange={setEditMonths} />
+                        <Sel label="İlk Taksit Ayı" value={editStartMk} onChange={setEditStartMk} options={startOptions} />
+                        <Sel label="Hangi Kart" value={editCardId} onChange={setEditCardId} options={cards.map(c => ({ v: c.id, l: c.name }))} />
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <Btn onClick={saveEdit} c={X.p} s={{ flex: 1 }}>Kaydet</Btn>
+                          <Btn onClick={cancelEdit} v="outline" c={X.td} s={{ flex: 1 }}>İptal</Btn>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                          <div>
+                            <div style={{ color: X.t, fontWeight: 700, fontSize: 13 }}>{p.note || "İsimsiz taksit"}</div>
+                            <div style={{ color: X.td, fontSize: 11, marginTop: 2 }}>💳 {cardName} · {paidCount}/{p.months} ödendi · {remainingCount} kaldı · Toplam: {C(p.totalAmount)}</div>
+                          </div>
+                          <div style={{ display: "flex", gap: 4 }}>
+                            <button onClick={startEdit} style={{ background: "none", border: "none", color: X.b, fontSize: 16, cursor: "pointer", padding: "4px 6px" }}>✎</button>
+                            <button onClick={() => { if (confirm("Bu taksit planını silmek istiyor musunuz?")) { onDeletePlan(p.id); } }} style={{ background: "none", border: "none", color: X.r, fontSize: 16, cursor: "pointer", padding: "4px 6px" }}>✕</button>
+                          </div>
+                        </div>
+                        <div style={{ color: X.p, fontFamily: fm, fontWeight: 700, fontSize: 15, marginTop: 6 }}>{C(p.monthlyPayment)}<span style={{ color: X.td, fontSize: 11, fontWeight: 400 }}>/ay</span></div>
+                      </>
+                    )}
+                  </Card>
+                );
+              })}
+              <div style={{ borderBottom: `1px solid rgba(0,0,0,0.08)`, marginBottom: 12, paddingBottom: 4 }}>
+                <div style={{ color: X.tm, fontSize: 11, fontWeight: 700 }}>YENİ TAKSİTLİ İŞLEM EKLE</div>
+              </div>
+            </div>
+          )}
+          {cards.length === 0
+            ? <div style={{ color: X.w, fontSize: 13, marginBottom: 12, padding: 10, background: X.wd, borderRadius: 8 }}>⚠️ Önce Ayarlar → Kartlarım'dan en az bir kart eklemelisiniz.</div>
+            : <Sel label="Hangi Kart" value={iCardId} onChange={setICardId} options={cards.map(c => ({ v: c.id, l: c.name }))} />}
+          <Inp label="Toplam Tutar" type="number" value={ia} onChange={v2 => { sia(v2); setSim(null); }} suffix="₺" placeholder="0" />
+          <Inp label="Taksit Sayısı" type="number" value={mo} onChange={v2 => { smo(v2); setSim(null); }} />
+          <Sel label="İlk Taksit Ayı" value={startMk} onChange={v2 => { setStartMk(v2); setSim(null); }} options={startOptions} />
+          {t > 0 && m2 > 0 && <div style={{ color: X.tm, fontSize: 13, marginBottom: 12 }}>Aylık taksit: <span style={{ color: X.p, fontWeight: 800, fontFamily: fm, fontSize: 16 }}>{C(mp)}</span> × {m2} ay · {ml(startMk)}'dan itibaren</div>}
+          <Inp label="Harcama Açıklaması" value={iNote} onChange={setINote} placeholder="Örn: Saloni yatak odası" />
+          {(variableExpenses || []).length > 0 && (
+            <Sel label="Kategori" value={iCategoryId} onChange={v => { setICategoryId(v); setIUserChanged(true); }} options={[{ v: "", l: "— Otomatik / Kategorisiz —" }, ...(variableExpenses || []).map(ve => ({ v: ve.id, l: (ve.icon || "📋") + " " + ve.name }))]} />
+          )}
+          {iCategoryId && !iUserChanged && <div style={{ color: X.g, fontSize: 11, marginTop: -8, marginBottom: 12 }}>✓ Anahtar kelime eşleşmesi bulundu</div>}
+          {!sim && (
+            <div style={{ display: "flex", gap: 8 }}>
+              <Btn onClick={saveInstall} c={X.p} s={{ flex: 1 }} disabled={!iCardId}>📅 Direkt Kaydet</Btn>
+              <Btn onClick={doSim} v="outline" c={X.p} s={{ flex: 1 }}>🔮 Hesapla</Btn>
+            </div>
+          )}
+          {sim && (
+            <>
+              <Card s={{ marginBottom: 10, background: "rgba(160,190,200,0.50)", border: `1px solid ${X.border}` }}>
+                <div style={{ background: "rgba(160,190,200,0.50)", borderRadius: 10, padding: "8px 10px", marginBottom: 10, fontSize: 11, color: X.tm, lineHeight: 1.5 }}><span style={{ fontWeight: 700, color: X.t }}>Harcanabilir bütçe: </span>Aylık bütçeden sabit giderler, taksitler ve borç ödemeleri düşüldükten sonra kalan tutardır.</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr", gap: 4, fontSize: 10, marginBottom: 6, paddingBottom: 8, borderBottom: `1px solid rgba(0,0,0,0.08)`, alignItems: "end" }}>
+                  <span style={{ color: X.td }}>Ay</span><span style={{ color: X.td, textAlign: "right" }}>Şu anki harcanabilir</span><span style={{ color: X.p, textAlign: "right" }}>Taksit sonrası harcanabilir</span>
+                </div>
+                {sim.withS.map((ws, i) => { const wo = sim.without[i]; return (
+                  <div key={ws.mk} style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr", gap: 4, padding: "5px 0", borderBottom: `1px solid ${X.border}`, fontSize: 12 }}>
+                    <span style={{ color: X.t }}>{ml(ws.mk).split(" ")[0]}</span>
+                    <span style={{ color: wo.remaining >= 0 ? X.g : X.r, textAlign: "right", fontFamily: fm, fontWeight: 700 }}>{C(wo.remaining)}</span>
+                    <span style={{ color: ws.remaining >= 0 ? X.g : X.r, textAlign: "right", fontFamily: fm, fontWeight: 700 }}>{C(ws.remaining)}</span>
+                  </div>); })}
+              </Card>
+              {(() => {
+                const minMonth = sim.withS.reduce((min, ws) => ws.remaining < min.remaining ? ws : min, sim.withS[0]);
+                const hasDeficit = sim.deficit;
+                const budgetTight = !hasDeficit && minMonth.remaining < minMonth.effectiveBudget * 0.05;
+                const budgetHard = budgetTight && minMonth.remaining < 0;
+                if (hasDeficit) { const defMonth = sim.withS.find(ws => ws.remaining < 0); return <div style={{ color: X.r, fontSize: 13, fontWeight: 600, marginBottom: 10, lineHeight: 1.5 }}>🚨 Bu taksitli işlem bütçenizi zorlar. {ml(sim.deficit)} ayında {C(Math.abs(defMonth?.remaining || 0))} açık oluşuyor.</div>; }
+                if (budgetTight) { return <div style={{ color: budgetHard ? X.r : X.w, fontSize: 13, fontWeight: 600, marginBottom: 10, lineHeight: 1.5 }}>⚠️ Bu taksitli işlem serbest bütçenizi daraltır. {ml(minMonth.mk)} ayında kalan bütçe {C(minMonth.remaining)} olacak.</div>; }
+                return <div style={{ color: X.g, fontSize: 13, fontWeight: 600, marginBottom: 10, lineHeight: 1.5 }}>✅ Bu taksitli işlemi yapabilirsiniz. En düşük aylık kalan: {C(minMonth.remaining)} ({ml(minMonth.mk)}).</div>;
+              })()}
+              <div style={{ display: "flex", gap: 8 }}>
+                <Btn onClick={saveInstall} c={X.g} s={{ flex: 1 }} disabled={!iCardId}>✓ Taksiti Onayla ve Kaydet</Btn>
+                <Btn onClick={() => setSim(null)} v="outline" c={X.td} s={{ flex: 1 }}>Geri</Btn>
+              </div>
+            </>
+          )}
         </>
       )}
     </Modal>
@@ -2065,6 +2286,7 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
   const handleDebtPay = debtId => { setMonthField(mk, "debtPayments", { ...md.debtPayments, [debtId]: { paid: true, date: td() } }); setData(d => ({ ...d, debts: d.debts.map(db => db.id === debtId ? { ...db, remainingMonths: Math.max(0, db.remainingMonths - 1) } : db) })); flash("✓"); };
   const undoDebtPay = debtId => { const dp = { ...md.debtPayments }; delete dp[debtId]; setMonthField(mk, "debtPayments", dp); setData(d => ({ ...d, debts: d.debts.map(db => db.id === debtId ? { ...db, remainingMonths: db.remainingMonths + 1 } : db) })); };
   const handleInstSave = plan => { setData(d => ({ ...d, installmentPlans: [...d.installmentPlans, plan] })); flash("✓ Taksit kaydedildi"); };
+  const handleAccountPay = entry => { setMonthField(mk, "accountEntries", [...(md.accountEntries || []), entry]); flash("✓"); };
   const deleteInstallment = id => { setData(d => ({ ...d, installmentPlans: d.installmentPlans.filter(p => p.id !== id) })); };
   const editInstallment = (id, updates) => {
     if (updates) {
@@ -2233,25 +2455,18 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
 
         return (
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, margin: "12px 0" }}>
-        <div onClick={() => setModal("ccSingle")} style={{ background: "rgba(29,78,216,0.24)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(29,78,216,0.28)", borderRadius: 16, padding: "14px 12px", cursor: "pointer", textAlign: "center", position: "relative", boxShadow: neu }}>
+        <div onClick={() => setModal("ccCombined")} style={{ background: "rgba(29,78,216,0.22)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(29,78,216,0.28)", borderRadius: 16, padding: "14px 12px", cursor: "pointer", textAlign: "center", position: "relative", boxShadow: neu }}>
           <InfoBtn onClick={() => setInfo("ccSingle")} />
           <div style={{ fontSize: 24, marginBottom: 4 }}>💳</div>
-          <div style={{ color: X.b, fontSize: 13, fontWeight: 800 }}>Kredi Kartı Tek Çekim</div>
-          <div style={{ color: X.t, fontSize: 18, fontWeight: 800, fontFamily: fm, marginTop: 2 }}>{C(c.ccSingleTotal)}</div>
+          <div style={{ color: X.b, fontSize: 13, fontWeight: 800 }}>Kredi Kartı</div>
+          <div style={{ color: X.t, fontSize: 18, fontWeight: 800, fontFamily: fm, marginTop: 2 }}>{C(c.ccSingleTotal + c.installmentTotal)}</div>
+          {activePlans.length > 0 && <div style={{ color: X.td, fontSize: 10, marginTop: 3 }}>{activePlans.length} taksit planı aktif</div>}
         </div>
-        <div onClick={() => setModal("ccInstall")} style={{ background: "rgba(124,58,237,0.20)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(124,58,237,0.26)", borderRadius: 16, padding: "14px 12px", cursor: "pointer", textAlign: "center", position: "relative", boxShadow: neu }}>
-          <InfoBtn onClick={() => setInfo("ccInstall")} />
-          <div style={{ fontSize: 24, marginBottom: 4 }}>📅</div>
-          <div style={{ color: X.p, fontSize: 13, fontWeight: 800 }}>Kredi Kartı Taksitli</div>
-          <div style={{ color: X.t, fontSize: 18, fontWeight: 800, fontFamily: fm, marginTop: 2 }}>{C(c.installmentTotal)}</div>
-          {activePlans.length > 0 && (
-            <div style={{ marginTop: 4 }}>
-              {c.installmentTotal === 0 && nextMonthInst > 0 && (
-                <div style={{ color: X.p, fontSize: 10, fontWeight: 600 }}>{ml(nextMk)}'dan {C(nextMonthInst)}/ay</div>
-              )}
-              <div style={{ color: X.td, fontSize: 10 }}>{activePlans.length} plan · toplam {C(totalCommitted)}</div>
-            </div>
-          )}
+        <div onClick={() => setModal("accountPay")} style={{ background: "rgba(15,118,110,0.22)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(15,118,110,0.28)", borderRadius: 16, padding: "14px 12px", cursor: "pointer", textAlign: "center", position: "relative", boxShadow: neu }}>
+          <div style={{ fontSize: 24, marginBottom: 4 }}>🏦</div>
+          <div style={{ color: X.g, fontSize: 13, fontWeight: 800 }}>Hesaptan Ödeme</div>
+          <div style={{ color: X.t, fontSize: 18, fontWeight: 800, fontFamily: fm, marginTop: 2 }}>{C(c.accountTotal)}</div>
+          {(md.accountEntries || []).length > 0 && <div style={{ color: X.td, fontSize: 10, marginTop: 3 }}>{(md.accountEntries || []).length} işlem</div>}
         </div>
         <div onClick={() => setModal("cardLoad")} style={{ background: "rgba(15,118,110,0.32)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(15,118,110,0.30)", borderRadius: 16, padding: "14px 12px", cursor: "pointer", textAlign: "center", position: "relative", boxShadow: neu }}>
           <InfoBtn onClick={() => setInfo("cardLoad")} />
@@ -2398,9 +2613,9 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
         {data.settings.fixedExpenses.map(exp => { const paid = md.fixedPaid?.[exp.id]; return <ItemRow key={exp.id} label={exp.name} sub={`${exp.paymentMethod === "cc" ? "💳" : "🏦"}${exp.autoPayment ? " ⚡oto" : ""}${exp.increaseDate ? " • Artış: " + exp.increaseDate : ""}`} value={exp.amount} color={paid ? X.g : X.t} toggle={!!paid} toggleOn={() => handleFixedPay(exp.id)} toggleOff={() => handleFixedUnpay(exp.id)} toggleLabelOn="Ödendi" toggleLabelOff="Öde" />; })}
       </CatButton>
 
-      {modal === "ccSingle" && <CCSingleModal cards={data.settings.cards || []} variableExpenses={data.settings.variableExpenses || []} onClose={() => setModal(null)} onSave={handleCCSingle} />}
-      {modal === "ccInstall" && <CCInstallModal data={data} mk={mk} cards={data.settings.cards || []} variableExpenses={data.settings.variableExpenses || []} onClose={() => setModal(null)} onSave={handleInstSave} onDeletePlan={deleteInstallment} onEditPlan={editInstallment} />}
-      {modal === "simulate" && <CCInstallModal data={data} mk={mk} cards={data.settings.cards || []} variableExpenses={data.settings.variableExpenses || []} onClose={() => setModal(null)} onSave={handleInstSave} onDeletePlan={deleteInstallment} onEditPlan={editInstallment} startInSim={true} />}
+      {modal === "ccCombined" && <CCCombinedModal data={data} mk={mk} cards={data.settings.cards || []} variableExpenses={data.settings.variableExpenses || []} onClose={() => setModal(null)} onSaveSingle={handleCCSingle} onSaveInstall={handleInstSave} onDeletePlan={deleteInstallment} onEditPlan={editInstallment} />}
+      {modal === "accountPay" && <AccountPayModal variableExpenses={data.settings.variableExpenses || []} onClose={() => setModal(null)} onSave={handleAccountPay} />}
+      {modal === "simulate" && <CCCombinedModal data={data} mk={mk} cards={data.settings.cards || []} variableExpenses={data.settings.variableExpenses || []} onClose={() => setModal(null)} onSaveSingle={handleCCSingle} onSaveInstall={handleInstSave} onDeletePlan={deleteInstallment} onEditPlan={editInstallment} />}
       {modal === "cardLoad" && <CardLoadModal currentLoaded={md.cardLoaded || 0} maxPerTx={c.cardLoadMaxPerTx} maxTotal={c.cardLoadMaxTotal} onClose={() => setModal(null)} onSave={handleCardLoad} onEdit={editCardLoad} />}
       {modal === "debtPay" && <DebtPayModal debts={data.debts} debtPayments={md.debtPayments} data={data} mk={mk} onClose={() => setModal(null)} onPay={handleDebtPay} onUndo={undoDebtPay} />}
       {modal === "budget" && <BudgetModal mk={mk} cur={md.budget || data.settings.monthlyBudget} def={data.settings.monthlyBudget} onSave={v => setMonthField(mk, "budget", v)} onClose={() => setModal(null)} />}
