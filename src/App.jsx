@@ -2392,7 +2392,7 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
         const hasTodayOrOverdue = ccOverdue.length > 0 || filteredUpcoming.some(u => u.diff === 0);
         return (
           <div style={{ margin: "0 0 10px" }}>
-            <div onClick={() => toggle("payments")} style={{ background: hasTodayOrOverdue ? X.rd : X.wd, border: `1px solid ${topColor}40`, borderRadius: expanded === "payments" ? "14px 14px 0 0" : 14, padding: "14px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div onClick={() => toggle("payments")} style={{ background: hasTodayOrOverdue ? X.rd : X.wd, border: `1px solid ${topColor}40`, borderRadius: expanded === "payments" ? "14px 14px 0 0" : 14, padding: "10px 14px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <span style={{ fontSize: 20 }}>📅</span>
                 <div>
@@ -2454,52 +2454,52 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
         }, 0);
 
         return (
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, margin: "12px 0" }}>
-        <div onClick={() => setModal("ccCombined")} style={{ background: "rgba(29,78,216,0.22)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(29,78,216,0.28)", borderRadius: 16, padding: "14px 12px", cursor: "pointer", textAlign: "center", position: "relative", boxShadow: neu }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, margin: "8px 0" }}>
+        <div onClick={() => setModal("ccCombined")} style={{ background: "rgba(29,78,216,0.22)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(29,78,216,0.28)", borderRadius: 16, padding: "10px 8px", cursor: "pointer", textAlign: "center", position: "relative", boxShadow: neu }}>
           <InfoBtn onClick={() => setInfo("ccSingle")} />
-          <div style={{ fontSize: 24, marginBottom: 4 }}>💳</div>
-          <div style={{ color: X.b, fontSize: 13, fontWeight: 800 }}>Kredi Kartı</div>
-          <div style={{ color: X.t, fontSize: 18, fontWeight: 800, fontFamily: fm, marginTop: 2 }}>{C(c.ccSingleTotal + c.installmentTotal)}</div>
+          <div style={{ fontSize: 20, marginBottom: 3 }}>💳</div>
+          <div style={{ color: X.b, fontSize: 11, fontWeight: 800 }}>Kredi Kartı</div>
+          <div style={{ color: X.t, fontSize: 14, fontWeight: 800, fontFamily: fm, marginTop: 1 }}>{C(c.ccSingleTotal + c.installmentTotal)}</div>
           {activePlans.length > 0 && <div style={{ color: X.td, fontSize: 10, marginTop: 3 }}>{activePlans.length} taksit planı aktif</div>}
         </div>
-        <div onClick={() => setModal("accountPay")} style={{ background: "rgba(15,118,110,0.22)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(15,118,110,0.28)", borderRadius: 16, padding: "14px 12px", cursor: "pointer", textAlign: "center", position: "relative", boxShadow: neu }}>
-          <div style={{ fontSize: 24, marginBottom: 4 }}>🏦</div>
-          <div style={{ color: X.g, fontSize: 13, fontWeight: 800 }}>Hesaptan Ödeme</div>
-          <div style={{ color: X.t, fontSize: 18, fontWeight: 800, fontFamily: fm, marginTop: 2 }}>{C(c.accountTotal)}</div>
+        <div onClick={() => setModal("accountPay")} style={{ background: "rgba(15,118,110,0.22)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(15,118,110,0.28)", borderRadius: 16, padding: "10px 8px", cursor: "pointer", textAlign: "center", position: "relative", boxShadow: neu }}>
+          <div style={{ fontSize: 20, marginBottom: 3 }}>🏦</div>
+          <div style={{ color: X.g, fontSize: 11, fontWeight: 800 }}>Hesaptan Ödeme</div>
+          <div style={{ color: X.t, fontSize: 14, fontWeight: 800, fontFamily: fm, marginTop: 1 }}>{C(c.accountTotal)}</div>
           {(md.accountEntries || []).length > 0 && <div style={{ color: X.td, fontSize: 10, marginTop: 3 }}>{(md.accountEntries || []).length} işlem</div>}
         </div>
-        <div onClick={() => setModal("cardLoad")} style={{ background: "rgba(15,118,110,0.32)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(15,118,110,0.30)", borderRadius: 16, padding: "14px 12px", cursor: "pointer", textAlign: "center", position: "relative", boxShadow: neu }}>
+        <div onClick={() => setModal("cardLoad")} style={{ background: "rgba(15,118,110,0.32)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(15,118,110,0.30)", borderRadius: 16, padding: "10px 8px", cursor: "pointer", textAlign: "center", position: "relative", boxShadow: neu }}>
           <InfoBtn onClick={() => setInfo("cardLoad")} />
-          <div style={{ fontSize: 24, marginBottom: 4 }}>🛒</div>
-          <div style={{ color: X.g, fontSize: 13, fontWeight: 800 }}>Genel Harcama Kartı</div>
-          <div style={{ color: X.t, fontSize: 18, fontWeight: 800, fontFamily: fm, marginTop: 2 }}>{C(md.cardLoaded || 0)} <span style={{ color: X.td, fontSize: 11 }}>/ {C(c.cardLoadMaxTotal)}</span></div>
+          <div style={{ fontSize: 20, marginBottom: 3 }}>🛒</div>
+          <div style={{ color: X.g, fontSize: 11, fontWeight: 800 }}>Genel Harcama Kartı</div>
+          <div style={{ color: X.t, fontSize: 14, fontWeight: 800, fontFamily: fm, marginTop: 1 }}>{C(md.cardLoaded || 0)} <span style={{ color: X.td, fontSize: 11 }}>/ {C(c.cardLoadMaxTotal)}</span></div>
         </div>
-        <div onClick={() => setModal("debtPay")} style={{ background: "rgba(180,83,9,0.28)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(180,83,9,0.28)", borderRadius: 16, padding: "14px 12px", cursor: "pointer", textAlign: "center", position: "relative", boxShadow: neu }}>
+        <div onClick={() => setModal("debtPay")} style={{ background: "rgba(180,83,9,0.28)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(180,83,9,0.28)", borderRadius: 16, padding: "10px 8px", cursor: "pointer", textAlign: "center", position: "relative", boxShadow: neu }}>
           <InfoBtn onClick={() => setInfo("debt")} />
-          <div style={{ fontSize: 24, marginBottom: 4 }}>📌</div>
-          <div style={{ color: X.w, fontSize: 13, fontWeight: 800 }}>Borç Ödemeleri</div>
-          <div style={{ color: X.t, fontSize: 18, fontWeight: 800, fontFamily: fm, marginTop: 2 }}>{C(c.debtTotal)}</div>
+          <div style={{ fontSize: 20, marginBottom: 3 }}>📌</div>
+          <div style={{ color: X.w, fontSize: 11, fontWeight: 800 }}>Borç Ödemeleri</div>
+          <div style={{ color: X.t, fontSize: 14, fontWeight: 800, fontFamily: fm, marginTop: 1 }}>{C(c.debtTotal)}</div>
         </div>
 
         {/* Receipt + Simulation half width */}
-        <div onClick={() => setModal("receipt")} style={{ background: "rgba(194,65,12,0.20)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(194,65,12,0.26)", borderRadius: 16, padding: "14px 12px", cursor: "pointer", textAlign: "center", position: "relative", boxShadow: neu }}>
-          <div style={{ fontSize: 24, marginBottom: 4 }}>📷</div>
-          <div style={{ color: X.o, fontSize: 13, fontWeight: 800 }}>Market Fişi</div>
+        <div onClick={() => setModal("receipt")} style={{ background: "rgba(194,65,12,0.20)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(194,65,12,0.26)", borderRadius: 16, padding: "10px 8px", cursor: "pointer", textAlign: "center", position: "relative", boxShadow: neu }}>
+          <div style={{ fontSize: 20, marginBottom: 3 }}>📷</div>
+          <div style={{ color: X.o, fontSize: 11, fontWeight: 800 }}>Market Fişi</div>
         </div>
-        <div onClick={() => setModal("simulate")} style={{ background: "rgba(124,58,237,0.18)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(124,58,237,0.24)", borderRadius: 16, padding: "14px 12px", cursor: "pointer", textAlign: "center", position: "relative", boxShadow: neu }}>
-          <div style={{ fontSize: 24, marginBottom: 4 }}>🔮</div>
-          <div style={{ color: X.p, fontSize: 13, fontWeight: 800 }}>Taksit Simülasyonu</div>
+        <div onClick={() => setModal("simulate")} style={{ background: "rgba(124,58,237,0.18)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(124,58,237,0.24)", borderRadius: 16, padding: "10px 8px", cursor: "pointer", textAlign: "center", position: "relative", boxShadow: neu }}>
+          <div style={{ fontSize: 20, marginBottom: 3 }}>🔮</div>
+          <div style={{ color: X.p, fontSize: 11, fontWeight: 800 }}>Taksit Simülasyonu</div>
         </div>
 
         {/* Savings full width */}
-        <div style={{ gridColumn: "1 / -1", background: "rgba(15,118,110,0.35)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(15,118,110,0.30)", borderRadius: 16, padding: "14px 16px", position: "relative", minHeight: 92, display: "flex", flexDirection: "column", justifyContent: "space-between", boxShadow: neu }}>
+        <div style={{ gridColumn: "1 / -1", background: "rgba(15,118,110,0.35)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(15,118,110,0.30)", borderRadius: 16, padding: "10px 14px", position: "relative", minHeight: 74, display: "flex", flexDirection: "column", justifyContent: "space-between", boxShadow: neu }}>
           <InfoBtn onClick={() => setInfo("savings")} />
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
-            <span style={{ fontSize: 24 }}>💰</span>
-            <div style={{ color: X.g, fontSize: 14, fontWeight: 800 }}>Bu Ayın Birikimi</div>
+            <span style={{ fontSize: 20 }}>💰</span>
+            <div style={{ color: X.g, fontSize: 11, fontWeight: 800 }}>Bu Ayın Birikimi</div>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
-            <span style={{ color: c.remaining >= 0 ? X.g : X.r, fontSize: 22, fontWeight: 800, fontFamily: fm }}>{C(Math.max(0, c.remaining))}</span>
+            <span style={{ color: c.remaining >= 0 ? X.g : X.r, fontSize: 17, fontWeight: 800, fontFamily: fm }}>{C(Math.max(0, c.remaining))}</span>
             <span style={{ color: X.tm, fontSize: 13, fontFamily: fm }}>/ {C(c.savingsTarget)} hedef</span>
           </div>
           <div style={{ height: 6, borderRadius: 3, boxShadow: neuIn }}>
@@ -2520,7 +2520,7 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
         const uncat = cats._uncategorized || 0;
         return (
           <div style={{ margin: "10px 0" }}>
-            <div onClick={() => toggle("envelopes")} style={{ ...glassSolid, borderRadius: 14, padding: "12px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div onClick={() => toggle("envelopes")} style={{ ...glassSolid, borderRadius: 14, padding: "10px 14px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <span style={{ fontSize: 16 }}>📊</span>
                 <span style={{ color: X.t, fontSize: 13, fontWeight: 700 }}>Değişken Gider Takibi</span>
@@ -2612,6 +2612,62 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
         {data.settings.fixedExpenses.length === 0 && <div style={{ color: X.td, fontSize: 12, padding: 8 }}>Ayarlar'dan ekleyin</div>}
         {data.settings.fixedExpenses.map(exp => { const paid = md.fixedPaid?.[exp.id]; return <ItemRow key={exp.id} label={exp.name} sub={`${exp.paymentMethod === "cc" ? "💳" : "🏦"}${exp.autoPayment ? " ⚡oto" : ""}${exp.increaseDate ? " • Artış: " + exp.increaseDate : ""}`} value={exp.amount} color={paid ? X.g : X.t} toggle={!!paid} toggleOn={() => handleFixedPay(exp.id)} toggleOff={() => handleFixedUnpay(exp.id)} toggleLabelOn="Ödendi" toggleLabelOff="Öde" />; })}
       </CatButton>
+
+      {/* DÖNEM İÇİ İŞLEMLER */}
+      {(() => {
+        // CC tek çekim
+        const ccTxs = (md.ccSingle || []).map(e => ({ id: "cc-" + e.id, type: "cc", date: e.date || (mk + "-01"), desc: e.note || e.merchantName || "CC Harcama", amount: e.amount }));
+        // Hesaptan ödeme
+        const accTxs = (md.accountEntries || []).map(e => ({ id: "acc-" + e.id, type: "acc", date: e.date || (mk + "-01"), desc: e.note || "Hesaptan Ödeme", amount: e.amount }));
+        // Bu ay aktif taksitler
+        const instTxs = data.installmentPlans.filter(p => {
+          let cur = p.startMonth;
+          for (let i = 0; i < p.months; i++) { if (cur === mk) return true; cur = nmk(cur); }
+          return false;
+        }).map(p => {
+          let paidCount = 0; let cur = p.startMonth;
+          for (let i = 0; i < p.months; i++) { if (cur < mk) paidCount++; else break; cur = nmk(cur); }
+          return { id: "inst-" + p.id, type: "inst", date: mk + "-01", desc: p.note || "Taksitli Harcama", amount: p.monthlyPayment, paidCount: paidCount + 1, totalMonths: p.months };
+        });
+        const allTxs = [...ccTxs, ...accTxs, ...instTxs].sort((a, b) => b.date.localeCompare(a.date));
+        if (allTxs.length === 0) return null;
+        const fmtDate = d => { try { const dt = new Date(d); return dt.toLocaleDateString("tr-TR", { day: "numeric", month: "short", year: "numeric" }); } catch { return d; } };
+        const rowBg = { cc: "rgba(29,78,216,0.10)", inst: "rgba(124,58,237,0.12)", acc: "rgba(15,118,110,0.10)" };
+        const badgeBg = { cc: "rgba(29,78,216,0.18)", inst: "rgba(124,58,237,0.18)", acc: "rgba(15,118,110,0.18)" };
+        const badgeColor = { cc: X.b, inst: X.p, acc: X.g };
+        const amtColor = { cc: X.b, inst: X.p, acc: X.g };
+        const badgeLabel = { cc: "Tek Çekim", inst: "Taksitli", acc: "Hesaptan" };
+        return (
+          <div style={{ marginBottom: 8 }}>
+            <div onClick={() => toggle("periodTx")} style={{ ...glassSolid, borderRadius: expanded === "periodTx" ? "14px 14px 0 0" : 14, padding: "10px 14px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 14 }}>📋</span>
+                <span style={{ color: X.t, fontSize: 11, fontWeight: 700 }}>Dönem İçi İşlemler</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ color: X.td, fontSize: 10 }}>{allTxs.length} işlem</span>
+                <span style={{ color: X.td, fontSize: 11, transform: expanded === "periodTx" ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>▼</span>
+              </div>
+            </div>
+            {expanded === "periodTx" && (
+              <div style={{ ...glassSolid, borderRadius: "0 0 14px 14px", borderTop: `1px solid ${X.border}`, padding: "6px 10px 10px" }}>
+                {allTxs.map(tx => (
+                  <div key={tx.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 10px", borderRadius: 8, marginBottom: 4, background: rowBg[tx.type] }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 4, whiteSpace: "nowrap", flexShrink: 0, background: badgeBg[tx.type], color: badgeColor[tx.type] }}>{badgeLabel[tx.type]}</span>
+                      <div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: X.t }}>{tx.desc}</div>
+                        <div style={{ fontSize: 10, color: X.td, marginTop: 1 }}>{tx.type === "inst" ? `${ml(mk).split(" ")[0]} ${new Date().getFullYear()} · ${tx.paidCount}/${tx.totalMonths}` : fmtDate(tx.date)}</div>
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: amtColor[tx.type], whiteSpace: "nowrap", fontFamily: fm }}>{C(tx.amount)}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {modal === "ccCombined" && <CCCombinedModal data={data} mk={mk} cards={data.settings.cards || []} variableExpenses={data.settings.variableExpenses || []} onClose={() => setModal(null)} onSaveSingle={handleCCSingle} onSaveInstall={handleInstSave} onDeletePlan={deleteInstallment} onEditPlan={editInstallment} />}
       {modal === "accountPay" && <AccountPayModal variableExpenses={data.settings.variableExpenses || []} onClose={() => setModal(null)} onSave={handleAccountPay} />}
