@@ -1557,10 +1557,11 @@ function CCInstallModal({ data, mk, cards, variableExpenses, onClose, onSave, on
   );
 }
 
-function AccountPayModal({ variableExpenses, entries, onClose, onSave, onDelete }) {
+function AccountPayModal({ variableExpenses, entries, onClose, onSave, onDelete, onEdit }) {
   const [a, sa] = useState(""); const [n, sn] = useState(""); const [d, sd] = useState(td());
   const [categoryId, setCategoryId] = useState(""); const [userChanged, setUserChanged] = useState(false);
   const [listOpen, setListOpen] = useState(false);
+  const [editId, setEditId] = useState(null); const [editAmt, setEditAmt] = useState(""); const [editNote2, setEditNote2] = useState(""); const [editDate2, setEditDate2] = useState("");
 
   useEffect(() => {
     if (userChanged) return;
@@ -1581,8 +1582,8 @@ function AccountPayModal({ variableExpenses, entries, onClose, onSave, onDelete 
       <Inp label="Tarih" type="date" value={d} onChange={sd} />
       <Btn onClick={() => { if (!a) return; onSave({ id: uid(), amount: parseFloat(a), note: n, date: d, categoryId: categoryId || null }); sa(""); sn(""); sd(td()); setCategoryId(""); setUserChanged(false); }}>🏦 Kaydet</Btn>
       <div style={{ marginTop: 14 }}>
-        <div onClick={() => setListOpen(!listOpen)} style={{ ...glassSolid, borderRadius: listOpen ? "10px 10px 0 0" : 10, padding: "8px 12px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: X.tm }}>Bu ayki hesaptan ödemeler</span>
+        <div onClick={() => setListOpen(!listOpen)} style={{ ...glassSolid, borderRadius: listOpen ? "10px 10px 0 0" : 10, padding: "11px 14px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: X.tm }}>Bu ayki hesaptan ödemeler</span>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             {sorted.length > 0 && <span style={{ fontSize: 10, color: X.td }}>{sorted.length} giriş</span>}
             <span style={{ fontSize: 10, color: X.td, transform: listOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>▼</span>
@@ -1592,15 +1593,30 @@ function AccountPayModal({ variableExpenses, entries, onClose, onSave, onDelete 
           <div style={{ background: "rgba(160,190,200,0.35)", borderRadius: "0 0 10px 10px", borderTop: `1px solid ${X.border}`, padding: "6px 10px 8px" }}>
             {sorted.length === 0
               ? <div style={{ color: X.td, fontSize: 12, padding: "4px 0" }}>Bu ay henüz ödeme girilmedi.</div>
-              : sorted.map(e => (
+              : sorted.map(e => editId === e.id ? (
+                <div key={e.id} style={{ padding: 8, borderRadius: 7, marginBottom: 3, background: "rgba(15,118,110,0.07)", border: "1px solid rgba(15,118,110,0.2)" }}>
+                  <div style={{ fontSize: 9, fontWeight: 700, color: X.g, marginBottom: 5 }}>{e.note || "Hesaptan Ödeme"} — düzenleniyor</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, marginBottom: 4 }}>
+                    <div><div style={{ fontSize: 9, color: X.td, marginBottom: 2 }}>Tutar</div><input type="number" value={editAmt} onChange={ev => setEditAmt(ev.target.value)} style={{ width: "100%", background: "rgba(255,255,255,0.7)", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 6, padding: "5px 7px", fontSize: 11, color: X.t, boxSizing: "border-box" }} /></div>
+                    <div><div style={{ fontSize: 9, color: X.td, marginBottom: 2 }}>Tarih</div><input type="date" value={editDate2} onChange={ev => setEditDate2(ev.target.value)} style={{ width: "100%", background: "rgba(255,255,255,0.7)", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 6, padding: "5px 7px", fontSize: 11, color: X.t, boxSizing: "border-box" }} /></div>
+                  </div>
+                  <div style={{ fontSize: 9, color: X.td, marginBottom: 2 }}>Açıklama</div>
+                  <input value={editNote2} onChange={ev => setEditNote2(ev.target.value)} style={{ width: "100%", background: "rgba(255,255,255,0.7)", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 6, padding: "5px 7px", fontSize: 11, color: X.t, boxSizing: "border-box", marginBottom: 6 }} />
+                  <div style={{ display: "flex", gap: 4 }}>
+                    <button onClick={() => { onEdit(e.id, { amount: parseFloat(editAmt) || e.amount, note: editNote2, date: editDate2 }); setEditId(null); }} style={{ flex: 1, background: X.g, border: "none", borderRadius: 6, padding: 5, color: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer", fontFamily: ff }}>✓ Kaydet</button>
+                    <button onClick={() => setEditId(null)} style={{ flex: 1, background: "transparent", border: "1px solid rgba(0,0,0,0.15)", borderRadius: 6, padding: 5, color: X.td, fontSize: 10, cursor: "pointer", fontFamily: ff }}>İptal</button>
+                  </div>
+                </div>
+              ) : (
                 <div key={e.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 8px", borderRadius: 7, marginBottom: 3, background: "rgba(255,255,255,0.35)" }}>
                   <div>
                     <div style={{ fontSize: 11, fontWeight: 600, color: X.t }}>{e.note || "Hesaptan Ödeme"}</div>
                     <div style={{ fontSize: 9, color: X.td, marginTop: 1 }}>{e.date}</div>
                   </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
                     <span style={{ fontSize: 11, fontWeight: 700, color: X.g, fontFamily: fm }}>{C(e.amount)}</span>
-                    <button onClick={() => { if (confirm("Bu kaydı silmek istiyor musunuz?")) onDelete(e.id); }} style={{ background: "none", border: "none", color: X.r, fontSize: 14, cursor: "pointer", padding: "2px 4px", lineHeight: 1 }}>✕</button>
+                    <button onClick={() => { setEditId(e.id); setEditAmt(String(e.amount)); setEditNote2(e.note || ""); setEditDate2(e.date || ""); }} style={{ background: "none", border: "none", color: X.b, fontSize: 13, cursor: "pointer", padding: "2px 3px", lineHeight: 1 }}>✎</button>
+                    <button onClick={() => { if (confirm("Bu kaydı silmek istiyor musunuz?")) onDelete(e.id); }} style={{ background: "none", border: "none", color: X.r, fontSize: 13, cursor: "pointer", padding: "2px 3px", lineHeight: 1 }}>✕</button>
                   </div>
                 </div>
               ))
@@ -1630,6 +1646,7 @@ function CCCombinedModal({ data, mk, cards, variableExpenses, ccSingleEntries, o
   const [singleListOpen, setSingleListOpen] = useState(false);
   const [installListOpen, setInstallListOpen] = useState(false);
   const sortedSingle = [...(ccSingleEntries || [])].sort((a2, b2) => (b2.date || "").localeCompare(a2.date || ""));
+  const [sEditId, setSEditId] = useState(null); const [sEditAmt, setSEditAmt] = useState(""); const [sEditNote, setSEditNote] = useState(""); const [sEditDate, setSEditDate] = useState("");
 
   const t = parseFloat(ia) || 0; const m2 = parseInt(mo) || 1; const mp = Math.ceil(t / m2);
   const startOptions = []; let sm = mk;
@@ -1697,8 +1714,8 @@ function CCCombinedModal({ data, mk, cards, variableExpenses, ccSingleEntries, o
           <Inp label="Tarih" type="date" value={d} onChange={sd} />
           <Btn onClick={() => { if (!a || !cardId) return; onSaveSingle({ id: uid(), amount: parseFloat(a), note: n, merchantName: "", date: d, cardId, categoryId: categoryId || null }); sa(""); sn(""); sd(td()); setCategoryId(""); setUserChanged(false); }} disabled={!cardId}>💳 Kaydet</Btn>
           <div style={{ marginTop: 14 }}>
-            <div onClick={() => setSingleListOpen(!singleListOpen)} style={{ ...glassSolid, borderRadius: singleListOpen ? "10px 10px 0 0" : 10, padding: "8px 12px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ fontSize: 11, fontWeight: 700, color: X.tm }}>Bu ayki tek çekim girişleri</span>
+            <div onClick={() => setSingleListOpen(!singleListOpen)} style={{ ...glassSolid, borderRadius: singleListOpen ? "10px 10px 0 0" : 10, padding: "11px 14px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: X.tm }}>Bu ayki tek çekim girişleri</span>
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 {sortedSingle.length > 0 && <span style={{ fontSize: 10, color: X.td }}>{sortedSingle.length} giriş</span>}
                 <span style={{ fontSize: 10, color: X.td, transform: singleListOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>▼</span>
@@ -1708,15 +1725,30 @@ function CCCombinedModal({ data, mk, cards, variableExpenses, ccSingleEntries, o
               <div style={{ background: "rgba(160,190,200,0.35)", borderRadius: "0 0 10px 10px", borderTop: `1px solid ${X.border}`, padding: "6px 10px 8px" }}>
                 {sortedSingle.length === 0
                   ? <div style={{ color: X.td, fontSize: 12, padding: "4px 0" }}>Bu ay henüz tek çekim girilmedi.</div>
-                  : sortedSingle.map(e => (
+                  : sortedSingle.map(e => sEditId === e.id ? (
+                    <div key={e.id} style={{ padding: 8, borderRadius: 7, marginBottom: 3, background: "rgba(29,78,216,0.07)", border: "1px solid rgba(29,78,216,0.2)" }}>
+                      <div style={{ fontSize: 9, fontWeight: 700, color: X.b, marginBottom: 5 }}>{e.note || e.merchantName || "CC Harcama"} — düzenleniyor</div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, marginBottom: 4 }}>
+                        <div><div style={{ fontSize: 9, color: X.td, marginBottom: 2 }}>Tutar</div><input type="number" value={sEditAmt} onChange={ev => setSEditAmt(ev.target.value)} style={{ width: "100%", background: "rgba(255,255,255,0.7)", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 6, padding: "5px 7px", fontSize: 11, color: X.t, boxSizing: "border-box" }} /></div>
+                        <div><div style={{ fontSize: 9, color: X.td, marginBottom: 2 }}>Tarih</div><input type="date" value={sEditDate} onChange={ev => setSEditDate(ev.target.value)} style={{ width: "100%", background: "rgba(255,255,255,0.7)", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 6, padding: "5px 7px", fontSize: 11, color: X.t, boxSizing: "border-box" }} /></div>
+                      </div>
+                      <div style={{ fontSize: 9, color: X.td, marginBottom: 2 }}>Açıklama</div>
+                      <input value={sEditNote} onChange={ev => setSEditNote(ev.target.value)} style={{ width: "100%", background: "rgba(255,255,255,0.7)", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 6, padding: "5px 7px", fontSize: 11, color: X.t, boxSizing: "border-box", marginBottom: 6 }} />
+                      <div style={{ display: "flex", gap: 4 }}>
+                        <button onClick={() => { onDeleteSingle(e.id); onSaveSingle({ ...e, amount: parseFloat(sEditAmt) || e.amount, note: sEditNote, date: sEditDate }); setSEditId(null); }} style={{ flex: 1, background: X.b, border: "none", borderRadius: 6, padding: 5, color: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer", fontFamily: ff }}>✓ Kaydet</button>
+                        <button onClick={() => setSEditId(null)} style={{ flex: 1, background: "transparent", border: "1px solid rgba(0,0,0,0.15)", borderRadius: 6, padding: 5, color: X.td, fontSize: 10, cursor: "pointer", fontFamily: ff }}>İptal</button>
+                      </div>
+                    </div>
+                  ) : (
                     <div key={e.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 8px", borderRadius: 7, marginBottom: 3, background: "rgba(255,255,255,0.35)" }}>
                       <div>
                         <div style={{ fontSize: 11, fontWeight: 600, color: X.t }}>{e.note || e.merchantName || "CC Harcama"}</div>
                         <div style={{ fontSize: 9, color: X.td, marginTop: 1 }}>{e.date}</div>
                       </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
                         <span style={{ fontSize: 11, fontWeight: 700, color: X.b, fontFamily: fm }}>{C(e.amount)}</span>
-                        <button onClick={() => { if (confirm("Bu kaydı silmek istiyor musunuz?")) onDeleteSingle(e.id); }} style={{ background: "none", border: "none", color: X.r, fontSize: 14, cursor: "pointer", padding: "2px 4px", lineHeight: 1 }}>✕</button>
+                        <button onClick={() => { setSEditId(e.id); setSEditAmt(String(e.amount)); setSEditNote(e.note || e.merchantName || ""); setSEditDate(e.date || ""); }} style={{ background: "none", border: "none", color: X.b, fontSize: 13, cursor: "pointer", padding: "2px 3px", lineHeight: 1 }}>✎</button>
+                        <button onClick={() => { if (confirm("Bu kaydı silmek istiyor musunuz?")) onDeleteSingle(e.id); }} style={{ background: "none", border: "none", color: X.r, fontSize: 13, cursor: "pointer", padding: "2px 3px", lineHeight: 1 }}>✕</button>
                       </div>
                     </div>
                   ))
@@ -1751,8 +1783,8 @@ function CCCombinedModal({ data, mk, cards, variableExpenses, ccSingleEntries, o
           {/* Aktif taksit planları akordiyonu */}
           {!sim && (
             <div style={{ marginTop: 14 }}>
-              <div onClick={() => setInstallListOpen(!installListOpen)} style={{ ...glassSolid, borderRadius: installListOpen ? "10px 10px 0 0" : 10, padding: "8px 12px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: X.tm }}>Aktif taksit planları</span>
+              <div onClick={() => setInstallListOpen(!installListOpen)} style={{ ...glassSolid, borderRadius: installListOpen ? "10px 10px 0 0" : 10, padding: "11px 14px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: X.tm }}>Aktif taksit planları</span>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   {activePlans.length > 0 && <span style={{ fontSize: 10, color: X.td }}>{activePlans.length} plan</span>}
                   <span style={{ fontSize: 10, color: X.td, transform: installListOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>▼</span>
@@ -2362,6 +2394,7 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
   const handleInstSave = plan => { setData(d => ({ ...d, installmentPlans: [...d.installmentPlans, plan] })); flash("✓ Taksit kaydedildi"); };
   const handleAccountPay = entry => { setMonthField(mk, "accountEntries", [...(md.accountEntries || []), entry]); flash("✓"); };
   const deleteAccountEntry = id => { setMonthField(mk, "accountEntries", (md.accountEntries || []).filter(e => e.id !== id)); };
+  const editAccountEntry = (id, updates) => { setMonthField(mk, "accountEntries", (md.accountEntries || []).map(e => e.id === id ? { ...e, ...updates } : e)); };
   const deleteInstallment = id => { setData(d => ({ ...d, installmentPlans: d.installmentPlans.filter(p => p.id !== id) })); };
   const editInstallment = (id, updates) => {
     if (updates) {
@@ -2748,7 +2781,7 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
       })()}
 
       {modal === "ccCombined" && <CCCombinedModal data={data} mk={mk} cards={data.settings.cards || []} variableExpenses={data.settings.variableExpenses || []} ccSingleEntries={md.ccSingle || []} onClose={() => setModal(null)} onSaveSingle={handleCCSingle} onDeleteSingle={deleteCCSingle} onSaveInstall={handleInstSave} onDeletePlan={deleteInstallment} onEditPlan={editInstallment} />}
-      {modal === "accountPay" && <AccountPayModal variableExpenses={data.settings.variableExpenses || []} entries={md.accountEntries || []} onClose={() => setModal(null)} onSave={handleAccountPay} onDelete={deleteAccountEntry} />}
+      {modal === "accountPay" && <AccountPayModal variableExpenses={data.settings.variableExpenses || []} entries={md.accountEntries || []} onClose={() => setModal(null)} onSave={handleAccountPay} onDelete={deleteAccountEntry} onEdit={editAccountEntry} />}
       {modal === "simulate" && <CCCombinedModal data={data} mk={mk} cards={data.settings.cards || []} variableExpenses={data.settings.variableExpenses || []} ccSingleEntries={md.ccSingle || []} onClose={() => setModal(null)} onSaveSingle={handleCCSingle} onDeleteSingle={deleteCCSingle} onSaveInstall={handleInstSave} onDeletePlan={deleteInstallment} onEditPlan={editInstallment} />}
       {modal === "cardLoad" && <CardLoadModal currentLoaded={md.cardLoaded || 0} maxPerTx={c.cardLoadMaxPerTx} maxTotal={c.cardLoadMaxTotal} onClose={() => setModal(null)} onSave={handleCardLoad} onEdit={editCardLoad} />}
       {modal === "debtPay" && <DebtPayModal debts={data.debts} debtPayments={md.debtPayments} data={data} mk={mk} onClose={() => setModal(null)} onPay={handleDebtPay} onUndo={undoDebtPay} />}
