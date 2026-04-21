@@ -2520,13 +2520,13 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
         const uncat = cats._uncategorized || 0;
         return (
           <div style={{ margin: "10px 0" }}>
-            <div onClick={() => toggle("envelopes")} style={{ ...glassSolid, borderRadius: 14, padding: "10px 14px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div onClick={() => toggle("envelopes")} style={{ ...glassSolid, borderRadius: 14, padding: "14px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontSize: 16 }}>📊</span>
-                <span style={{ color: X.t, fontSize: 13, fontWeight: 700 }}>Değişken Gider Takibi</span>
+                <span style={{ fontSize: 28, lineHeight: 1 }}>📊</span>
+                <span style={{ color: X.t, fontSize: 14, fontWeight: 700 }}>Değişken Gider Takibi</span>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <span style={{ color: totalSpentEnv > totalBudget ? X.r : X.t, fontSize: 14, fontWeight: 800, fontFamily: fm }}>{C(totalSpentEnv)}</span>
+                <span style={{ color: totalSpentEnv > totalBudget ? X.r : X.t, fontSize: 17, fontWeight: 800, fontFamily: fm }}>{C(totalSpentEnv)}</span>
                 <span style={{ color: X.td, fontSize: 11 }}>/ {C(totalBudget)}</span>
                 <span style={{ color: X.td, fontSize: 12, transform: expanded === "envelopes" ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>▼</span>
               </div>
@@ -2639,13 +2639,13 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
         const badgeLabel = { cc: "Tek Çekim", inst: "Taksitli", acc: "Hesaptan" };
         return (
           <div style={{ marginBottom: 8 }}>
-            <div onClick={() => toggle("periodTx")} style={{ ...glassSolid, borderRadius: expanded === "periodTx" ? "14px 14px 0 0" : 14, padding: "10px 14px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div onClick={() => toggle("periodTx")} style={{ ...glassSolid, borderRadius: expanded === "periodTx" ? "14px 14px 0 0" : 14, padding: "14px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontSize: 14 }}>📋</span>
-                <span style={{ color: X.t, fontSize: 11, fontWeight: 700 }}>Dönem İçi İşlemler</span>
+                <span style={{ fontSize: 28, lineHeight: 1 }}>📋</span>
+                <span style={{ color: X.t, fontSize: 14, fontWeight: 700 }}>Dönem İçi İşlemler</span>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <span style={{ color: X.td, fontSize: 10 }}>{allTxs.length} işlem</span>
+                <span style={{ color: X.td, fontSize: 11 }}>{allTxs.length} işlem</span>
                 <span style={{ color: X.td, fontSize: 11, transform: expanded === "periodTx" ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>▼</span>
               </div>
             </div>
