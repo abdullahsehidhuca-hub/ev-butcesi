@@ -2566,37 +2566,37 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
         <div onClick={() => setModal("ccCombined")} style={{ background: "rgba(29,78,216,0.22)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(29,78,216,0.28)", borderRadius: 16, padding: "10px 8px", cursor: "pointer", textAlign: "center", position: "relative", boxShadow: neu }}>
           <InfoBtn onClick={() => setInfo("ccSingle")} />
           <div style={{ fontSize: 20, marginBottom: 3 }}>💳</div>
-          <div style={{ color: X.b, fontSize: 11, fontWeight: 800 }}>Kredi Kartı</div>
-          <div style={{ color: X.t, fontSize: 14, fontWeight: 800, fontFamily: fm, marginTop: 1 }}>{C(c.ccSingleTotal + c.installmentTotal)}</div>
-          {activePlans.length > 0 && <div style={{ color: X.td, fontSize: 10, marginTop: 3 }}>{activePlans.length} taksit planı aktif</div>}
+          <div style={{ color: X.b, fontSize: 13, fontWeight: 800 }}>Kredi Kartı</div>
+          <div style={{ color: X.t, fontSize: 17, fontWeight: 800, fontFamily: fm, marginTop: 2 }}>{C(c.ccSingleTotal + c.installmentTotal)}</div>
+          {activePlans.length > 0 && <div style={{ color: X.td, fontSize: 11, marginTop: 3 }}>{activePlans.length} taksit planı aktif</div>}
         </div>
         <div onClick={() => setModal("accountPay")} style={{ background: "rgba(15,118,110,0.22)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(15,118,110,0.28)", borderRadius: 16, padding: "10px 8px", cursor: "pointer", textAlign: "center", position: "relative", boxShadow: neu }}>
           <div style={{ fontSize: 20, marginBottom: 3 }}>🏦</div>
-          <div style={{ color: X.g, fontSize: 11, fontWeight: 800 }}>Hesaptan Ödeme</div>
-          <div style={{ color: X.t, fontSize: 14, fontWeight: 800, fontFamily: fm, marginTop: 1 }}>{C(c.accountTotal)}</div>
-          {(md.accountEntries || []).length > 0 && <div style={{ color: X.td, fontSize: 10, marginTop: 3 }}>{(md.accountEntries || []).length} işlem</div>}
+          <div style={{ color: X.g, fontSize: 13, fontWeight: 800 }}>Hesaptan Ödeme</div>
+          <div style={{ color: X.t, fontSize: 17, fontWeight: 800, fontFamily: fm, marginTop: 2 }}>{C(c.accountTotal)}</div>
+          {(md.accountEntries || []).length > 0 && <div style={{ color: X.td, fontSize: 11, marginTop: 3 }}>{(md.accountEntries || []).length} işlem</div>}
         </div>
         <div onClick={() => setModal("cardLoad")} style={{ background: "rgba(15,118,110,0.32)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(15,118,110,0.30)", borderRadius: 16, padding: "10px 8px", cursor: "pointer", textAlign: "center", position: "relative", boxShadow: neu }}>
           <InfoBtn onClick={() => setInfo("cardLoad")} />
           <div style={{ fontSize: 20, marginBottom: 3 }}>🛒</div>
-          <div style={{ color: X.g, fontSize: 11, fontWeight: 800 }}>Genel Harcama Kartı</div>
-          <div style={{ color: X.t, fontSize: 14, fontWeight: 800, fontFamily: fm, marginTop: 1 }}>{C(md.cardLoaded || 0)} <span style={{ color: X.td, fontSize: 11 }}>/ {C(c.cardLoadMaxTotal)}</span></div>
+          <div style={{ color: X.g, fontSize: 13, fontWeight: 800 }}>Genel Harcama Kartı</div>
+          <div style={{ color: X.t, fontSize: 17, fontWeight: 800, fontFamily: fm, marginTop: 2 }}>{C(md.cardLoaded || 0)} <span style={{ color: X.td, fontSize: 11 }}>/ {C(c.cardLoadMaxTotal)}</span></div>
         </div>
         <div onClick={() => setModal("debtPay")} style={{ background: "rgba(180,83,9,0.28)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(180,83,9,0.28)", borderRadius: 16, padding: "10px 8px", cursor: "pointer", textAlign: "center", position: "relative", boxShadow: neu }}>
           <InfoBtn onClick={() => setInfo("debt")} />
           <div style={{ fontSize: 20, marginBottom: 3 }}>📌</div>
-          <div style={{ color: X.w, fontSize: 11, fontWeight: 800 }}>Borç Ödemeleri</div>
-          <div style={{ color: X.t, fontSize: 14, fontWeight: 800, fontFamily: fm, marginTop: 1 }}>{C(c.debtTotal)}</div>
+          <div style={{ color: X.w, fontSize: 13, fontWeight: 800 }}>Borç Ödemeleri</div>
+          <div style={{ color: X.t, fontSize: 17, fontWeight: 800, fontFamily: fm, marginTop: 2 }}>{C(c.debtTotal)}</div>
         </div>
 
         {/* Receipt + Simulation half width */}
         <div onClick={() => setModal("receipt")} style={{ background: "rgba(194,65,12,0.20)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(194,65,12,0.26)", borderRadius: 16, padding: "10px 8px", cursor: "pointer", textAlign: "center", position: "relative", boxShadow: neu }}>
           <div style={{ fontSize: 20, marginBottom: 3 }}>📷</div>
-          <div style={{ color: X.o, fontSize: 11, fontWeight: 800 }}>Market Fişi</div>
+          <div style={{ color: X.o, fontSize: 13, fontWeight: 800 }}>Market Fişi</div>
         </div>
         <div onClick={() => setModal("simulate")} style={{ background: "rgba(124,58,237,0.18)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(124,58,237,0.24)", borderRadius: 16, padding: "10px 8px", cursor: "pointer", textAlign: "center", position: "relative", boxShadow: neu }}>
           <div style={{ fontSize: 20, marginBottom: 3 }}>🔮</div>
-          <div style={{ color: X.p, fontSize: 11, fontWeight: 800 }}>Taksit Simülasyonu</div>
+          <div style={{ color: X.p, fontSize: 13, fontWeight: 800 }}>Taksit Simülasyonu</div>
         </div>
 
         {/* Savings full width */}
@@ -2604,10 +2604,10 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
           <InfoBtn onClick={() => setInfo("savings")} />
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
             <span style={{ fontSize: 20 }}>💰</span>
-            <div style={{ color: X.g, fontSize: 11, fontWeight: 800 }}>Bu Ayın Birikimi</div>
+            <div style={{ color: X.g, fontSize: 13, fontWeight: 800 }}>Bu Ayın Birikimi</div>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
-            <span style={{ color: c.remaining >= 0 ? X.g : X.r, fontSize: 17, fontWeight: 800, fontFamily: fm }}>{C(Math.max(0, c.remaining))}</span>
+            <span style={{ color: c.remaining >= 0 ? X.g : X.r, fontSize: 19, fontWeight: 800, fontFamily: fm }}>{C(Math.max(0, c.remaining))}</span>
             <span style={{ color: X.tm, fontSize: 13, fontFamily: fm }}>/ {C(c.savingsTarget)} hedef</span>
           </div>
           <div style={{ height: 6, borderRadius: 3, boxShadow: neuIn }}>
