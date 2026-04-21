@@ -1594,8 +1594,8 @@ function AccountPayModal({ variableExpenses, entries, onClose, onSave, onDelete,
       <Inp label="Tarih" type="date" value={d} onChange={sd} />
       <Btn onClick={() => { if (!a) return; onSave({ id: uid(), amount: parseFloat(a), note: n, date: d, categoryId: categoryId || null }); sa(""); sn(""); sd(td()); setCategoryId(""); setUserChanged(false); }}>🏦 Kaydet</Btn>
       <div style={{ marginTop: 14 }}>
-        <div onClick={() => setListOpen(!listOpen)} style={{ ...glassSolid, borderRadius: listOpen ? "10px 10px 0 0" : 10, padding: "11px 14px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span style={{ fontSize: 12, fontWeight: 700, color: X.tm }}>Bu ayki hesaptan ödemeler</span>
+        <div onClick={() => setListOpen(!listOpen)} style={{ ...glassSolid, borderRadius: listOpen ? "10px 10px 0 0" : 10, padding: "12px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span style={{ fontSize: 15, fontWeight: 700, color: X.tm }}>Bu ayki hesaptan ödemeler</span>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             {sorted.length > 0 && <span style={{ fontSize: 10, color: X.td }}>{sorted.length} giriş</span>}
             <span style={{ fontSize: 10, color: X.td, transform: listOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>▼</span>
@@ -1620,12 +1620,12 @@ function AccountPayModal({ variableExpenses, entries, onClose, onSave, onDelete,
                   </div>
                 </div>
               ) : (
-                <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 6px", borderRadius: 7, marginBottom: 3, background: "rgba(255,255,255,0.35)" }}>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: X.t, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.note || "Hesaptan Ödeme"}</span>
-                  <span style={{ fontSize: 11, color: X.td, whiteSpace: "nowrap", flexShrink: 0 }}>{e.date}</span>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: X.g, fontFamily: fm, whiteSpace: "nowrap", flexShrink: 0 }}>{C(e.amount)}</span>
-                  <button onClick={() => { setEditId(e.id); setEditAmt(String(e.amount)); setEditNote2(e.note || ""); setEditDate2(e.date || ""); }} style={{ background: "none", border: "none", color: X.b, fontSize: 18, cursor: "pointer", padding: 0, width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>✎</button>
-                  <button onClick={() => { if (confirm("Bu kaydı silmek istiyor musunuz?")) onDelete(e.id); }} style={{ background: "none", border: "none", color: X.r, fontSize: 18, cursor: "pointer", padding: 0, width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>✕</button>
+                <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 10px", borderRadius: 10, marginBottom: 4, background: "rgba(255,255,255,0.35)" }}>
+                  <span style={{ fontSize: 15, fontWeight: 600, color: X.t, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.note || "Hesaptan Ödeme"}</span>
+                  <span style={{ fontSize: 13, color: X.td, whiteSpace: "nowrap", flexShrink: 0 }}>{e.date}</span>
+                  <span style={{ fontSize: 15, fontWeight: 700, color: X.g, fontFamily: fm, whiteSpace: "nowrap", flexShrink: 0 }}>{C(e.amount)}</span>
+                  <button onClick={() => { setEditId(e.id); setEditAmt(String(e.amount)); setEditNote2(e.note || ""); setEditDate2(e.date || ""); }} style={{ background: "none", border: "none", color: X.b, fontSize: 22, cursor: "pointer", padding: 0, width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>✎</button>
+                  <button onClick={() => { if (confirm("Bu kaydı silmek istiyor musunuz?")) onDelete(e.id); }} style={{ background: "none", border: "none", color: X.r, fontSize: 22, cursor: "pointer", padding: 0, width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>✕</button>
                 </div>
               ))
             }
@@ -1722,8 +1722,8 @@ function CCCombinedModal({ data, mk, cards, variableExpenses, ccSingleEntries, o
           <Inp label="Tarih" type="date" value={d} onChange={sd} />
           <Btn onClick={() => { if (!a || !cardId) return; onSaveSingle({ id: uid(), amount: parseFloat(a), note: n, merchantName: "", date: d, cardId, categoryId: categoryId || null }); sa(""); sn(""); sd(td()); setCategoryId(""); setUserChanged(false); }} disabled={!cardId}>💳 Kaydet</Btn>
           <div style={{ marginTop: 14 }}>
-            <div onClick={() => setSingleListOpen(!singleListOpen)} style={{ ...glassSolid, borderRadius: singleListOpen ? "10px 10px 0 0" : 10, padding: "11px 14px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ fontSize: 12, fontWeight: 700, color: X.tm }}>Bu ayki tek çekim girişleri</span>
+            <div onClick={() => setSingleListOpen(!singleListOpen)} style={{ ...glassSolid, borderRadius: singleListOpen ? "10px 10px 0 0" : 10, padding: "12px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: 15, fontWeight: 700, color: X.tm }}>Bu ayki tek çekim girişleri</span>
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 {sortedSingle.length > 0 && <span style={{ fontSize: 10, color: X.td }}>{sortedSingle.length} giriş</span>}
                 <span style={{ fontSize: 10, color: X.td, transform: singleListOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>▼</span>
@@ -1748,12 +1748,12 @@ function CCCombinedModal({ data, mk, cards, variableExpenses, ccSingleEntries, o
                       </div>
                     </div>
                   ) : (
-                    <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 6px", borderRadius: 7, marginBottom: 3, background: "rgba(255,255,255,0.35)" }}>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: X.t, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.note || e.merchantName || "CC Harcama"}</span>
-                      <span style={{ fontSize: 11, color: X.td, whiteSpace: "nowrap", flexShrink: 0 }}>{e.date}</span>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: X.b, fontFamily: fm, whiteSpace: "nowrap", flexShrink: 0 }}>{C(e.amount)}</span>
-                      <button onClick={() => { setSEditId(e.id); setSEditAmt(String(e.amount)); setSEditNote(e.note || e.merchantName || ""); setSEditDate(e.date || ""); }} style={{ background: "none", border: "none", color: X.b, fontSize: 18, cursor: "pointer", padding: 0, width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>✎</button>
-                      <button onClick={() => { if (confirm("Bu kaydı silmek istiyor musunuz?")) onDeleteSingle(e.id); }} style={{ background: "none", border: "none", color: X.r, fontSize: 18, cursor: "pointer", padding: 0, width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>✕</button>
+                    <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 10px", borderRadius: 10, marginBottom: 4, background: "rgba(255,255,255,0.35)" }}>
+                      <span style={{ fontSize: 15, fontWeight: 600, color: X.t, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.note || e.merchantName || "CC Harcama"}</span>
+                      <span style={{ fontSize: 13, color: X.td, whiteSpace: "nowrap", flexShrink: 0 }}>{e.date}</span>
+                      <span style={{ fontSize: 15, fontWeight: 700, color: X.b, fontFamily: fm, whiteSpace: "nowrap", flexShrink: 0 }}>{C(e.amount)}</span>
+                      <button onClick={() => { setSEditId(e.id); setSEditAmt(String(e.amount)); setSEditNote(e.note || e.merchantName || ""); setSEditDate(e.date || ""); }} style={{ background: "none", border: "none", color: X.b, fontSize: 22, cursor: "pointer", padding: 0, width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>✎</button>
+                      <button onClick={() => { if (confirm("Bu kaydı silmek istiyor musunuz?")) onDeleteSingle(e.id); }} style={{ background: "none", border: "none", color: X.r, fontSize: 22, cursor: "pointer", padding: 0, width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>✕</button>
                     </div>
                   ))
                 }
@@ -1787,8 +1787,8 @@ function CCCombinedModal({ data, mk, cards, variableExpenses, ccSingleEntries, o
           {/* Aktif taksit planları akordiyonu */}
           {!sim && (
             <div style={{ marginTop: 14 }}>
-              <div onClick={() => setInstallListOpen(!installListOpen)} style={{ ...glassSolid, borderRadius: installListOpen ? "10px 10px 0 0" : 10, padding: "11px 14px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontSize: 12, fontWeight: 700, color: X.tm }}>Aktif taksit planları</span>
+              <div onClick={() => setInstallListOpen(!installListOpen)} style={{ ...glassSolid, borderRadius: installListOpen ? "10px 10px 0 0" : 10, padding: "12px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: 15, fontWeight: 700, color: X.tm }}>Aktif taksit planları</span>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   {activePlans.length > 0 && <span style={{ fontSize: 10, color: X.td }}>{activePlans.length} plan</span>}
                   <span style={{ fontSize: 10, color: X.td, transform: installListOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>▼</span>
@@ -1815,7 +1815,7 @@ function CCCombinedModal({ data, mk, cards, variableExpenses, ccSingleEntries, o
                           setEditingId(null);
                         };
                         return (
-                          <div key={p.id} style={{ marginBottom: 6, background: "rgba(124,58,237,0.08)", borderRadius: 8, padding: "8px 10px", border: "1px solid rgba(124,58,237,0.15)" }}>
+                          <div key={p.id} style={{ marginBottom: 6, background: "rgba(124,58,237,0.08)", borderRadius: 10, padding: "12px 14px", border: "1px solid rgba(124,58,237,0.15)" }}>
                             {isEditing ? (
                               <>
                                 <Inp label="Açıklama" value={editNote} onChange={setEditNote} />
@@ -1829,12 +1829,12 @@ function CCCombinedModal({ data, mk, cards, variableExpenses, ccSingleEntries, o
                                 </div>
                               </>
                             ) : (
-                              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                <span style={{ fontSize: 13, fontWeight: 700, color: X.t, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.note || "İsimsiz taksit"}</span>
-                                <span style={{ fontSize: 11, color: X.td, whiteSpace: "nowrap", flexShrink: 0 }}>{paidCount}/{p.months}</span>
-                                <span style={{ fontSize: 13, fontWeight: 700, color: X.p, fontFamily: fm, whiteSpace: "nowrap", flexShrink: 0 }}>{C(p.monthlyPayment)}<span style={{ fontSize: 10, fontWeight: 400, color: X.td }}>/ay</span></span>
-                                <button onClick={startEdit} style={{ background: "none", border: "none", color: X.b, fontSize: 18, cursor: "pointer", padding: 0, width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>✎</button>
-                                <button onClick={() => { if (confirm("Bu taksit planını silmek istiyor musunuz?")) { onDeletePlan(p.id); } }} style={{ background: "none", border: "none", color: X.r, fontSize: 18, cursor: "pointer", padding: 0, width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>✕</button>
+                              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0" }}>
+                                <span style={{ fontSize: 15, fontWeight: 700, color: X.t, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.note || "İsimsiz taksit"}</span>
+                                <span style={{ fontSize: 13, color: X.td, whiteSpace: "nowrap", flexShrink: 0 }}>{paidCount}/{p.months}</span>
+                                <span style={{ fontSize: 15, fontWeight: 700, color: X.p, fontFamily: fm, whiteSpace: "nowrap", flexShrink: 0 }}>{C(p.monthlyPayment)}<span style={{ fontSize: 11, fontWeight: 400, color: X.td }}>/ay</span></span>
+                                <button onClick={startEdit} style={{ background: "none", border: "none", color: X.b, fontSize: 22, cursor: "pointer", padding: 0, width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>✎</button>
+                                <button onClick={() => { if (confirm("Bu taksit planını silmek istiyor musunuz?")) { onDeletePlan(p.id); } }} style={{ background: "none", border: "none", color: X.r, fontSize: 22, cursor: "pointer", padding: 0, width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>✕</button>
                               </div>
                             )}
                           </div>
