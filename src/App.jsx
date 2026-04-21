@@ -406,9 +406,16 @@ function categorizeMonthSpending(data, mk) {
     return matchCategory(text, ves);
   };
 
-  // Sadece CC tek çekim harcamaları — taksitler SAYILMAZ (ayrı katman)
+  // CC tek çekim harcamaları — taksitler SAYILMAZ (ayrı katman)
   (md.ccSingle || []).forEach(e => {
     const cat = tryMatch(e, (e.note || "") + " " + (e.merchantName || ""));
+    if (cat && result[cat] !== undefined) result[cat] += e.amount;
+    else result._uncategorized += e.amount;
+  });
+
+  // Hesaptan ödeme harcamaları
+  (md.accountEntries || []).forEach(e => {
+    const cat = tryMatch(e, (e.note || ""));
     if (cat && result[cat] !== undefined) result[cat] += e.amount;
     else result._uncategorized += e.amount;
   });
@@ -452,7 +459,7 @@ function getCategorizedTotal(data, mk) {
 // Average CC single from past 3 months
 function getCCSingleAvg(data, m) {
   const past = [pmk(m), pmk(pmk(m)), pmk(pmk(pmk(m)))];
-  const vals = past.map(pm => { const pmd = data.months[pm]; if (!pmd) return 0; return (pmd.ccSingle || []).reduce((s, e) => s + e.amount, 0); }).filter(t => t > 0);
+  const vals = past.map(pm => { const pmd = data.months[pm]; if (!pmd) return 0; return (pmd.ccSingle || []).reduce((s, e) => s + e.amount, 0) + (pmd.accountEntries || []).reduce((s, e) => s + e.amount, 0); }).filter(t => t > 0);
   return vals.length > 0 ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : 0;
 }
 
@@ -482,7 +489,7 @@ function calcMonth(data, m, extraInst) {
   // Değişken gider tahmini: 3 ay ortalaması veya beklenen tutarlar
   const expectedVariableBase = (data.settings.variableExpenses || []).reduce((s, ve) => s + (ve.expectedAmount || 0), 0);
   const past3 = [pmk(pmk(pmk(m))), pmk(pmk(m)), pmk(m)]
-    .map(pm => { const pmd = data.months[pm] || DM(); return (pmd.ccSingle || []).reduce((s2, e) => s2 + e.amount, 0); })
+    .map(pm => { const pmd = data.months[pm] || DM(); return (pmd.ccSingle || []).reduce((s2, e) => s2 + e.amount, 0) + (pmd.accountEntries || []).reduce((s2, e) => s2 + e.amount, 0); })
     .filter(t => t > 0);
   const variableEstimate = past3.length >= 2 ? Math.round(past3.reduce((s, t) => s + t, 0) / past3.length) : expectedVariableBase;
 
@@ -517,7 +524,7 @@ function calcMonth(data, m, extraInst) {
   const ccTransferNeeded = fixedCC + ccSingleTotal + installmentTotal;
 
   // Geriye uyumluluk alanları
-  const hasActualSpending = ccSingleTotal > 0 || cardLoaded > 0;
+  const hasActualSpending = ccSingleTotal > 0 || cardLoaded > 0 || accountTotal > 0;
   const expectedVariable = envelopeRemaining + envelopeOverflow;
   const pendingVariable = envelopeRemaining;
   const availableForCard = cardUsable;
@@ -539,10 +546,11 @@ function calcFlat(data, m, extraInst) {
     return s;
   }, 0);
   const cl = md.cardLoaded || 0;
+  const accTotal = (md.accountEntries || []).reduce((s, e) => s + e.amount, 0);
   // Zarf mantığı: categorizedCC + uncategorizedCC + kalan tahmin
   const expectedVariableBase = (data.settings.variableExpenses || []).reduce((s, ve) => s + (ve.expectedAmount || 0), 0);
   const past3 = [pmk(pmk(pmk(m))), pmk(pmk(m)), pmk(m)]
-    .map(pm => { const pmd = data.months[pm] || DM(); return (pmd.ccSingle || []).reduce((s2, e) => s2 + e.amount, 0); })
+    .map(pm => { const pmd = data.months[pm] || DM(); return (pmd.ccSingle || []).reduce((s2, e) => s2 + e.amount, 0) + (pmd.accountEntries || []).reduce((s2, e) => s2 + e.amount, 0); })
     .filter(t => t > 0);
   const variableEstimate = past3.length >= 2 ? Math.round(past3.reduce((s, t) => s + t, 0) / past3.length) : expectedVariableBase;
   const { categories: cats } = categorizeMonthSpending(data, m);
@@ -550,7 +558,7 @@ function calcFlat(data, m, extraInst) {
   const uncategorizedCC = cats._uncategorized || 0;
   const envelopeRemaining = Math.max(0, variableEstimate - categorizedCC);
   const envelopeOverflow = Math.max(0, categorizedCC - variableEstimate);
-  const totalSpent = ft + inst + dt + cl + categorizedCC + uncategorizedCC + envelopeRemaining + envelopeOverflow;
+  const totalSpent = ft + inst + dt + cl + accTotal + categorizedCC + uncategorizedCC + envelopeRemaining + envelopeOverflow;
   return { remaining: b - totalSpent, totalSpent };
 }
 
@@ -721,6 +729,10 @@ function getMonthBreakdown(data, m) {
   // Kategorisiz CC harcamaları
   if (mc.uncategorizedCC > 0) {
     rows.push({ label: `Kategorisiz harcamalar`, value: mc.uncategorizedCC, sign: "−", color: X.o });
+  }
+  // Hesaptan ödemeler
+  if (mc.accountTotal > 0) {
+    rows.push({ label: "Hesaptan ödemeler", value: mc.accountTotal, sign: "−", color: X.g });
   }
   // Kart yükleme
   if (mc.cardLoaded > 0) {
@@ -3925,6 +3937,7 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
           byDate[d].push({ kind, amt, note });
         };
         (md.ccSingle || []).forEach(e => addTx(e.date, "CC Tek Çekim", e.amount, e.note || e.merchantName));
+        (md.accountEntries || []).forEach(e => addTx(e.date, "Hesaptan Ödeme", e.amount, e.note || "Hesaptan Ödeme"));
         // Sabit zorunlu giderleri de ay başı varsayalım
         data.settings.fixedExpenses.forEach(f => {
           if (md.fixedPaid?.[f.id]?.paid) addTx(md.fixedPaid[f.id].date || (mk + "-01"), "Sabit", f.amount, f.name);
