@@ -1595,29 +1595,25 @@ function AccountPayModal({ variableExpenses, entries, onClose, onSave, onDelete,
               ? <div style={{ color: X.td, fontSize: 12, padding: "4px 0" }}>Bu ay henüz ödeme girilmedi.</div>
               : sorted.map(e => editId === e.id ? (
                 <div key={e.id} style={{ padding: 8, borderRadius: 7, marginBottom: 3, background: "rgba(15,118,110,0.07)", border: "1px solid rgba(15,118,110,0.2)" }}>
-                  <div style={{ fontSize: 9, fontWeight: 700, color: X.g, marginBottom: 5 }}>{e.note || "Hesaptan Ödeme"} — düzenleniyor</div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, marginBottom: 4 }}>
-                    <div><div style={{ fontSize: 9, color: X.td, marginBottom: 2 }}>Tutar</div><input type="number" value={editAmt} onChange={ev => setEditAmt(ev.target.value)} style={{ width: "100%", background: "rgba(255,255,255,0.7)", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 6, padding: "5px 7px", fontSize: 11, color: X.t, boxSizing: "border-box" }} /></div>
-                    <div><div style={{ fontSize: 9, color: X.td, marginBottom: 2 }}>Tarih</div><input type="date" value={editDate2} onChange={ev => setEditDate2(ev.target.value)} style={{ width: "100%", background: "rgba(255,255,255,0.7)", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 6, padding: "5px 7px", fontSize: 11, color: X.t, boxSizing: "border-box" }} /></div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: X.g, marginBottom: 8 }}>{e.note || "Hesaptan Ödeme"} — düzenleniyor</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 6 }}>
+                    <div><div style={{ fontSize: 12, color: X.td, marginBottom: 3 }}>Tutar</div><input type="number" value={editAmt} onChange={ev => setEditAmt(ev.target.value)} style={{ width: "100%", background: "rgba(255,255,255,0.7)", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 8, padding: "8px 10px", fontSize: 13, color: X.t, boxSizing: "border-box" }} /></div>
+                    <div><div style={{ fontSize: 12, color: X.td, marginBottom: 3 }}>Tarih</div><input type="date" value={editDate2} onChange={ev => setEditDate2(ev.target.value)} style={{ width: "100%", background: "rgba(255,255,255,0.7)", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 8, padding: "8px 10px", fontSize: 13, color: X.t, boxSizing: "border-box" }} /></div>
                   </div>
-                  <div style={{ fontSize: 9, color: X.td, marginBottom: 2 }}>Açıklama</div>
-                  <input value={editNote2} onChange={ev => setEditNote2(ev.target.value)} style={{ width: "100%", background: "rgba(255,255,255,0.7)", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 6, padding: "5px 7px", fontSize: 11, color: X.t, boxSizing: "border-box", marginBottom: 6 }} />
-                  <div style={{ display: "flex", gap: 4 }}>
-                    <button onClick={() => { onEdit(e.id, { amount: parseFloat(editAmt) || e.amount, note: editNote2, date: editDate2 }); setEditId(null); }} style={{ flex: 1, background: X.g, border: "none", borderRadius: 6, padding: 5, color: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer", fontFamily: ff }}>✓ Kaydet</button>
-                    <button onClick={() => setEditId(null)} style={{ flex: 1, background: "transparent", border: "1px solid rgba(0,0,0,0.15)", borderRadius: 6, padding: 5, color: X.td, fontSize: 10, cursor: "pointer", fontFamily: ff }}>İptal</button>
+                  <div style={{ fontSize: 12, color: X.td, marginBottom: 3 }}>Açıklama</div>
+                  <input value={editNote2} onChange={ev => setEditNote2(ev.target.value)} style={{ width: "100%", background: "rgba(255,255,255,0.7)", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 8, padding: "8px 10px", fontSize: 13, color: X.t, boxSizing: "border-box", marginBottom: 8 }} />
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button onClick={() => { onEdit(e.id, { amount: parseFloat(editAmt) || e.amount, note: editNote2, date: editDate2 }); setEditId(null); }} style={{ flex: 1, background: X.g, border: "none", borderRadius: 8, padding: "8px", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: ff }}>✓ Kaydet</button>
+                    <button onClick={() => setEditId(null)} style={{ flex: 1, background: "transparent", border: "1px solid rgba(0,0,0,0.15)", borderRadius: 8, padding: "8px", color: X.td, fontSize: 13, cursor: "pointer", fontFamily: ff }}>İptal</button>
                   </div>
                 </div>
               ) : (
-                <div key={e.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 8px", borderRadius: 7, marginBottom: 3, background: "rgba(255,255,255,0.35)" }}>
-                  <div>
-                    <div style={{ fontSize: 11, fontWeight: 600, color: X.t }}>{e.note || "Hesaptan Ödeme"}</div>
-                    <div style={{ fontSize: 9, color: X.td, marginTop: 1 }}>{e.date}</div>
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: X.g, fontFamily: fm }}>{C(e.amount)}</span>
-                    <button onClick={() => { setEditId(e.id); setEditAmt(String(e.amount)); setEditNote2(e.note || ""); setEditDate2(e.date || ""); }} style={{ background: "none", border: "none", color: X.b, fontSize: 13, cursor: "pointer", padding: "2px 3px", lineHeight: 1 }}>✎</button>
-                    <button onClick={() => { if (confirm("Bu kaydı silmek istiyor musunuz?")) onDelete(e.id); }} style={{ background: "none", border: "none", color: X.r, fontSize: 13, cursor: "pointer", padding: "2px 3px", lineHeight: 1 }}>✕</button>
-                  </div>
+                <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 6px", borderRadius: 7, marginBottom: 3, background: "rgba(255,255,255,0.35)" }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: X.t, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.note || "Hesaptan Ödeme"}</span>
+                  <span style={{ fontSize: 11, color: X.td, whiteSpace: "nowrap", flexShrink: 0 }}>{e.date}</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: X.g, fontFamily: fm, whiteSpace: "nowrap", flexShrink: 0 }}>{C(e.amount)}</span>
+                  <button onClick={() => { setEditId(e.id); setEditAmt(String(e.amount)); setEditNote2(e.note || ""); setEditDate2(e.date || ""); }} style={{ background: "none", border: "none", color: X.b, fontSize: 18, cursor: "pointer", padding: 0, width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>✎</button>
+                  <button onClick={() => { if (confirm("Bu kaydı silmek istiyor musunuz?")) onDelete(e.id); }} style={{ background: "none", border: "none", color: X.r, fontSize: 18, cursor: "pointer", padding: 0, width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>✕</button>
                 </div>
               ))
             }
@@ -1727,29 +1723,25 @@ function CCCombinedModal({ data, mk, cards, variableExpenses, ccSingleEntries, o
                   ? <div style={{ color: X.td, fontSize: 12, padding: "4px 0" }}>Bu ay henüz tek çekim girilmedi.</div>
                   : sortedSingle.map(e => sEditId === e.id ? (
                     <div key={e.id} style={{ padding: 8, borderRadius: 7, marginBottom: 3, background: "rgba(29,78,216,0.07)", border: "1px solid rgba(29,78,216,0.2)" }}>
-                      <div style={{ fontSize: 9, fontWeight: 700, color: X.b, marginBottom: 5 }}>{e.note || e.merchantName || "CC Harcama"} — düzenleniyor</div>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, marginBottom: 4 }}>
-                        <div><div style={{ fontSize: 9, color: X.td, marginBottom: 2 }}>Tutar</div><input type="number" value={sEditAmt} onChange={ev => setSEditAmt(ev.target.value)} style={{ width: "100%", background: "rgba(255,255,255,0.7)", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 6, padding: "5px 7px", fontSize: 11, color: X.t, boxSizing: "border-box" }} /></div>
-                        <div><div style={{ fontSize: 9, color: X.td, marginBottom: 2 }}>Tarih</div><input type="date" value={sEditDate} onChange={ev => setSEditDate(ev.target.value)} style={{ width: "100%", background: "rgba(255,255,255,0.7)", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 6, padding: "5px 7px", fontSize: 11, color: X.t, boxSizing: "border-box" }} /></div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: X.b, marginBottom: 8 }}>{e.note || e.merchantName || "CC Harcama"} — düzenleniyor</div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 6 }}>
+                        <div><div style={{ fontSize: 12, color: X.td, marginBottom: 3 }}>Tutar</div><input type="number" value={sEditAmt} onChange={ev => setSEditAmt(ev.target.value)} style={{ width: "100%", background: "rgba(255,255,255,0.7)", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 8, padding: "8px 10px", fontSize: 13, color: X.t, boxSizing: "border-box" }} /></div>
+                        <div><div style={{ fontSize: 12, color: X.td, marginBottom: 3 }}>Tarih</div><input type="date" value={sEditDate} onChange={ev => setSEditDate(ev.target.value)} style={{ width: "100%", background: "rgba(255,255,255,0.7)", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 8, padding: "8px 10px", fontSize: 13, color: X.t, boxSizing: "border-box" }} /></div>
                       </div>
-                      <div style={{ fontSize: 9, color: X.td, marginBottom: 2 }}>Açıklama</div>
-                      <input value={sEditNote} onChange={ev => setSEditNote(ev.target.value)} style={{ width: "100%", background: "rgba(255,255,255,0.7)", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 6, padding: "5px 7px", fontSize: 11, color: X.t, boxSizing: "border-box", marginBottom: 6 }} />
-                      <div style={{ display: "flex", gap: 4 }}>
-                        <button onClick={() => { onDeleteSingle(e.id); onSaveSingle({ ...e, amount: parseFloat(sEditAmt) || e.amount, note: sEditNote, date: sEditDate }); setSEditId(null); }} style={{ flex: 1, background: X.b, border: "none", borderRadius: 6, padding: 5, color: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer", fontFamily: ff }}>✓ Kaydet</button>
-                        <button onClick={() => setSEditId(null)} style={{ flex: 1, background: "transparent", border: "1px solid rgba(0,0,0,0.15)", borderRadius: 6, padding: 5, color: X.td, fontSize: 10, cursor: "pointer", fontFamily: ff }}>İptal</button>
+                      <div style={{ fontSize: 12, color: X.td, marginBottom: 3 }}>Açıklama</div>
+                      <input value={sEditNote} onChange={ev => setSEditNote(ev.target.value)} style={{ width: "100%", background: "rgba(255,255,255,0.7)", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 8, padding: "8px 10px", fontSize: 13, color: X.t, boxSizing: "border-box", marginBottom: 8 }} />
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <button onClick={() => { onDeleteSingle(e.id); onSaveSingle({ ...e, amount: parseFloat(sEditAmt) || e.amount, note: sEditNote, date: sEditDate }); setSEditId(null); }} style={{ flex: 1, background: X.b, border: "none", borderRadius: 8, padding: "8px", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: ff }}>✓ Kaydet</button>
+                        <button onClick={() => setSEditId(null)} style={{ flex: 1, background: "transparent", border: "1px solid rgba(0,0,0,0.15)", borderRadius: 8, padding: "8px", color: X.td, fontSize: 13, cursor: "pointer", fontFamily: ff }}>İptal</button>
                       </div>
                     </div>
                   ) : (
-                    <div key={e.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 8px", borderRadius: 7, marginBottom: 3, background: "rgba(255,255,255,0.35)" }}>
-                      <div>
-                        <div style={{ fontSize: 11, fontWeight: 600, color: X.t }}>{e.note || e.merchantName || "CC Harcama"}</div>
-                        <div style={{ fontSize: 9, color: X.td, marginTop: 1 }}>{e.date}</div>
-                      </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
-                        <span style={{ fontSize: 11, fontWeight: 700, color: X.b, fontFamily: fm }}>{C(e.amount)}</span>
-                        <button onClick={() => { setSEditId(e.id); setSEditAmt(String(e.amount)); setSEditNote(e.note || e.merchantName || ""); setSEditDate(e.date || ""); }} style={{ background: "none", border: "none", color: X.b, fontSize: 13, cursor: "pointer", padding: "2px 3px", lineHeight: 1 }}>✎</button>
-                        <button onClick={() => { if (confirm("Bu kaydı silmek istiyor musunuz?")) onDeleteSingle(e.id); }} style={{ background: "none", border: "none", color: X.r, fontSize: 13, cursor: "pointer", padding: "2px 3px", lineHeight: 1 }}>✕</button>
-                      </div>
+                    <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 6px", borderRadius: 7, marginBottom: 3, background: "rgba(255,255,255,0.35)" }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: X.t, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.note || e.merchantName || "CC Harcama"}</span>
+                      <span style={{ fontSize: 11, color: X.td, whiteSpace: "nowrap", flexShrink: 0 }}>{e.date}</span>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: X.b, fontFamily: fm, whiteSpace: "nowrap", flexShrink: 0 }}>{C(e.amount)}</span>
+                      <button onClick={() => { setSEditId(e.id); setSEditAmt(String(e.amount)); setSEditNote(e.note || e.merchantName || ""); setSEditDate(e.date || ""); }} style={{ background: "none", border: "none", color: X.b, fontSize: 18, cursor: "pointer", padding: 0, width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>✎</button>
+                      <button onClick={() => { if (confirm("Bu kaydı silmek istiyor musunuz?")) onDeleteSingle(e.id); }} style={{ background: "none", border: "none", color: X.r, fontSize: 18, cursor: "pointer", padding: 0, width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>✕</button>
                     </div>
                   ))
                 }
@@ -1825,19 +1817,13 @@ function CCCombinedModal({ data, mk, cards, variableExpenses, ccSingleEntries, o
                                 </div>
                               </>
                             ) : (
-                              <>
-                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                                  <div style={{ flex: 1, minWidth: 0 }}>
-                                    <div style={{ color: X.t, fontWeight: 700, fontSize: 12 }}>{p.note || "İsimsiz taksit"}</div>
-                                    <div style={{ color: X.td, fontSize: 10, marginTop: 2 }}>💳 {cardName} · {paidCount}/{p.months} ödendi · {remainingCount} kaldı</div>
-                                  </div>
-                                  <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
-                                    <button onClick={startEdit} style={{ background: "none", border: "none", color: X.b, fontSize: 14, cursor: "pointer", padding: "2px 4px" }}>✎</button>
-                                    <button onClick={() => { if (confirm("Bu taksit planını silmek istiyor musunuz?")) { onDeletePlan(p.id); } }} style={{ background: "none", border: "none", color: X.r, fontSize: 14, cursor: "pointer", padding: "2px 4px" }}>✕</button>
-                                  </div>
-                                </div>
-                                <div style={{ color: X.p, fontFamily: fm, fontWeight: 700, fontSize: 13, marginTop: 4 }}>{C(p.monthlyPayment)}<span style={{ color: X.td, fontSize: 10, fontWeight: 400 }}>/ay</span></div>
-                              </>
+                              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                <span style={{ fontSize: 13, fontWeight: 700, color: X.t, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.note || "İsimsiz taksit"}</span>
+                                <span style={{ fontSize: 11, color: X.td, whiteSpace: "nowrap", flexShrink: 0 }}>{paidCount}/{p.months}</span>
+                                <span style={{ fontSize: 13, fontWeight: 700, color: X.p, fontFamily: fm, whiteSpace: "nowrap", flexShrink: 0 }}>{C(p.monthlyPayment)}<span style={{ fontSize: 10, fontWeight: 400, color: X.td }}>/ay</span></span>
+                                <button onClick={startEdit} style={{ background: "none", border: "none", color: X.b, fontSize: 18, cursor: "pointer", padding: 0, width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>✎</button>
+                                <button onClick={() => { if (confirm("Bu taksit planını silmek istiyor musunuz?")) { onDeletePlan(p.id); } }} style={{ background: "none", border: "none", color: X.r, fontSize: 18, cursor: "pointer", padding: 0, width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>✕</button>
+                              </div>
                             )}
                           </div>
                         );
@@ -2350,6 +2336,7 @@ Fiyatlar Türk Lirası cinsindendir. Eğer fiş okunamıyorsa {"error":"Fiş oku
 /* ═══ DASHBOARD ═══ */
 function Dashboard({ data, mk, gmd, setMonthField, setData }) {
   const [expanded, setExpanded] = useState(null);
+  const [expandedCat, setExpandedCat] = useState(null);
   const [modal, setModal] = useState(null);
   const [info, setInfo] = useState(null);
   const [msg, setMsg] = useState(null);
@@ -2623,6 +2610,7 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
       {(() => {
         const ves = data.settings.variableExpenses || [];
         const { categories: cats, instByCategory } = ves.length > 0 ? categorizeMonthSpending(data, mk) : { categories: {}, instByCategory: {} };
+        // Kategori detay için inline expand — expandedCat state Dashboard'da tanımlı
         const totalBudget = ves.reduce((s, ve) => s + (ve.expectedAmount || 0), 0);
         const totalSpentEnv = Object.entries(cats).filter(([k]) => k !== "_uncategorized").reduce((s, [, v]) => s + v, 0);
         const uncat = cats._uncategorized || 0;
@@ -2647,18 +2635,51 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
                   const instAmt = instByCategory[ve.id] || 0;
                   const budget = ve.expectedAmount || 0;
                   const over = budget > 0 && spent > budget;
+                  const isOpen = expandedCat === ve.id;
+                  // Bu kategoriye ait tüm girişler
+                  const catEntries = [
+                    ...(md.ccSingle || []).filter(e => e.categoryId === ve.id).map(e => ({ key: e.id, desc: e.note || e.merchantName || "CC Harcama", date: e.date, amount: e.amount, type: "cc" })),
+                    ...(md.accountEntries || []).filter(e => e.categoryId === ve.id).map(e => ({ key: e.id, desc: e.note || "Hesaptan Ödeme", date: e.date, amount: e.amount, type: "acc" })),
+                    ...data.installmentPlans.filter(p => p.categoryId === ve.id).reduce((arr, p) => {
+                      let cur = p.startMonth; let pc = 0;
+                      for (let i = 0; i < p.months; i++) { if (cur === mk) { arr.push({ key: p.id, desc: p.note || "Taksitli", date: `${pc + 1}/${p.months}`, amount: p.monthlyPayment, type: "inst" }); break; } if (cur < mk) pc++; cur = nmk(cur); }
+                      return arr;
+                    }, []),
+                  ].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+                  const typeBadge = { cc: { bg: "rgba(29,78,216,0.12)", color: X.b, label: "Tek Çekim" }, acc: { bg: "rgba(15,118,110,0.12)", color: X.g, label: "Hesaptan" }, inst: { bg: "rgba(124,58,237,0.12)", color: X.p, label: "Taksitli" } };
                   return (
-                    <div key={ve.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: `1px solid ${X.border}` }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1, minWidth: 0 }}>
-                        <span style={{ fontSize: 14 }}>{ve.icon || "📋"}</span>
-                        <span style={{ color: X.t, fontSize: 12, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ve.name}</span>
-                        {instAmt > 0 && <span style={{ color: X.p, fontSize: 9, fontWeight: 700, background: X.pd, padding: "1px 4px", borderRadius: 4 }}>+taksit</span>}
+                    <div key={ve.id}>
+                      <div onClick={() => setExpandedCat(isOpen ? null : ve.id)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 6px", borderBottom: isOpen ? "none" : `1px solid ${X.border}`, cursor: "pointer", borderRadius: isOpen ? "8px 8px 0 0" : 0, background: isOpen ? "rgba(29,78,216,0.06)" : "transparent" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1, minWidth: 0 }}>
+                          <span style={{ fontSize: 14 }}>{ve.icon || "📋"}</span>
+                          <span style={{ color: X.t, fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ve.name}</span>
+                          {instAmt > 0 && <span style={{ color: X.p, fontSize: 9, fontWeight: 700, background: X.pd, padding: "1px 4px", borderRadius: 4 }}>+taksit</span>}
+                        </div>
+                        <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 8 }}>
+                          <span style={{ color: over ? X.r : X.t, fontSize: 13, fontWeight: 800, fontFamily: fm }}>{C(spent)}</span>
+                          {budget > 0 && <span style={{ color: X.td, fontSize: 11 }}> / {C(budget)}</span>}
+                          {budget === 0 && spent > 0 && <span style={{ color: X.w, fontSize: 10, marginLeft: 4 }}>tahmin yok</span>}
+                        </div>
                       </div>
-                      <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 8 }}>
-                        <span style={{ color: over ? X.r : X.t, fontSize: 13, fontWeight: 800, fontFamily: fm }}>{C(spent)}</span>
-                        {budget > 0 && <span style={{ color: X.td, fontSize: 10 }}> / {C(budget)}</span>}
-                        {budget === 0 && spent > 0 && <span style={{ color: X.w, fontSize: 9, marginLeft: 4 }}>tahmin yok</span>}
-                      </div>
+                      {isOpen && (
+                        <div style={{ background: "rgba(29,78,216,0.04)", borderRadius: "0 0 8px 8px", padding: "4px 8px 8px", marginBottom: 2, borderBottom: `1px solid ${X.border}` }}>
+                          {catEntries.length === 0
+                            ? <div style={{ color: X.td, fontSize: 12, padding: "6px 0" }}>Bu kategoride henüz giriş yok.</div>
+                            : catEntries.map(tx => (
+                              <div key={tx.key} style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 4px", borderBottom: `1px solid rgba(0,0,0,0.04)` }}>
+                                <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 5px", borderRadius: 4, background: typeBadge[tx.type].bg, color: typeBadge[tx.type].color, whiteSpace: "nowrap", flexShrink: 0 }}>{typeBadge[tx.type].label}</span>
+                                <span style={{ fontSize: 12, fontWeight: 600, color: X.t, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tx.desc}</span>
+                                <span style={{ fontSize: 11, color: X.td, whiteSpace: "nowrap", flexShrink: 0 }}>{tx.date}</span>
+                                <span style={{ fontSize: 12, fontWeight: 700, color: X.t, fontFamily: fm, whiteSpace: "nowrap", flexShrink: 0 }}>{C(tx.amount)}</span>
+                              </div>
+                            ))
+                          }
+                          <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 4px 0", marginTop: 2, borderTop: `1px solid rgba(0,0,0,0.08)` }}>
+                            <span style={{ fontSize: 12, fontWeight: 700, color: X.tm }}>Toplam</span>
+                            <span style={{ fontSize: 13, fontWeight: 800, color: over ? X.r : X.t, fontFamily: fm }}>{C(spent)}</span>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
