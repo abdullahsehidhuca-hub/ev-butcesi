@@ -1557,15 +1557,18 @@ function CCInstallModal({ data, mk, cards, variableExpenses, onClose, onSave, on
   );
 }
 
-function AccountPayModal({ variableExpenses, onClose, onSave }) {
+function AccountPayModal({ variableExpenses, entries, onClose, onSave, onDelete }) {
   const [a, sa] = useState(""); const [n, sn] = useState(""); const [d, sd] = useState(td());
   const [categoryId, setCategoryId] = useState(""); const [userChanged, setUserChanged] = useState(false);
+  const [listOpen, setListOpen] = useState(false);
 
   useEffect(() => {
     if (userChanged) return;
     const matched = matchCategory(n, variableExpenses || []);
     if (matched) setCategoryId(matched);
   }, [n, userChanged, variableExpenses]);
+
+  const sorted = [...(entries || [])].sort((a2, b2) => (b2.date || "").localeCompare(a2.date || ""));
 
   return (
     <Modal title="🏦 Hesaptan Ödeme" onClose={onClose}>
@@ -1576,12 +1579,40 @@ function AccountPayModal({ variableExpenses, onClose, onSave }) {
       )}
       {categoryId && !userChanged && <div style={{ color: X.g, fontSize: 11, marginTop: -8, marginBottom: 12 }}>✓ Anahtar kelime eşleşmesi bulundu</div>}
       <Inp label="Tarih" type="date" value={d} onChange={sd} />
-      <Btn onClick={() => { if (!a) return; onSave({ id: uid(), amount: parseFloat(a), note: n, date: d, categoryId: categoryId || null }); onClose(); }}>🏦 Kaydet</Btn>
+      <Btn onClick={() => { if (!a) return; onSave({ id: uid(), amount: parseFloat(a), note: n, date: d, categoryId: categoryId || null }); sa(""); sn(""); sd(td()); setCategoryId(""); setUserChanged(false); }}>🏦 Kaydet</Btn>
+      <div style={{ marginTop: 14 }}>
+        <div onClick={() => setListOpen(!listOpen)} style={{ ...glassSolid, borderRadius: listOpen ? "10px 10px 0 0" : 10, padding: "8px 12px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: X.tm }}>Bu ayki hesaptan ödemeler</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            {sorted.length > 0 && <span style={{ fontSize: 10, color: X.td }}>{sorted.length} giriş</span>}
+            <span style={{ fontSize: 10, color: X.td, transform: listOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>▼</span>
+          </div>
+        </div>
+        {listOpen && (
+          <div style={{ background: "rgba(160,190,200,0.35)", borderRadius: "0 0 10px 10px", borderTop: `1px solid ${X.border}`, padding: "6px 10px 8px" }}>
+            {sorted.length === 0
+              ? <div style={{ color: X.td, fontSize: 12, padding: "4px 0" }}>Bu ay henüz ödeme girilmedi.</div>
+              : sorted.map(e => (
+                <div key={e.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 8px", borderRadius: 7, marginBottom: 3, background: "rgba(255,255,255,0.35)" }}>
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: X.t }}>{e.note || "Hesaptan Ödeme"}</div>
+                    <div style={{ fontSize: 9, color: X.td, marginTop: 1 }}>{e.date}</div>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: X.g, fontFamily: fm }}>{C(e.amount)}</span>
+                    <button onClick={() => { if (confirm("Bu kaydı silmek istiyor musunuz?")) onDelete(e.id); }} style={{ background: "none", border: "none", color: X.r, fontSize: 14, cursor: "pointer", padding: "2px 4px", lineHeight: 1 }}>✕</button>
+                  </div>
+                </div>
+              ))
+            }
+          </div>
+        )}
+      </div>
     </Modal>
   );
 }
 
-function CCCombinedModal({ data, mk, cards, variableExpenses, onClose, onSaveSingle, onSaveInstall, onDeletePlan, onEditPlan }) {
+function CCCombinedModal({ data, mk, cards, variableExpenses, ccSingleEntries, onClose, onSaveSingle, onDeleteSingle, onSaveInstall, onDeletePlan, onEditPlan }) {
   const [tab, setTab] = useState("single");
   const [a, sa] = useState(""); const [n, sn] = useState(""); const [d, sd] = useState(td());
   const [cardId, setCardId] = useState(cards[0]?.id || "");
@@ -1596,6 +1627,9 @@ function CCCombinedModal({ data, mk, cards, variableExpenses, onClose, onSaveSin
   const [editNote, setEditNote] = useState(""); const [editTotal, setEditTotal] = useState("");
   const [editMonths, setEditMonths] = useState(""); const [editStartMk, setEditStartMk] = useState("");
   const [editCardId, setEditCardId] = useState("");
+  const [singleListOpen, setSingleListOpen] = useState(false);
+  const [installListOpen, setInstallListOpen] = useState(false);
+  const sortedSingle = [...(ccSingleEntries || [])].sort((a2, b2) => (b2.date || "").localeCompare(a2.date || ""));
 
   const t = parseFloat(ia) || 0; const m2 = parseInt(mo) || 1; const mp = Math.ceil(t / m2);
   const startOptions = []; let sm = mk;
@@ -1661,68 +1695,41 @@ function CCCombinedModal({ data, mk, cards, variableExpenses, onClose, onSaveSin
           )}
           {categoryId && !userChanged && <div style={{ color: X.g, fontSize: 11, marginTop: -8, marginBottom: 12 }}>✓ Anahtar kelime eşleşmesi bulundu</div>}
           <Inp label="Tarih" type="date" value={d} onChange={sd} />
-          <Btn onClick={() => { if (!a || !cardId) return; onSaveSingle({ id: uid(), amount: parseFloat(a), note: n, merchantName: "", date: d, cardId, categoryId: categoryId || null }); onClose(); }} disabled={!cardId}>💳 Kaydet</Btn>
+          <Btn onClick={() => { if (!a || !cardId) return; onSaveSingle({ id: uid(), amount: parseFloat(a), note: n, merchantName: "", date: d, cardId, categoryId: categoryId || null }); sa(""); sn(""); sd(td()); setCategoryId(""); setUserChanged(false); }} disabled={!cardId}>💳 Kaydet</Btn>
+          <div style={{ marginTop: 14 }}>
+            <div onClick={() => setSingleListOpen(!singleListOpen)} style={{ ...glassSolid, borderRadius: singleListOpen ? "10px 10px 0 0" : 10, padding: "8px 12px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: X.tm }}>Bu ayki tek çekim girişleri</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                {sortedSingle.length > 0 && <span style={{ fontSize: 10, color: X.td }}>{sortedSingle.length} giriş</span>}
+                <span style={{ fontSize: 10, color: X.td, transform: singleListOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>▼</span>
+              </div>
+            </div>
+            {singleListOpen && (
+              <div style={{ background: "rgba(160,190,200,0.35)", borderRadius: "0 0 10px 10px", borderTop: `1px solid ${X.border}`, padding: "6px 10px 8px" }}>
+                {sortedSingle.length === 0
+                  ? <div style={{ color: X.td, fontSize: 12, padding: "4px 0" }}>Bu ay henüz tek çekim girilmedi.</div>
+                  : sortedSingle.map(e => (
+                    <div key={e.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 8px", borderRadius: 7, marginBottom: 3, background: "rgba(255,255,255,0.35)" }}>
+                      <div>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: X.t }}>{e.note || e.merchantName || "CC Harcama"}</div>
+                        <div style={{ fontSize: 9, color: X.td, marginTop: 1 }}>{e.date}</div>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: X.b, fontFamily: fm }}>{C(e.amount)}</span>
+                        <button onClick={() => { if (confirm("Bu kaydı silmek istiyor musunuz?")) onDeleteSingle(e.id); }} style={{ background: "none", border: "none", color: X.r, fontSize: 14, cursor: "pointer", padding: "2px 4px", lineHeight: 1 }}>✕</button>
+                      </div>
+                    </div>
+                  ))
+                }
+              </div>
+            )}
+          </div>
         </>
       )}
 
       {tab === "install" && (
         <>
-          {activePlans.length > 0 && (
-            <div style={{ marginBottom: 16 }}>
-              <div style={{ color: X.tm, fontSize: 11, fontWeight: 700, marginBottom: 8 }}>AKTİF TAKSİT PLANLARI</div>
-              {activePlans.map(p => {
-                const cardName = cards.find(c2 => c2.id === p.cardId)?.name || "—";
-                let paidCount = 0; let cur = p.startMonth;
-                for (let i = 0; i < p.months; i++) { if (cur < mk) paidCount++; else break; cur = nmk(cur); }
-                const remainingCount = p.months - paidCount;
-                const isEditing = editingId === p.id;
-                const startEdit = () => { setEditingId(p.id); setEditNote(p.note || ""); setEditTotal(String(p.totalAmount || 0)); setEditMonths(String(p.months || 1)); setEditStartMk(p.startMonth || mk); setEditCardId(p.cardId || cards[0]?.id || ""); };
-                const cancelEdit = () => setEditingId(null);
-                const saveEdit = () => {
-                  const newTotal = parseFloat(editTotal) || p.totalAmount;
-                  const newMonths = parseInt(editMonths) || p.months;
-                  const newMp = Math.ceil(newTotal / newMonths);
-                  const newRemaining = (() => { let r = 0; let c2 = editStartMk; for (let i = 0; i < newMonths; i++) { if (c2 >= mk) r++; c2 = nmk(c2); } return r; })();
-                  onEditPlan({ ...p, note: editNote, totalAmount: newTotal, months: newMonths, monthlyPayment: newMp, startMonth: editStartMk, cardId: editCardId, remainingMonths: newRemaining });
-                  setEditingId(null);
-                };
-                return (
-                  <Card key={p.id} s={{ marginBottom: 8, background: "rgba(124,58,237,0.08)", border: `1px solid rgba(124,58,237,0.15)` }}>
-                    {isEditing ? (
-                      <>
-                        <Inp label="Açıklama" value={editNote} onChange={setEditNote} />
-                        <Inp label="Toplam Tutar" type="number" value={editTotal} onChange={setEditTotal} suffix="₺" />
-                        <Inp label="Taksit Sayısı" type="number" value={editMonths} onChange={setEditMonths} />
-                        <Sel label="İlk Taksit Ayı" value={editStartMk} onChange={setEditStartMk} options={startOptions} />
-                        <Sel label="Hangi Kart" value={editCardId} onChange={setEditCardId} options={cards.map(c => ({ v: c.id, l: c.name }))} />
-                        <div style={{ display: "flex", gap: 8 }}>
-                          <Btn onClick={saveEdit} c={X.p} s={{ flex: 1 }}>Kaydet</Btn>
-                          <Btn onClick={cancelEdit} v="outline" c={X.td} s={{ flex: 1 }}>İptal</Btn>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                          <div>
-                            <div style={{ color: X.t, fontWeight: 700, fontSize: 13 }}>{p.note || "İsimsiz taksit"}</div>
-                            <div style={{ color: X.td, fontSize: 11, marginTop: 2 }}>💳 {cardName} · {paidCount}/{p.months} ödendi · {remainingCount} kaldı · Toplam: {C(p.totalAmount)}</div>
-                          </div>
-                          <div style={{ display: "flex", gap: 4 }}>
-                            <button onClick={startEdit} style={{ background: "none", border: "none", color: X.b, fontSize: 16, cursor: "pointer", padding: "4px 6px" }}>✎</button>
-                            <button onClick={() => { if (confirm("Bu taksit planını silmek istiyor musunuz?")) { onDeletePlan(p.id); } }} style={{ background: "none", border: "none", color: X.r, fontSize: 16, cursor: "pointer", padding: "4px 6px" }}>✕</button>
-                          </div>
-                        </div>
-                        <div style={{ color: X.p, fontFamily: fm, fontWeight: 700, fontSize: 15, marginTop: 6 }}>{C(p.monthlyPayment)}<span style={{ color: X.td, fontSize: 11, fontWeight: 400 }}>/ay</span></div>
-                      </>
-                    )}
-                  </Card>
-                );
-              })}
-              <div style={{ borderBottom: `1px solid rgba(0,0,0,0.08)`, marginBottom: 12, paddingBottom: 4 }}>
-                <div style={{ color: X.tm, fontSize: 11, fontWeight: 700 }}>YENİ TAKSİTLİ İŞLEM EKLE</div>
-              </div>
-            </div>
-          )}
+          {/* Yeni taksit formu */}
           {cards.length === 0
             ? <div style={{ color: X.w, fontSize: 13, marginBottom: 12, padding: 10, background: X.wd, borderRadius: 8 }}>⚠️ Önce Ayarlar → Kartlarım'dan en az bir kart eklemelisiniz.</div>
             : <Sel label="Hangi Kart" value={iCardId} onChange={setICardId} options={cards.map(c => ({ v: c.id, l: c.name }))} />}
@@ -1739,6 +1746,73 @@ function CCCombinedModal({ data, mk, cards, variableExpenses, onClose, onSaveSin
             <div style={{ display: "flex", gap: 8 }}>
               <Btn onClick={saveInstall} c={X.p} s={{ flex: 1 }} disabled={!iCardId}>📅 Direkt Kaydet</Btn>
               <Btn onClick={doSim} v="outline" c={X.p} s={{ flex: 1 }}>🔮 Hesapla</Btn>
+            </div>
+          )}
+          {/* Aktif taksit planları akordiyonu */}
+          {!sim && (
+            <div style={{ marginTop: 14 }}>
+              <div onClick={() => setInstallListOpen(!installListOpen)} style={{ ...glassSolid, borderRadius: installListOpen ? "10px 10px 0 0" : 10, padding: "8px 12px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: X.tm }}>Aktif taksit planları</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  {activePlans.length > 0 && <span style={{ fontSize: 10, color: X.td }}>{activePlans.length} plan</span>}
+                  <span style={{ fontSize: 10, color: X.td, transform: installListOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>▼</span>
+                </div>
+              </div>
+              {installListOpen && (
+                <div style={{ background: "rgba(160,190,200,0.35)", borderRadius: "0 0 10px 10px", borderTop: `1px solid ${X.border}`, padding: "6px 10px 8px" }}>
+                  {activePlans.length === 0
+                    ? <div style={{ color: X.td, fontSize: 12, padding: "4px 0" }}>Henüz taksitli işlem yok.</div>
+                    : activePlans.map(p => {
+                        const cardName = cards.find(c2 => c2.id === p.cardId)?.name || "—";
+                        let paidCount = 0; let cur = p.startMonth;
+                        for (let i = 0; i < p.months; i++) { if (cur < mk) paidCount++; else break; cur = nmk(cur); }
+                        const remainingCount = p.months - paidCount;
+                        const isEditing = editingId === p.id;
+                        const startEdit = () => { setEditingId(p.id); setEditNote(p.note || ""); setEditTotal(String(p.totalAmount || 0)); setEditMonths(String(p.months || 1)); setEditStartMk(p.startMonth || mk); setEditCardId(p.cardId || cards[0]?.id || ""); };
+                        const cancelEdit = () => setEditingId(null);
+                        const saveEdit = () => {
+                          const newTotal = parseFloat(editTotal) || p.totalAmount;
+                          const newMonths = parseInt(editMonths) || p.months;
+                          const newMp = Math.ceil(newTotal / newMonths);
+                          const newRemaining = (() => { let r = 0; let c2 = editStartMk; for (let i = 0; i < newMonths; i++) { if (c2 >= mk) r++; c2 = nmk(c2); } return r; })();
+                          onEditPlan({ ...p, note: editNote, totalAmount: newTotal, months: newMonths, monthlyPayment: newMp, startMonth: editStartMk, cardId: editCardId, remainingMonths: newRemaining });
+                          setEditingId(null);
+                        };
+                        return (
+                          <div key={p.id} style={{ marginBottom: 6, background: "rgba(124,58,237,0.08)", borderRadius: 8, padding: "8px 10px", border: "1px solid rgba(124,58,237,0.15)" }}>
+                            {isEditing ? (
+                              <>
+                                <Inp label="Açıklama" value={editNote} onChange={setEditNote} />
+                                <Inp label="Toplam Tutar" type="number" value={editTotal} onChange={setEditTotal} suffix="₺" />
+                                <Inp label="Taksit Sayısı" type="number" value={editMonths} onChange={setEditMonths} />
+                                <Sel label="İlk Taksit Ayı" value={editStartMk} onChange={setEditStartMk} options={startOptions} />
+                                <Sel label="Hangi Kart" value={editCardId} onChange={setEditCardId} options={cards.map(c => ({ v: c.id, l: c.name }))} />
+                                <div style={{ display: "flex", gap: 8 }}>
+                                  <Btn onClick={saveEdit} c={X.p} s={{ flex: 1 }}>Kaydet</Btn>
+                                  <Btn onClick={cancelEdit} v="outline" c={X.td} s={{ flex: 1 }}>İptal</Btn>
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ color: X.t, fontWeight: 700, fontSize: 12 }}>{p.note || "İsimsiz taksit"}</div>
+                                    <div style={{ color: X.td, fontSize: 10, marginTop: 2 }}>💳 {cardName} · {paidCount}/{p.months} ödendi · {remainingCount} kaldı</div>
+                                  </div>
+                                  <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+                                    <button onClick={startEdit} style={{ background: "none", border: "none", color: X.b, fontSize: 14, cursor: "pointer", padding: "2px 4px" }}>✎</button>
+                                    <button onClick={() => { if (confirm("Bu taksit planını silmek istiyor musunuz?")) { onDeletePlan(p.id); } }} style={{ background: "none", border: "none", color: X.r, fontSize: 14, cursor: "pointer", padding: "2px 4px" }}>✕</button>
+                                  </div>
+                                </div>
+                                <div style={{ color: X.p, fontFamily: fm, fontWeight: 700, fontSize: 13, marginTop: 4 }}>{C(p.monthlyPayment)}<span style={{ color: X.td, fontSize: 10, fontWeight: 400 }}>/ay</span></div>
+                              </>
+                            )}
+                          </div>
+                        );
+                      })
+                  }
+                </div>
+              )}
             </div>
           )}
           {sim && (
@@ -2287,6 +2361,7 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
   const undoDebtPay = debtId => { const dp = { ...md.debtPayments }; delete dp[debtId]; setMonthField(mk, "debtPayments", dp); setData(d => ({ ...d, debts: d.debts.map(db => db.id === debtId ? { ...db, remainingMonths: db.remainingMonths + 1 } : db) })); };
   const handleInstSave = plan => { setData(d => ({ ...d, installmentPlans: [...d.installmentPlans, plan] })); flash("✓ Taksit kaydedildi"); };
   const handleAccountPay = entry => { setMonthField(mk, "accountEntries", [...(md.accountEntries || []), entry]); flash("✓"); };
+  const deleteAccountEntry = id => { setMonthField(mk, "accountEntries", (md.accountEntries || []).filter(e => e.id !== id)); };
   const deleteInstallment = id => { setData(d => ({ ...d, installmentPlans: d.installmentPlans.filter(p => p.id !== id) })); };
   const editInstallment = (id, updates) => {
     if (updates) {
@@ -2386,18 +2461,18 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
         });
 
         const allItems = [...ccOverdue, ...filteredUpcoming];
-        if (allItems.length === 0) return null;
         const totalAmt = [...ccOverdue, ...filteredUpcoming].reduce((s, u) => s + (u.amountRaw || 0), 0);
-        const topColor = ccOverdue.length > 0 ? X.r : (filteredUpcoming[0]?.color || X.w);
+        const topColor = ccOverdue.length > 0 ? X.r : allItems.length > 0 ? (filteredUpcoming[0]?.color || X.w) : X.td;
         const hasTodayOrOverdue = ccOverdue.length > 0 || filteredUpcoming.some(u => u.diff === 0);
+        const subText = allItems.length === 0 ? "Yaklaşan ödeme yok" : ccOverdue.length > 0 ? `${ccOverdue.length} gecikmiş` : filteredUpcoming[0]?.diff === 0 ? "Bugün ödeme var" : `${filteredUpcoming[0]?.diff} gün içinde`;
         return (
           <div style={{ margin: "0 0 10px" }}>
-            <div onClick={() => toggle("payments")} style={{ background: hasTodayOrOverdue ? X.rd : X.wd, border: `1px solid ${topColor}40`, borderRadius: expanded === "payments" ? "14px 14px 0 0" : 14, padding: "10px 14px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div onClick={() => toggle("payments")} style={{ background: allItems.length === 0 ? "rgba(0,0,0,0.04)" : hasTodayOrOverdue ? X.rd : X.wd, border: `1px solid ${topColor}40`, borderRadius: expanded === "payments" ? "14px 14px 0 0" : 14, padding: "10px 14px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <span style={{ fontSize: 20 }}>📅</span>
                 <div>
                   <div style={{ color: topColor, fontSize: 14, fontWeight: 800 }}>Ödeme Hatırlatıcı</div>
-                  <div style={{ color: X.tm, fontSize: 11, marginTop: 1 }}>{allItems.length} kalem · {ccOverdue.length > 0 ? `${ccOverdue.length} gecikmiş` : filteredUpcoming[0]?.diff === 0 ? "Bugün ödeme var" : `${filteredUpcoming[0]?.diff} gün içinde`}</div>
+                  <div style={{ color: X.tm, fontSize: 11, marginTop: 1 }}>{allItems.length > 0 ? `${allItems.length} kalem · ` : ""}{subText}</div>
                 </div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -2406,7 +2481,8 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
               </div>
             </div>
             {expanded === "payments" && (
-              <div style={{ background: hasTodayOrOverdue ? X.rd : X.wd, border: `1px solid ${topColor}40`, borderTop: `1px solid ${topColor}20`, borderRadius: "0 0 14px 14px", padding: "6px 16px 12px" }}>
+              <div style={{ background: allItems.length === 0 ? "rgba(0,0,0,0.04)" : hasTodayOrOverdue ? X.rd : X.wd, border: `1px solid ${topColor}40`, borderTop: `1px solid ${topColor}20`, borderRadius: "0 0 14px 14px", padding: "6px 16px 12px" }}>
+                {allItems.length === 0 && <div style={{ color: X.td, fontSize: 12, padding: "6px 0" }}>Önümüzdeki günlerde yaklaşan ödeme bulunmuyor.</div>}
                 {ccOverdue.map(u => (
                   <div key={u.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px solid rgba(220,38,38,0.12)" }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
@@ -2513,8 +2589,7 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
       {/* DEĞİŞKEN GİDER TAKİBİ */}
       {(() => {
         const ves = data.settings.variableExpenses || [];
-        if (ves.length === 0) return null;
-        const { categories: cats, instByCategory } = categorizeMonthSpending(data, mk);
+        const { categories: cats, instByCategory } = ves.length > 0 ? categorizeMonthSpending(data, mk) : { categories: {}, instByCategory: {} };
         const totalBudget = ves.reduce((s, ve) => s + (ve.expectedAmount || 0), 0);
         const totalSpentEnv = Object.entries(cats).filter(([k]) => k !== "_uncategorized").reduce((s, [, v]) => s + v, 0);
         const uncat = cats._uncategorized || 0;
@@ -2533,6 +2608,7 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
             </div>
             {expanded === "envelopes" && (
               <div style={{ ...glassSolid, borderRadius: "0 0 14px 14px", marginTop: -1, padding: "8px 16px 12px", borderTop: `1px solid ${X.border}` }}>
+                {ves.length === 0 && <div style={{ color: X.td, fontSize: 12, padding: "6px 0" }}>Kategori tanımlanmamış. Ayarlar &#8594; Değişken Giderler&#39;den ekleyin.</div>}
                 {ves.map(ve => {
                   const spent = cats[ve.id] || 0;
                   const instAmt = instByCategory[ve.id] || 0;
@@ -2573,11 +2649,13 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
       })()}
 
       {/* CC TRANSFER */}
-      {ccTransferTotal > 0 && (
+      {true && (
         <CatButton icon="💳" label="Kredi Kartı Hesabına Aktar" total={ccTransferTotal} color={X.b} dimColor={X.bd} expanded={expanded === "ccTransfer"} onToggle={() => toggle("ccTransfer")} onInfo={() => setInfo("ccTransfer")}>
-          <div style={{ color: X.td, fontSize: 11, marginBottom: 8 }}>
+          {ccTransferTotal === 0
+            ? <div style={{ color: X.td, fontSize: 12, padding: "4px 0" }}>Bu ay aktarılacak işlem yok.</div>
+            : <div style={{ color: X.td, fontSize: 11, marginBottom: 8 }}>
             {ccTransferredCount}/{ccTransferItems.length} kalem aktarıldı
-          </div>
+          </div>}
           {/* Kart bazlı özet */}
           {ccTransferByCard.length > 0 && (
             <div style={{ marginBottom: 10, padding: "8px 10px", borderRadius: 10, background: "rgba(37,99,235,0.06)", border: "1px solid rgba(37,99,235,0.12)" }}>
@@ -2630,7 +2708,6 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
           return { id: "inst-" + p.id, type: "inst", date: mk + "-01", desc: p.note || "Taksitli Harcama", amount: p.monthlyPayment, paidCount: paidCount + 1, totalMonths: p.months };
         });
         const allTxs = [...ccTxs, ...accTxs, ...instTxs].sort((a, b) => b.date.localeCompare(a.date));
-        if (allTxs.length === 0) return null;
         const fmtDate = d => { try { const dt = new Date(d); return dt.toLocaleDateString("tr-TR", { day: "numeric", month: "short", year: "numeric" }); } catch { return d; } };
         const rowBg = { cc: "rgba(29,78,216,0.10)", inst: "rgba(124,58,237,0.12)", acc: "rgba(15,118,110,0.10)" };
         const badgeBg = { cc: "rgba(29,78,216,0.18)", inst: "rgba(124,58,237,0.18)", acc: "rgba(15,118,110,0.18)" };
@@ -2651,6 +2728,7 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
             </div>
             {expanded === "periodTx" && (
               <div style={{ ...glassSolid, borderRadius: "0 0 14px 14px", borderTop: `1px solid ${X.border}`, padding: "6px 10px 10px" }}>
+                {allTxs.length === 0 && <div style={{ color: X.td, fontSize: 12, padding: "6px 0" }}>Bu ay henüz işlem girilmedi.</div>}
                 {allTxs.map(tx => (
                   <div key={tx.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 10px", borderRadius: 8, marginBottom: 4, background: rowBg[tx.type] }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -2669,9 +2747,9 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
         );
       })()}
 
-      {modal === "ccCombined" && <CCCombinedModal data={data} mk={mk} cards={data.settings.cards || []} variableExpenses={data.settings.variableExpenses || []} onClose={() => setModal(null)} onSaveSingle={handleCCSingle} onSaveInstall={handleInstSave} onDeletePlan={deleteInstallment} onEditPlan={editInstallment} />}
-      {modal === "accountPay" && <AccountPayModal variableExpenses={data.settings.variableExpenses || []} onClose={() => setModal(null)} onSave={handleAccountPay} />}
-      {modal === "simulate" && <CCCombinedModal data={data} mk={mk} cards={data.settings.cards || []} variableExpenses={data.settings.variableExpenses || []} onClose={() => setModal(null)} onSaveSingle={handleCCSingle} onSaveInstall={handleInstSave} onDeletePlan={deleteInstallment} onEditPlan={editInstallment} />}
+      {modal === "ccCombined" && <CCCombinedModal data={data} mk={mk} cards={data.settings.cards || []} variableExpenses={data.settings.variableExpenses || []} ccSingleEntries={md.ccSingle || []} onClose={() => setModal(null)} onSaveSingle={handleCCSingle} onDeleteSingle={deleteCCSingle} onSaveInstall={handleInstSave} onDeletePlan={deleteInstallment} onEditPlan={editInstallment} />}
+      {modal === "accountPay" && <AccountPayModal variableExpenses={data.settings.variableExpenses || []} entries={md.accountEntries || []} onClose={() => setModal(null)} onSave={handleAccountPay} onDelete={deleteAccountEntry} />}
+      {modal === "simulate" && <CCCombinedModal data={data} mk={mk} cards={data.settings.cards || []} variableExpenses={data.settings.variableExpenses || []} ccSingleEntries={md.ccSingle || []} onClose={() => setModal(null)} onSaveSingle={handleCCSingle} onDeleteSingle={deleteCCSingle} onSaveInstall={handleInstSave} onDeletePlan={deleteInstallment} onEditPlan={editInstallment} />}
       {modal === "cardLoad" && <CardLoadModal currentLoaded={md.cardLoaded || 0} maxPerTx={c.cardLoadMaxPerTx} maxTotal={c.cardLoadMaxTotal} onClose={() => setModal(null)} onSave={handleCardLoad} onEdit={editCardLoad} />}
       {modal === "debtPay" && <DebtPayModal debts={data.debts} debtPayments={md.debtPayments} data={data} mk={mk} onClose={() => setModal(null)} onPay={handleDebtPay} onUndo={undoDebtPay} />}
       {modal === "budget" && <BudgetModal mk={mk} cur={md.budget || data.settings.monthlyBudget} def={data.settings.monthlyBudget} onSave={v => setMonthField(mk, "budget", v)} onClose={() => setModal(null)} />}
