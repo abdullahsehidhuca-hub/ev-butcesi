@@ -28,13 +28,10 @@ const nmk = mk => { let [y, m] = mk.split("-").map(Number); m++; if (m > 12) { m
 const pmk = mk => { let [y, m] = mk.split("-").map(Number); m--; if (m < 1) { m = 12; y--; } return `${y}-${String(m).padStart(2, "0")}`; };
 const PM = [{ id: "account", label: "Hesaptan", icon: "🏦" }, { id: "cc", label: "Kredi Kartı", icon: "💳" }];
 
-const CARD_USABLE_PCT = 0.75;      // serbest bütçenin en fazla %75'i karta aktarılabilir
-const CARD_SINGLE_MAX_PCT = 0.70;  // kullanılabilir tutarın tek seferde en fazla %70'i
-const EMERGENCY_BUFFER_PCT = 0.25; // serbest bütçenin %25'i acil tampon
 const MIN_TL_SAVINGS_PCT = 0.15;   // toplam birikimin en az %15'i TL olmalı
 
-const DD = { settings: { monthlyBudget: 450000, fixedExpenses: [], variableExpenses: [], cards: [], emergencyFundTarget: null, billTypes: [] }, months: {}, installmentPlans: [], debts: [], merchantMap: {}, goldRates: {}, usdRates: {}, eurRates: {}, liveRates: { USD: null, EUR: null, XAU: null, fetchedAt: null }, savings: { TRY: [], USD: [], EUR: [], XAU: [] }, lastClosedMonth: null, lastBackup: null };
-const DM = () => ({ budget: null, fixedPaid: {}, variableEntries: {}, ccSingle: [], accountEntries: [], cardLoaded: 0, debtPayments: {}, ccTransferred: {}, csvByCard: {}, finalSavings: null, receipts: [] });
+const DD = { settings: { monthlyBudget: 450000, fixedExpenses: [], variableExpenses: [], cards: [], emergencyFundTarget: null, billTypes: [], generalCardBudget: 0, emergencyTampon: 20000 }, months: {}, installmentPlans: [], debts: [], merchantMap: {}, goldRates: {}, usdRates: {}, eurRates: {}, liveRates: { USD: null, EUR: null, XAU: null, fetchedAt: null }, savings: { TRY: [], USD: [], EUR: [], XAU: [] }, lastClosedMonth: null, lastBackup: null };
+const DM = () => ({ budget: null, fixedPaid: {}, variableEntries: {}, ccSingle: [], accountEntries: [], accountTransferred: {}, cardLoaded: 0, debtPayments: {}, ccTransferred: {}, csvByCard: {}, finalSavings: null, receipts: [] });
 
 const STORAGE_KEY = "ev-butce-v11";
 
@@ -362,17 +359,21 @@ function getBillHistory(data, currentMk, numMonths = 5) {
   let m = currentMk;
   for (let i = 0; i < numMonths; i++) {
     m = pmk(m);
-    const csvByCard = data.months[m]?.csvByCard || {};
+    const md = data.months[m] || DM();
+    const csvByCard = md.csvByCard || {};
     const byType = {};
     let total = 0;
+    const processTx = (desc, amount) => {
+      const btId = matchCustomBillType(desc, billTypes);
+      if (!btId || btId === "_fatura_other") return;
+      byType[btId] = (byType[btId] || 0) + amount;
+      total += amount;
+    };
     Object.values(csvByCard).forEach(cardData => {
-      (cardData.transactions || []).forEach(t => {
-        const btId = matchCustomBillType(t.desc, billTypes);
-        if (!btId) return;
-        byType[btId] = (byType[btId] || 0) + t.amount;
-        total += t.amount;
-      });
+      (cardData.transactions || []).forEach(t => processTx(t.desc, t.amount));
     });
+    (md.accountEntries || []).forEach(e => processTx(e.note || "", e.amount));
+    (md.ccSingle || []).forEach(e => processTx((e.note || "") + " " + (e.merchantName || ""), e.amount));
     if (Object.keys(byType).length > 0) result.unshift({ mk: m, byType, total });
   }
   return result;
@@ -455,6 +456,14 @@ function getCategorizedTotal(data, mk) {
   return Object.entries(cats).filter(([k]) => k !== "_uncategorized").reduce((s, [, v]) => s + v, 0);
 }
 
+// Kategori bazlı nesne döndürür: { [veId]: tutar }
+function getCategorizedByType(data, mk) {
+  const { categories: cats } = categorizeMonthSpending(data, mk);
+  const result = {};
+  Object.entries(cats).filter(([k]) => k !== "_uncategorized").forEach(([k, v]) => { result[k] = v; });
+  return result;
+}
+
 
 // Average CC single from past 3 months
 function getCCSingleAvg(data, m) {
@@ -469,12 +478,16 @@ function calcMonth(data, m, extraInst) {
   let carryoverDeficit = 0;
   if (data.months[pmk(m)]) { const pr = calcFlat(data, pmk(m), extraInst); if (pr.remaining < 0) carryoverDeficit = Math.abs(pr.remaining); }
   const effectiveBudget = baseBudget - carryoverDeficit;
+
+  // Sabit giderler
   const fixedTotal = data.settings.fixedExpenses.reduce((s, e) => s + e.amount, 0);
   const fixedCC = data.settings.fixedExpenses.filter(e => e.paymentMethod === "cc").reduce((s, e) => s + e.amount, 0);
-  const variableTotal = getCategorizedTotal(data, m);
-  const ccSingleTotal = (md.ccSingle || []).reduce((s, e) => s + e.amount, 0);
+
+  // Taksitler
   let installmentTotal = data.installmentPlans.reduce((s, p) => { let c = p.startMonth; for (let i = 0; i < p.months; i++) { if (c === m) return s + p.monthlyPayment; c = nmk(c); } return s; }, 0);
   if (extraInst) { let c = extraInst.startMonth; for (let i = 0; i < extraInst.months; i++) { if (c === m) { installmentTotal += extraInst.monthlyPayment; break; } c = nmk(c); } }
+
+  // Borçlar
   const debtTotal = data.debts.filter(d => d.remainingMonths > 0).reduce((s, d) => {
     if (d.currency === "TRY") return s + d.monthlyPayment;
     if (d.currency === "USD") { const rate = data.liveRates?.USD || data.usdRates?.[m] || 0; return s + d.monthlyPayment * rate; }
@@ -482,55 +495,72 @@ function calcMonth(data, m, extraInst) {
     if (d.currency === "XAU") { const rate = data.liveRates?.XAU || data.goldRates?.[m] || data.goldRates?.[cmk()] || 0; return s + d.monthlyPayment * rate; }
     return s;
   }, 0);
+
+  // Genel harcama kartı (sabit bütçe)
+  const generalCardBudget = data.settings.generalCardBudget || 0;
   const cardLoaded = md.cardLoaded || 0;
-  const accountTotal = (md.accountEntries || []).reduce((s, e) => s + e.amount, 0);
+  const cardLoadRemaining = Math.max(0, generalCardBudget - cardLoaded);
+  const cardLoadMaxPerTx = generalCardBudget;
+  const cardLoadMaxTotal = generalCardBudget;
+  const cardUsable = generalCardBudget;
+  const availableForCard = cardLoadRemaining;
 
-  // === ZARF (ENVELOPE) MANTIĞI ===
-  // Değişken gider tahmini: 3 ay ortalaması veya beklenen tutarlar
-  const expectedVariableBase = (data.settings.variableExpenses || []).reduce((s, ve) => s + (ve.expectedAmount || 0), 0);
-  const past3 = [pmk(pmk(pmk(m))), pmk(pmk(m)), pmk(m)]
-    .map(pm => { const pmd = data.months[pm] || DM(); return (pmd.ccSingle || []).reduce((s2, e) => s2 + e.amount, 0) + (pmd.accountEntries || []).reduce((s2, e) => s2 + e.amount, 0); })
-    .filter(t => t > 0);
-  const variableEstimate = past3.length >= 2 ? Math.round(past3.reduce((s, t) => s + t, 0) / past3.length) : expectedVariableBase;
+  // Acil tampon (ayarlardan sabit)
+  const emergencyBuffer = data.settings.emergencyTampon || 0;
 
-  // Kategorili CC harcamaları zarftan düşer, kategorisiz CC ek harcama olarak bütçeden düşer
+  // Değişken gider tahmini: kategori bazında 3 aylık ortalama
+  const ves = data.settings.variableExpenses || [];
+  const variableEstimate = ves.reduce((s, ve) => {
+    const past3 = [pmk(pmk(pmk(m))), pmk(pmk(m)), pmk(m)].map(pm => {
+      const pmd = data.months[pm] || DM();
+      const ccAmt = (pmd.ccSingle || []).filter(e => e.categoryId === ve.id).reduce((a, e) => a + e.amount, 0);
+      const accAmt = (pmd.accountEntries || []).filter(e => e.categoryId === ve.id).reduce((a, e) => a + e.amount, 0);
+      return ccAmt + accAmt;
+    }).filter(t => t > 0);
+    const avg = past3.length >= 2 ? Math.round(past3.reduce((a, b) => a + b, 0) / past3.length) : (ve.expectedAmount || 0);
+    return s + avg;
+  }, 0);
+
+  // Hesaplama: değişken gider tahmini tam değeriyle düşülür (çift sayım yok)
   const { categories: cats } = categorizeMonthSpending(data, m);
   const categorizedCC = Object.entries(cats).filter(([k]) => k !== "_uncategorized").reduce((s, [, v]) => s + v, 0);
   const uncategorizedCC = cats._uncategorized || 0;
+  const variableTotal = categorizedCC;
 
-  // Zarflarda kalan tahmin: toplam tahmin - zarflardan harcanan (kategorili CC)
-  const envelopeRemaining = Math.max(0, variableEstimate - categorizedCC);
-  // Zarf taşması: kategorili harcama tahminden fazlaysa fark serbest bütçeden düşer
+  // Fiilen yapılan harcamalar
+  const ccSingleTotal = (md.ccSingle || []).reduce((s, e) => s + e.amount, 0);
+  const accountTotal = (md.accountEntries || []).reduce((s, e) => s + e.amount, 0);
+
+  // === YENİ KALAN BÜTÇE FORMÜLÜ ===
+  // Kalan = Bütçe − sabit − taksit − borç − genel kart bütçesi − değişken tahmin − acil tampon
+  // Bu tutar ay başından ay sonuna sabit kalır (banka bakiyesiyle örtüşür)
+  const remaining = effectiveBudget - fixedTotal - installmentTotal - debtTotal - generalCardBudget - variableEstimate - emergencyBuffer;
+
+  // Bloke = henüz ödenmemiş/aktarılmamış her kalem (dinamik)
+  // Ödendi/aktarıldı işaretlenenler blokeden düşer
+  const unpaidFixed = data.settings.fixedExpenses.filter(e => !md.fixedPaid?.[e.id]).reduce((s, e) => s + e.amount, 0);
+  const unpaidFixedCC = data.settings.fixedExpenses.filter(e => e.paymentMethod === "cc" && !md.ccTransferred?.[`fixed-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
+  const untransferredCC = (md.ccSingle || []).filter(e => !md.ccTransferred?.[`single-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
+  const untransferredInst = installmentTotal; // taksitler ay sonunda toplu aktarılır
+  const untransferredAcc = (md.accountEntries || []).filter(e => !md.accountTransferred?.[e.id]?.transferred).reduce((s, e) => s + e.amount, 0);
+  const cardBlokeKalan = Math.max(0, generalCardBudget - cardLoaded); // henüz karta yüklenmeyen kısım
+  const variableBlokeKalan = Math.max(0, variableEstimate - categorizedCC); // değişken tahminden kalan
+  const bloke = unpaidFixed + untransferredAcc + cardBlokeKalan + variableBlokeKalan + debtTotal + emergencyBuffer;
+
+  // totalSpent: analiz için — gerçek harcamalar
+  const totalSpent = categorizedCC + uncategorizedCC + cardLoaded + accountTotal + fixedTotal + installmentTotal + debtTotal;
+
+  // CC transfer needed
+  const ccTransferNeeded = fixedCC + ccSingleTotal + installmentTotal;
+  const hasActualSpending = ccSingleTotal > 0 || cardLoaded > 0 || accountTotal > 0;
+  const expectedVariable = variableEstimate;
+  const pendingVariable = variableBlokeKalan;
+  const expectedCCSingle = hasActualSpending ? getCCSingleAvg(data, m) : 0;
+  const savingsTarget = emergencyBuffer;
+  const envelopeRemaining = variableBlokeKalan;
   const envelopeOverflow = Math.max(0, categorizedCC - variableEstimate);
 
-  // Toplam harcama: sabit + taksit + borç + kategorili CC + kategorisiz CC + kart + kalan zarf tahmini + taşma
-  const totalSpent = fixedTotal + installmentTotal + debtTotal + categorizedCC + uncategorizedCC + cardLoaded + accountTotal + envelopeRemaining + envelopeOverflow;
-  const remaining = effectiveBudget - totalSpent;
-
-  // === GENEL HARCAMA KARTI — yeni model ===
-  const cardUsable = Math.max(0, Math.floor(remaining * CARD_USABLE_PCT));
-  const cardLoadMaxPerTx = Math.floor(cardUsable * CARD_SINGLE_MAX_PCT);
-  const cardLoadMaxTotal = cardUsable;
-  const cardLoadRemaining = Math.max(0, cardLoadMaxTotal - cardLoaded);
-
-  // === ACİL TAMPON ===
-  const emergencyBuffer = Math.max(0, Math.floor(remaining * EMERGENCY_BUFFER_PCT));
-
-  // === BİRİKİM HEDEFİ ===
-  // Acil tampon harcanmazsa ay sonunda birikime eklenir
-  const savingsTarget = emergencyBuffer;
-
-  // CC transfer needed (sabit CC + CC tek çekim + taksitler)
-  const ccTransferNeeded = fixedCC + ccSingleTotal + installmentTotal;
-
-  // Geriye uyumluluk alanları
-  const hasActualSpending = ccSingleTotal > 0 || cardLoaded > 0 || accountTotal > 0;
-  const expectedVariable = envelopeRemaining + envelopeOverflow;
-  const pendingVariable = envelopeRemaining;
-  const availableForCard = cardUsable;
-  const expectedCCSingle = hasActualSpending ? getCCSingleAvg(data, m) : 0;
-
-  return { effectiveBudget, baseBudget, carryoverDeficit, fixedTotal, variableTotal, ccSingleTotal, accountTotal, installmentTotal, debtTotal, cardLoaded, cardLoadMaxPerTx, cardLoadMaxTotal, cardLoadRemaining, availableForCard, totalSpent, remaining, savingsTarget, expectedCCSingle, ccTransferNeeded, expectedVariable, pendingVariable, variableEstimate, categorizedCC, uncategorizedCC, envelopeRemaining, envelopeOverflow, emergencyBuffer, cardUsable };
+  return { effectiveBudget, baseBudget, carryoverDeficit, fixedTotal, variableTotal, ccSingleTotal, accountTotal, installmentTotal, debtTotal, cardLoaded, cardLoadMaxPerTx, cardLoadMaxTotal, cardLoadRemaining, availableForCard, totalSpent, remaining, savingsTarget, expectedCCSingle, ccTransferNeeded, expectedVariable, pendingVariable, variableEstimate, categorizedCC, uncategorizedCC, envelopeRemaining, envelopeOverflow, emergencyBuffer, cardUsable, generalCardBudget, bloke, unpaidFixed, untransferredAcc, cardBlokeKalan, variableBlokeKalan };
 }
 function calcFlat(data, m, extraInst) {
   const md = data.months[m] || DM();
@@ -546,20 +576,20 @@ function calcFlat(data, m, extraInst) {
     return s;
   }, 0);
   const cl = md.cardLoaded || 0;
-  const accTotal = (md.accountEntries || []).reduce((s, e) => s + e.amount, 0);
-  // Zarf mantığı: categorizedCC + uncategorizedCC + kalan tahmin
-  const expectedVariableBase = (data.settings.variableExpenses || []).reduce((s, ve) => s + (ve.expectedAmount || 0), 0);
-  const past3 = [pmk(pmk(pmk(m))), pmk(pmk(m)), pmk(m)]
-    .map(pm => { const pmd = data.months[pm] || DM(); return (pmd.ccSingle || []).reduce((s2, e) => s2 + e.amount, 0) + (pmd.accountEntries || []).reduce((s2, e) => s2 + e.amount, 0); })
-    .filter(t => t > 0);
-  const variableEstimate = past3.length >= 2 ? Math.round(past3.reduce((s, t) => s + t, 0) / past3.length) : expectedVariableBase;
-  const { categories: cats } = categorizeMonthSpending(data, m);
-  const categorizedCC = Object.entries(cats).filter(([k]) => k !== "_uncategorized").reduce((s, [, v]) => s + v, 0);
-  const uncategorizedCC = cats._uncategorized || 0;
-  const envelopeRemaining = Math.max(0, variableEstimate - categorizedCC);
-  const envelopeOverflow = Math.max(0, categorizedCC - variableEstimate);
-  const totalSpent = ft + inst + dt + cl + accTotal + categorizedCC + uncategorizedCC + envelopeRemaining + envelopeOverflow;
-  return { remaining: b - totalSpent, totalSpent };
+  const generalCardBudget = data.settings.generalCardBudget || 0;
+  const emergencyTampon = data.settings.emergencyTampon || 0;
+  const ves = data.settings.variableExpenses || [];
+  const variableEstimate = ves.reduce((s, ve) => {
+    const past3 = [pmk(pmk(pmk(m))), pmk(pmk(m)), pmk(m)].map(pm => {
+      const pmd2 = data.months[pm] || DM();
+      return (pmd2.ccSingle || []).filter(e => e.categoryId === ve.id).reduce((a, e) => a + e.amount, 0) +
+             (pmd2.accountEntries || []).filter(e => e.categoryId === ve.id).reduce((a, e) => a + e.amount, 0);
+    }).filter(t => t > 0);
+    const avg = past3.length >= 2 ? Math.round(past3.reduce((a, b2) => a + b2, 0) / past3.length) : (ve.expectedAmount || 0);
+    return s + avg;
+  }, 0);
+  const remaining = b - ft - inst - dt - generalCardBudget - variableEstimate - emergencyTampon;
+  return { remaining, totalSpent: b - remaining };
 }
 
 /* ═══ YAKLAŞAN ÖDEMELER ═══ */
@@ -1569,7 +1599,7 @@ function CCInstallModal({ data, mk, cards, variableExpenses, onClose, onSave, on
   );
 }
 
-function AccountPayModal({ variableExpenses, entries, onClose, onSave, onDelete, onEdit }) {
+function AccountPayModal({ variableExpenses, entries, transferred, onClose, onSave, onDelete, onEdit, onTransfer, onUndoTransfer }) {
   const [a, sa] = useState(""); const [n, sn] = useState(""); const [d, sd] = useState(td());
   const [categoryId, setCategoryId] = useState(""); const [userChanged, setUserChanged] = useState(false);
   const [listOpen, setListOpen] = useState(false);
@@ -1624,6 +1654,10 @@ function AccountPayModal({ variableExpenses, entries, onClose, onSave, onDelete,
                   <span style={{ fontSize: 15, fontWeight: 600, color: X.t, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.note || "Hesaptan Ödeme"}</span>
                   <span style={{ fontSize: 13, color: X.td, whiteSpace: "nowrap", flexShrink: 0 }}>{e.date}</span>
                   <span style={{ fontSize: 15, fontWeight: 700, color: X.g, fontFamily: fm, whiteSpace: "nowrap", flexShrink: 0 }}>{C(e.amount)}</span>
+                  {transferred?.[e.id]?.transferred
+                    ? <button onClick={() => onUndoTransfer(e.id)} style={{ background: "#F0FDF4", border: "1px solid #86EFAC", borderRadius: 6, padding: "4px 8px", color: "#15803D", fontSize: 11, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0, display: "flex", alignItems: "center", gap: 3 }}><svg width="9" height="9" viewBox="0 0 10 10" fill="none"><polyline points="1,5.5 3.8,8.5 9,1.5" stroke="#15803D" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>Aktarıldı</button>
+                    : <button onClick={() => onTransfer(e.id)} style={{ background: "#FFF7ED", border: "1px solid #FDBA74", borderRadius: 6, padding: "4px 8px", color: "#C2410C", fontSize: 11, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>Aktar</button>
+                  }
                   <button onClick={() => { setEditId(e.id); setEditAmt(String(e.amount)); setEditNote2(e.note || ""); setEditDate2(e.date || ""); }} style={{ background: "none", border: "none", color: X.b, fontSize: 22, cursor: "pointer", padding: 0, width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>✎</button>
                   <button onClick={() => { if (confirm("Bu kaydı silmek istiyor musunuz?")) onDelete(e.id); }} style={{ background: "none", border: "none", color: X.r, fontSize: 22, cursor: "pointer", padding: 0, width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>✕</button>
                 </div>
@@ -2019,15 +2053,13 @@ function analyzeReceipts(receipts) {
   return { catBreakdown, repeating, topBrands, grandTotal, totalReceipts: receipts.length, totalItems: allItems.length };
 }
 
-function ReceiptModal({ receipts, onClose, onSave, onDelete, apiKey, onSaveApiKey }) {
+function ReceiptModal({ receipts, onClose, onSave, onDelete }) {
   const [step, setStep] = useState("list"); // list, capture, analyzing, result, analysis
   const [imgSrc, setImgSrc] = useState(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const [editIdx, setEditIdx] = useState(null);
-  const [keyInput, setKeyInput] = useState(apiKey || "");
-  const [showKeyInput, setShowKeyInput] = useState(!apiKey);
 
   const handleFile = e => {
     const file = e.target.files?.[0];
@@ -2042,37 +2074,18 @@ function ReceiptModal({ receipts, onClose, onSave, onDelete, apiKey, onSaveApiKe
 
   const doAnalyze = async () => {
     if (!imgSrc) return;
-    const key = apiKey || keyInput;
-    if (!key) { setError("Claude API anahtarı gerekli. Lütfen anahtarınızı girin."); setShowKeyInput(true); return; }
-    if (keyInput && !apiKey) { onSaveApiKey(keyInput); }
     setAnalyzing(true);
     setError(null);
     setStep("analyzing");
     try {
       const base64 = imgSrc.split(",")[1];
       const mediaType = imgSrc.split(";")[0].split(":")[1] || "image/jpeg";
-      const resp = await fetch("https://api.anthropic.com/v1/messages", {
+      const resp = await fetch("/api/analyze-receipt", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-api-key": key, "anthropic-dangerous-direct-browser-access": "true" },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 2000,
-          messages: [{
-            role: "user",
-            content: [
-              { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
-              { type: "text", text: `Bu bir market/mağaza fişi. Fişi analiz et ve SADECE aşağıdaki JSON formatında yanıt ver, başka hiçbir şey yazma:
-{"store":"mağaza adı","totalAmount":toplam_tutar_sayı,"items":[{"name":"ürün adı","qty":adet_sayı,"price":birim_fiyat_sayı,"brand":"marka veya boş string","category":"kategori"}]}
-category değerleri SADECE şunlardan biri olmalı: süt ürünleri, et/tavuk, meyve/sebze, temel gıda, atıştırmalık, içecek, temizlik, kişisel bakım, bebek/çocuk, diğer.
-Fiyatlar Türk Lirası cinsindendir. Eğer fiş okunamıyorsa {"error":"Fiş okunamadı"} döndür.` }
-            ]
-          }]
-        })
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ base64, mediaType }),
       });
-      const data = await resp.json();
-      const text = (data.content || []).map(c => c.text || "").join("");
-      const clean = text.replace(/```json|```/g, "").trim();
-      const parsed = JSON.parse(clean);
+      const parsed = await resp.json();
       if (parsed.error) { setError(parsed.error); setStep("capture"); }
       else { setResult(parsed); setStep("result"); }
     } catch (err) {
@@ -2128,22 +2141,7 @@ Fiyatlar Türk Lirası cinsindendir. Eğer fiş okunamıyorsa {"error":"Fiş oku
       {/* ── FİŞ YÜKLEME ── */}
       {step === "list" && (
         <div>
-          {/* API Key uyarısı / girişi */}
-          {showKeyInput && (
-            <div style={{ marginBottom: 14, padding: "12px 14px", background: X.wd, borderRadius: 10, border: `1px solid ${X.w}40` }}>
-              <div style={{ color: X.w, fontSize: 12, fontWeight: 700, marginBottom: 6 }}>🔑 Claude API Anahtarı</div>
-              <div style={{ color: X.tm, fontSize: 11, marginBottom: 8 }}>Fiş analizi için Anthropic API anahtarı gerekli. Anahtar güvenli şekilde aile veritabanında saklanır.</div>
-              <div style={{ display: "flex", gap: 8 }}>
-                <input type="password" value={keyInput} onChange={e => setKeyInput(e.target.value)} placeholder="sk-ant-..." style={{ flex: 1, background: "rgba(200,220,232,0.65)", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 8, padding: "8px 10px", fontSize: 13, fontFamily: fm, outline: "none" }} />
-                <button onClick={() => { if (keyInput) { onSaveApiKey(keyInput); setShowKeyInput(false); } }} style={{ background: X.g, color: "#fff", border: "none", borderRadius: 8, padding: "8px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: ff, whiteSpace: "nowrap" }}>Kaydet</button>
-              </div>
-            </div>
-          )}
-          {apiKey && !showKeyInput && (
-            <div style={{ marginBottom: 10, display: "flex", justifyContent: "flex-end" }}>
-              <button onClick={() => setShowKeyInput(true)} style={{ background: "none", border: "none", color: X.td, fontSize: 10, cursor: "pointer", fontFamily: ff }}>🔑 API anahtarını değiştir</button>
-            </div>
-          )}
+
           {/* Yükleme butonu */}
           <label style={{ display: "block", cursor: "pointer", marginBottom: 16 }}>
             <input type="file" accept="image/*" capture="environment" onChange={handleFile} style={{ display: "none" }} />
@@ -2394,6 +2392,8 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
   const handleAccountPay = entry => { setMonthField(mk, "accountEntries", [...(md.accountEntries || []), entry]); flash("✓"); };
   const deleteAccountEntry = id => { setMonthField(mk, "accountEntries", (md.accountEntries || []).filter(e => e.id !== id)); };
   const editAccountEntry = (id, updates) => { setMonthField(mk, "accountEntries", (md.accountEntries || []).map(e => e.id === id ? { ...e, ...updates } : e)); };
+  const handleAccountTransfer = id => { setMonthField(mk, "accountTransferred", { ...(md.accountTransferred || {}), [id]: { transferred: true, date: td() } }); };
+  const undoAccountTransfer = id => { const at = { ...(md.accountTransferred || {}) }; delete at[id]; setMonthField(mk, "accountTransferred", at); };
   const deleteInstallment = id => { setData(d => ({ ...d, installmentPlans: d.installmentPlans.filter(p => p.id !== id) })); };
   const editInstallment = (id, updates) => {
     if (updates) {
@@ -2580,7 +2580,7 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
           <InfoBtn onClick={() => setInfo("cardLoad")} />
           <div style={{ fontSize: 20, marginBottom: 3 }}>🛒</div>
           <div style={{ color: X.g, fontSize: 13, fontWeight: 800 }}>Genel Harcama Kartı</div>
-          <div style={{ color: X.t, fontSize: 17, fontWeight: 800, fontFamily: fm, marginTop: 2 }}>{C(md.cardLoaded || 0)} <span style={{ color: X.td, fontSize: 11 }}>/ {C(c.cardLoadMaxTotal)}</span></div>
+          <div style={{ color: X.t, fontSize: 17, fontWeight: 800, fontFamily: fm, marginTop: 2 }}>{C(md.cardLoaded || 0)}{c.generalCardBudget > 0 && <span style={{ color: X.td, fontSize: 11 }}> / {C(c.generalCardBudget)}</span>}</div>
         </div>
         <div onClick={() => setModal("debtPay")} style={{ background: "rgba(180,83,9,0.28)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(180,83,9,0.28)", borderRadius: 16, padding: "10px 8px", cursor: "pointer", textAlign: "center", position: "relative", boxShadow: neu }}>
           <InfoBtn onClick={() => setInfo("debt")} />
@@ -2814,25 +2814,24 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
       })()}
 
       {modal === "ccCombined" && <CCCombinedModal data={data} mk={mk} cards={data.settings.cards || []} variableExpenses={data.settings.variableExpenses || []} ccSingleEntries={md.ccSingle || []} onClose={() => setModal(null)} onSaveSingle={handleCCSingle} onDeleteSingle={deleteCCSingle} onSaveInstall={handleInstSave} onDeletePlan={deleteInstallment} onEditPlan={editInstallment} />}
-      {modal === "accountPay" && <AccountPayModal variableExpenses={data.settings.variableExpenses || []} entries={md.accountEntries || []} onClose={() => setModal(null)} onSave={handleAccountPay} onDelete={deleteAccountEntry} onEdit={editAccountEntry} />}
+      {modal === "accountPay" && <AccountPayModal variableExpenses={data.settings.variableExpenses || []} entries={md.accountEntries || []} transferred={md.accountTransferred || {}} onClose={() => setModal(null)} onSave={handleAccountPay} onDelete={deleteAccountEntry} onEdit={editAccountEntry} onTransfer={handleAccountTransfer} onUndoTransfer={undoAccountTransfer} />}
       {modal === "simulate" && <CCCombinedModal data={data} mk={mk} cards={data.settings.cards || []} variableExpenses={data.settings.variableExpenses || []} ccSingleEntries={md.ccSingle || []} onClose={() => setModal(null)} onSaveSingle={handleCCSingle} onDeleteSingle={deleteCCSingle} onSaveInstall={handleInstSave} onDeletePlan={deleteInstallment} onEditPlan={editInstallment} />}
       {modal === "cardLoad" && <CardLoadModal currentLoaded={md.cardLoaded || 0} maxPerTx={c.cardLoadMaxPerTx} maxTotal={c.cardLoadMaxTotal} onClose={() => setModal(null)} onSave={handleCardLoad} onEdit={editCardLoad} />}
       {modal === "debtPay" && <DebtPayModal debts={data.debts} debtPayments={md.debtPayments} data={data} mk={mk} onClose={() => setModal(null)} onPay={handleDebtPay} onUndo={undoDebtPay} />}
       {modal === "budget" && <BudgetModal mk={mk} cur={md.budget || data.settings.monthlyBudget} def={data.settings.monthlyBudget} onSave={v => setMonthField(mk, "budget", v)} onClose={() => setModal(null)} />}
-      {modal === "receipt" && <ReceiptModal receipts={md.receipts || []} onClose={() => setModal(null)} onSave={handleReceiptSave} onDelete={handleReceiptDelete} apiKey={data.settings.claudeApiKey || ""} onSaveApiKey={key => setData(d => ({ ...d, settings: { ...d.settings, claudeApiKey: key } }))} />}
+      {modal === "receipt" && <ReceiptModal receipts={md.receipts || []} onClose={() => setModal(null)} onSave={handleReceiptSave} onDelete={handleReceiptDelete} />}
       {info && info === "cardLoad" && (
         <Modal title="ℹ️ Genel Harcama Kartı" onClose={() => setInfo(null)}>
           <div style={{ marginBottom: 16 }}>
-            <div style={{ color: X.tm, fontSize: 11, fontWeight: 700, marginBottom: 10 }}>BU AY YÜKLENEBİLİR TUTAR HESABI</div>
+            <div style={{ color: X.tm, fontSize: 11, fontWeight: 700, marginBottom: 10 }}>BU AY KART DURUMU</div>
             <div style={{ borderRadius: 10, padding: "12px 14px", background: "rgba(160,190,200,0.35)" }}>
               {[
-                { label: "Serbest bütçe (kalan)", value: c.remaining, sign: "", hl: true },
-                { label: `Kullanılabilir (%${Math.round(CARD_USABLE_PCT * 100)})`, value: c.cardUsable, sign: "" },
+                { label: "Aylık kart limiti (sabit)", value: c.generalCardBudget, sign: "", hl: true },
                 { label: "Bu ay yüklenen", value: md.cardLoaded || 0, sign: "−" },
               ].map((row, i) => (
                 <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderBottom: i === 0 ? "1px solid rgba(0,0,0,0.06)" : "none", fontSize: 13 }}>
                   <span style={{ color: row.hl ? X.t : X.tm }}>{row.sign} {row.label}</span>
-                  <span style={{ color: row.hl ? X.g : X.tm, fontFamily: fm, fontWeight: 700 }}>{row.sign}{C(row.value)}</span>
+                  <span style={{ color: row.hl ? X.g : X.tm, fontFamily: fm, fontWeight: 700 }}>{C(row.value)}</span>
                 </div>
               ))}
               <div style={{ borderTop: "1px solid rgba(0,0,0,0.1)", marginTop: 6, paddingTop: 6 }}>
@@ -2841,17 +2840,13 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
                   <span style={{ color: c.cardLoadRemaining > 0 ? X.g : X.r, fontFamily: fm, fontWeight: 800 }}>{C(c.cardLoadRemaining)}</span>
                 </div>
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "4px 0", color: X.td }}>
-                  <span>Tek seferde max (%{Math.round(CARD_SINGLE_MAX_PCT * 100)})</span>
-                  <span style={{ fontFamily: fm }}>{C(c.cardLoadMaxPerTx)}</span>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "4px 0", color: X.td }}>
-                  <span>Acil tampon (%{Math.round(EMERGENCY_BUFFER_PCT * 100)})</span>
+                  <span>Acil tampon</span>
                   <span style={{ fontFamily: fm }}>{C(c.emergencyBuffer)}</span>
                 </div>
               </div>
             </div>
           </div>
-          <div style={{ color: X.t, fontSize: 13, lineHeight: 1.6 }}>{INFO.cardLoad.text}</div>
+          <div style={{ color: X.t, fontSize: 13, lineHeight: 1.6 }}>Genel harcama kartı limitini Ayarlar → Aylık Bütçe bölümünden güncelleyebilirsiniz.</div>
           <Btn onClick={() => setInfo(null)} s={{ marginTop: 16 }}>Anladım</Btn>
         </Modal>
       )}
@@ -3076,22 +3071,32 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
     // Mevcut ay: her işlemi özel fatura türüne eşleştir
     const byType = {}; // { btId: { total, count, items } }
     let otherTotal = 0; let otherCount = 0; const otherItems = [];
+    const md = data.months[mk] || DM();
 
+    const processTx = (desc, amount, date, categoryId) => {
+      if (categoryId && faturaVe && categoryId !== faturaVe.id) return;
+      const btId = matchCustomBillType(desc, billTypes);
+      if (!btId) return;
+      if (btId === "_fatura_other") {
+        otherTotal += amount; otherCount++; otherItems.push({ desc, amount, date });
+        return;
+      }
+      if (!byType[btId]) byType[btId] = { total: 0, count: 0, items: [] };
+      byType[btId].total += amount;
+      byType[btId].count++;
+      byType[btId].items.push({ desc, amount, date });
+    };
+
+    // 1. CSV ekstresi işlemleri
     Object.values(allCsvData).forEach(cardData => {
-      (cardData.transactions || []).forEach(t => {
-        if (t.categoryId && faturaVe && t.categoryId !== faturaVe.id) return;
-        const btId = matchCustomBillType(t.desc, billTypes);
-        if (!btId) return;
-        if (btId === "_fatura_other") {
-          otherTotal += t.amount; otherCount++; otherItems.push({ desc: t.desc, amount: t.amount, date: t.date });
-          return;
-        }
-        if (!byType[btId]) byType[btId] = { total: 0, count: 0, items: [] };
-        byType[btId].total += t.amount;
-        byType[btId].count++;
-        byType[btId].items.push({ desc: t.desc, amount: t.amount, date: t.date });
-      });
+      (cardData.transactions || []).forEach(t => processTx(t.desc, t.amount, t.date, t.categoryId));
     });
+
+    // 2. Hesaptan ödeme girişleri
+    (md.accountEntries || []).forEach(e => processTx(e.note || "", e.amount, e.date, e.categoryId));
+
+    // 3. CC tek çekim girişleri
+    (md.ccSingle || []).forEach(e => processTx((e.note || "") + " " + (e.merchantName || ""), e.amount, e.date, e.categoryId));
 
     const matchedTotal = Object.values(byType).reduce((s, g) => s + g.total, 0);
     const grandTotal = matchedTotal + otherTotal;
@@ -3309,8 +3314,8 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
         const ves = data.settings.variableExpenses || [];
         if (ves.length > 0) {
           const prevMk = pmk(mk);
-          const curCats = getCategorizedTotal(data, mk);
-          const prevCats = getCategorizedTotal(data, prevMk);
+          const curCats = getCategorizedByType(data, mk);
+          const prevCats = getCategorizedByType(data, prevMk);
           ves.forEach(ve => {
             const cur = curCats[ve.id] || 0;
             const prev = prevCats[ve.id] || 0;
@@ -4685,7 +4690,7 @@ function Settings({ data, setData, isAdmin, family }) {
   ];
   const BackBtn = () => <button onClick={() => setSec(null)} style={{ background: "none", border: "none", color: X.g, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff, padding: 0, marginBottom: 16 }}>← Geri</button>;
   if (!sec) return (<div style={{ padding: "20px 16px 100px" }}><h2 style={{ color: X.t, fontSize: 20, margin: "0 0 16px", fontFamily: ff }}>Ayarlar</h2><div style={{ display: "flex", flexDirection: "column", gap: 8 }}>{secs.map(s => (<Card key={s.id} onClick={() => { setSec(s.id); setForm({}); }} s={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 14 }}><span style={{ fontSize: 24 }}>{s.i}</span><div style={{ flex: 1 }}><div style={{ color: X.t, fontWeight: 700, fontSize: 15 }}>{s.l}</div><div style={{ color: X.td, fontSize: 12 }}>{s.d}</div></div><span style={{ color: X.td }}>›</span></Card>))}</div></div>);
-  if (sec === "budget") return (<div style={{ padding: "20px 16px 100px" }}><BackBtn /><Inp label="Varsayılan (₺)" type="number" value={form.b ?? data.settings.monthlyBudget} onChange={v => setForm({ b: v })} suffix="₺" /><Btn onClick={() => { setData(d => ({ ...d, settings: { ...d.settings, monthlyBudget: parseFloat(form.b) || 0 } })); setSec(null); }}>Kaydet</Btn></div>);
+  if (sec === "budget") return (<div style={{ padding: "20px 16px 100px" }}><BackBtn /><Inp label="Aylık Bütçe (₺)" type="number" value={form.b ?? data.settings.monthlyBudget} onChange={v => setForm(f => ({ ...f, b: v }))} suffix="₺" /><Inp label="Genel Harcama Kartı Limiti (₺)" type="number" value={form.gcb ?? data.settings.generalCardBudget ?? 0} onChange={v => setForm(f => ({ ...f, gcb: v }))} suffix="₺" /><div style={{ color: X.td, fontSize: 12, marginTop: -8, marginBottom: 12, lineHeight: 1.5 }}>Ay başında genel harcama kartına yüklenecek sabit limit. Kalan bütçe hesabında bu tutar bloke edilir.</div><Inp label="Acil Tampon (₺)" type="number" value={form.et ?? data.settings.emergencyTampon ?? 20000} onChange={v => setForm(f => ({ ...f, et: v }))} suffix="₺" /><div style={{ color: X.td, fontSize: 12, marginTop: -8, marginBottom: 12, lineHeight: 1.5 }}>Beklenmedik harcamalar için ayrılan sabit tampon. Kalan bütçe hesabında bloke edilir.</div><Btn onClick={() => { setData(d => ({ ...d, settings: { ...d.settings, monthlyBudget: parseFloat(form.b) || d.settings.monthlyBudget, generalCardBudget: parseFloat(form.gcb) || 0, emergencyTampon: parseFloat(form.et) || 0 } })); setSec(null); }}>Kaydet</Btn></div>);
   if (sec === "fixed") return <FixedSettings data={data} setData={setData} onBack={() => setSec(null)} />;
   if (sec === "cards") return <CardsSettings data={data} setData={setData} onBack={() => setSec(null)} />;
   if (sec === "variable") return <VariableSettings data={data} setData={setData} onBack={() => setSec(null)} />;
@@ -5728,15 +5733,20 @@ export default function App() {
             <span style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", fontSize: 11, fontWeight: 800, color: headerRiskColor, fontFamily: fm }}>{headerRisk.score}</span>
           </div>
           {/* Bütçe rakamları */}
-          <div style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }} onClick={showHeaderDetail}>
+          <div style={{ display: "flex", alignItems: "center", gap: 5, cursor: "pointer" }} onClick={showHeaderDetail}>
             <div style={{ textAlign: "center" }}>
               <div style={{ fontSize: 9, color: X.tm, fontWeight: 700, letterSpacing: 0.3, marginBottom: 2 }}>AYLIK BÜTÇE</div>
-              <div style={{ fontSize: 14, fontWeight: 800, color: X.t, fontFamily: fm }}>{C(c.effectiveBudget)}</div>
+              <div style={{ fontSize: 13, fontWeight: 800, color: X.t, fontFamily: fm }}>{C(c.effectiveBudget)}</div>
             </div>
-            <div style={{ color: X.td, fontSize: 14, fontWeight: 300 }}>/</div>
+            <div style={{ color: X.td, fontSize: 12, fontWeight: 300 }}>/</div>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 9, color: X.w, fontWeight: 700, letterSpacing: 0.3, marginBottom: 2 }}>BLOKE</div>
+              <div style={{ fontSize: 13, fontWeight: 800, color: X.w, fontFamily: fm }}>{C(c.bloke || 0)}</div>
+            </div>
+            <div style={{ color: X.td, fontSize: 12, fontWeight: 300 }}>/</div>
             <div style={{ textAlign: "center" }}>
               <div style={{ fontSize: 9, color: X.tm, fontWeight: 700, letterSpacing: 0.3, marginBottom: 2 }}>KALAN BÜTÇE</div>
-              <div style={{ fontSize: 14, fontWeight: 800, fontFamily: fm, borderBottom: "1px dotted rgba(0,0,0,0.2)", paddingBottom: 1, color: (() => { const pct = c.effectiveBudget > 0 ? c.remaining / c.effectiveBudget : 0; if (c.remaining < 0) return X.r; if (pct < 0.1) return X.r; if (pct < 0.2) return "#FF6B35"; if (pct < 0.35) return X.w; if (pct < 0.5) return "#84CC16"; return X.g; })() }}>{C(c.remaining)}</div>
+              <div style={{ fontSize: 13, fontWeight: 800, fontFamily: fm, borderBottom: "1px dotted rgba(0,0,0,0.2)", paddingBottom: 1, color: (() => { const pct = c.effectiveBudget > 0 ? c.remaining / c.effectiveBudget : 0; if (c.remaining < 0) return X.r; if (pct < 0.1) return X.r; if (pct < 0.2) return "#FF6B35"; if (pct < 0.35) return X.w; if (pct < 0.5) return "#84CC16"; return X.g; })() }}>{C(c.remaining)}</div>
             </div>
           </div>
         </div>
