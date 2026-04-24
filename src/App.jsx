@@ -521,46 +521,63 @@ function calcMonth(data, m, extraInst) {
     return s + avg;
   }, 0);
 
-  // Hesaplama: değişken gider tahmini tam değeriyle düşülür (çift sayım yok)
-  const { categories: cats } = categorizeMonthSpending(data, m);
-  const categorizedCC = Object.entries(cats).filter(([k]) => k !== "_uncategorized").reduce((s, [, v]) => s + v, 0);
-  const uncategorizedCC = cats._uncategorized || 0;
-  const variableTotal = categorizedCC;
-
-  // Fiilen yapılan harcamalar
+  // Fiili harcamalar
   const ccSingleTotal = (md.ccSingle || []).reduce((s, e) => s + e.amount, 0);
   const accountTotal = (md.accountEntries || []).reduce((s, e) => s + e.amount, 0);
 
-  // === YENİ KALAN BÜTÇE FORMÜLÜ ===
-  // Kalan = Bütçe − sabit − taksit − borç − genel kart bütçesi − değişken tahmin − acil tampon
-  // Bu tutar ay başından ay sonuna sabit kalır (banka bakiyesiyle örtüşür)
-  const remaining = effectiveBudget - fixedTotal - installmentTotal - debtTotal - generalCardBudget - variableEstimate - emergencyBuffer;
+  // Kategorize (ccSingle + accountEntries birlikte)
+  const { categories: cats } = categorizeMonthSpending(data, m);
+  const categorizedTotal = Object.entries(cats).filter(([k]) => k !== "_uncategorized").reduce((s, [, v]) => s + v, 0);
+  const uncategorizedAcc = (md.accountEntries || []).filter(e => !e.categoryId || !ves.find(ve => ve.id === e.categoryId)).reduce((s, e) => s + e.amount, 0);
+  const uncategorizedCC2 = (md.ccSingle || []).filter(e => !e.categoryId || !ves.find(ve => ve.id === e.categoryId)).reduce((s, e) => s + e.amount, 0);
+  const categorizedCC = Object.entries(cats).filter(([k]) => k !== "_uncategorized").reduce((s, [, v]) => s + v, 0);
+  const uncategorizedCC = cats._uncategorized || 0;
+  const variableTotal = categorizedTotal;
 
-  // Bloke = henüz ödenmemiş/aktarılmamış her kalem (dinamik)
-  // Ödendi/aktarıldı işaretlenenler blokeden düşer
-  const unpaidFixed = data.settings.fixedExpenses.filter(e => !md.fixedPaid?.[e.id]).reduce((s, e) => s + e.amount, 0);
-  const unpaidFixedCC = data.settings.fixedExpenses.filter(e => e.paymentMethod === "cc" && !md.ccTransferred?.[`fixed-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
+  // === A GRUBU: Bankadan gerçekten çıkmış ===
+  const paidFixedAcc = data.settings.fixedExpenses.filter(e => e.paymentMethod === "account" && md.fixedPaid?.[e.id]).reduce((s, e) => s + e.amount, 0);
+  const transferredCC = (md.ccSingle || []).filter(e => md.ccTransferred?.[`single-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
+  const transferredFixedCC = data.settings.fixedExpenses.filter(e => e.paymentMethod === "cc" && md.ccTransferred?.[`fixed-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
+  const transferredInst = installmentTotal > 0 && md.ccTransferred?.["inst-all"]?.transferred ? installmentTotal : 0;
+  const transferredAcc = (md.accountEntries || []).filter(e => md.accountTransferred?.[e.id]?.transferred).reduce((s, e) => s + e.amount, 0);
+  const groupA = paidFixedAcc + transferredCC + transferredFixedCC + cardLoaded + transferredAcc;
+
+  // === B GRUBU: Kesin çıkacak ama henüz çıkmamış ===
+  const unpaidFixedAcc = data.settings.fixedExpenses.filter(e => e.paymentMethod === "account" && !md.fixedPaid?.[e.id]).reduce((s, e) => s + e.amount, 0);
   const untransferredCC = (md.ccSingle || []).filter(e => !md.ccTransferred?.[`single-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
-  const untransferredInst = installmentTotal; // taksitler ay sonunda toplu aktarılır
+  const untransferredFixedCC = data.settings.fixedExpenses.filter(e => e.paymentMethod === "cc" && !md.ccTransferred?.[`fixed-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
   const untransferredAcc = (md.accountEntries || []).filter(e => !md.accountTransferred?.[e.id]?.transferred).reduce((s, e) => s + e.amount, 0);
-  const cardBlokeKalan = Math.max(0, generalCardBudget - cardLoaded); // henüz karta yüklenmeyen kısım
-  const variableBlokeKalan = Math.max(0, variableEstimate - categorizedCC); // değişken tahminden kalan
-  const bloke = unpaidFixed + untransferredAcc + cardBlokeKalan + variableBlokeKalan + debtTotal + emergencyBuffer;
+  const groupB = unpaidFixedAcc + untransferredCC + untransferredFixedCC + untransferredAcc + debtTotal + installmentTotal;
 
-  // totalSpent: analiz için — gerçek harcamalar
-  const totalSpent = categorizedCC + uncategorizedCC + cardLoaded + accountTotal + fixedTotal + installmentTotal + debtTotal;
+  // === C GRUBU: Tahmin (bloke) ===
+  const variableBlokeKalan = Math.max(0, variableEstimate - categorizedTotal);
+  const cardBlokeKalan = Math.max(0, generalCardBudget - cardLoaded);
+  const groupC = variableBlokeKalan + cardBlokeKalan + emergencyBuffer;
+
+  // Y = banka bakiyesiyle eşit (sadece A düşülmüş)
+  const remainingY = effectiveBudget - groupA;
+  // X = bekleyen kesin ödemeler de düşülmüş
+  const remainingX = remainingY - groupB;
+  // Bloke = C (tahminler)
+  const bloke = groupC;
+  // remaining (geriye uyumluluk) = X
+  const remaining = remainingX;
+
+  // totalSpent: analiz için
+  const totalSpent = groupA + groupB;
 
   // CC transfer needed
-  const ccTransferNeeded = fixedCC + ccSingleTotal + installmentTotal;
+  const ccTransferNeeded = data.settings.fixedExpenses.filter(e => e.paymentMethod === "cc").reduce((s, e) => s + e.amount, 0) + ccSingleTotal + installmentTotal;
   const hasActualSpending = ccSingleTotal > 0 || cardLoaded > 0 || accountTotal > 0;
   const expectedVariable = variableEstimate;
   const pendingVariable = variableBlokeKalan;
   const expectedCCSingle = hasActualSpending ? getCCSingleAvg(data, m) : 0;
-  const savingsTarget = remaining;
+  const savingsTarget = remainingX;
   const envelopeRemaining = variableBlokeKalan;
-  const envelopeOverflow = Math.max(0, categorizedCC - variableEstimate);
+  const envelopeOverflow = Math.max(0, categorizedTotal - variableEstimate);
+  const unpaidFixed = data.settings.fixedExpenses.filter(e => !md.fixedPaid?.[e.id]).reduce((s, e) => s + e.amount, 0);
 
-  return { effectiveBudget, baseBudget, carryoverDeficit, fixedTotal, variableTotal, ccSingleTotal, accountTotal, installmentTotal, debtTotal, cardLoaded, cardLoadMaxPerTx, cardLoadMaxTotal, cardLoadRemaining, availableForCard, totalSpent, remaining, savingsTarget, expectedCCSingle, ccTransferNeeded, expectedVariable, pendingVariable, variableEstimate, categorizedCC, uncategorizedCC, envelopeRemaining, envelopeOverflow, emergencyBuffer, cardUsable, generalCardBudget, bloke, unpaidFixed, untransferredAcc, cardBlokeKalan, variableBlokeKalan };
+  return { effectiveBudget, baseBudget, carryoverDeficit, fixedTotal, variableTotal, ccSingleTotal, accountTotal, installmentTotal, debtTotal, cardLoaded, cardLoadMaxPerTx, cardLoadMaxTotal, cardLoadRemaining, availableForCard, totalSpent, remaining, remainingX, remainingY, savingsTarget, expectedCCSingle, ccTransferNeeded, expectedVariable, pendingVariable, variableEstimate, categorizedCC, uncategorizedCC, envelopeRemaining, envelopeOverflow, emergencyBuffer, cardUsable, generalCardBudget, bloke, groupA, groupB, groupC, unpaidFixed, unpaidFixedAcc, untransferredCC, untransferredFixedCC, untransferredAcc, cardBlokeKalan, variableBlokeKalan, transferredAcc, paidFixedAcc, transferredCC, transferredFixedCC };
 }
 function calcFlat(data, m, extraInst) {
   const md = data.months[m] || DM();
@@ -578,8 +595,8 @@ function calcFlat(data, m, extraInst) {
   const cl = md.cardLoaded || 0;
   const generalCardBudget = data.settings.generalCardBudget || 0;
   const emergencyTampon = data.settings.emergencyTampon || 0;
-  const ves = data.settings.variableExpenses || [];
-  const variableEstimate = ves.reduce((s, ve) => {
+  const ves2 = data.settings.variableExpenses || [];
+  const variableEstimate2 = ves2.reduce((s, ve) => {
     const past3 = [pmk(pmk(pmk(m))), pmk(pmk(m)), pmk(m)].map(pm => {
       const pmd2 = data.months[pm] || DM();
       return (pmd2.ccSingle || []).filter(e => e.categoryId === ve.id).reduce((a, e) => a + e.amount, 0) +
@@ -588,8 +605,21 @@ function calcFlat(data, m, extraInst) {
     const avg = past3.length >= 2 ? Math.round(past3.reduce((a, b2) => a + b2, 0) / past3.length) : (ve.expectedAmount || 0);
     return s + avg;
   }, 0);
-  const remaining = b - ft - inst - dt - generalCardBudget - variableEstimate - emergencyTampon;
-  return { remaining, totalSpent: b - remaining };
+  // A grubu: gerçek çıkışlar
+  const paidFixedAccF = (data.settings.fixedExpenses || []).filter(e => e.paymentMethod === "account" && md.fixedPaid?.[e.id]).reduce((s, e) => s + e.amount, 0);
+  const transferredCCF = (md.ccSingle || []).filter(e => md.ccTransferred?.[`single-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
+  const transferredFixedCCF = (data.settings.fixedExpenses || []).filter(e => e.paymentMethod === "cc" && md.ccTransferred?.[`fixed-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
+  const transferredAccF = (md.accountEntries || []).filter(e => md.accountTransferred?.[e.id]?.transferred).reduce((s, e) => s + e.amount, 0);
+  const groupAF = paidFixedAccF + transferredCCF + transferredFixedCCF + cl + transferredAccF;
+  // B grubu: kesin çıkacak
+  const unpaidFixedAccF = (data.settings.fixedExpenses || []).filter(e => e.paymentMethod === "account" && !md.fixedPaid?.[e.id]).reduce((s, e) => s + e.amount, 0);
+  const untransferredCCF = (md.ccSingle || []).filter(e => !md.ccTransferred?.[`single-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
+  const untransferredFixedCCF = (data.settings.fixedExpenses || []).filter(e => e.paymentMethod === "cc" && !md.ccTransferred?.[`fixed-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
+  const untransferredAccF = (md.accountEntries || []).filter(e => !md.accountTransferred?.[e.id]?.transferred).reduce((s, e) => s + e.amount, 0);
+  const groupBF = unpaidFixedAccF + untransferredCCF + untransferredFixedCCF + untransferredAccF + dt + inst;
+  const remainingX = b - groupAF - groupBF;
+  const remaining = remainingX;
+  return { remaining, totalSpent: groupAF + groupBF };
 }
 
 /* ═══ YAKLAŞAN ÖDEMELER ═══ */
@@ -5772,6 +5802,32 @@ export default function App() {
   const headerRiskColor = (() => { const s = headerRisk.score; if (s >= 70) return "#DC2626"; if (s >= 50) return "#D97706"; if (s >= 30) return "#B45309"; if (s >= 15) return "#84CC16"; return "#0F766E"; })();
   const showHeaderDetail = () => { const bd = getMonthBreakdown(data, mk); setHeaderDetail({ title: `${ml(mk)} — Bütçe Dökümü`, rows: bd.rows, total: bd.mc.remaining, totalLabel: "Kalan bütçe", totalColor: bd.mc.remaining > bd.mc.effectiveBudget * 0.1 ? X.g : bd.mc.remaining >= 0 ? X.w : X.r }); };
 
+  const showBlokeDetail = () => {
+    const rows = [
+      { label: "Ödenmemiş sabit giderler (hesaptan)", value: c.unpaidFixedAcc || 0, sign: "" },
+      { label: "Aktarılmamış CC harcamaları", value: c.untransferredCC || 0, sign: "" },
+      { label: "Aktarılmamış sabit CC ödemeleri", value: c.untransferredFixedCC || 0, sign: "" },
+      { label: "Aktarılmamış hesaptan ödemeler", value: c.untransferredAcc || 0, sign: "" },
+      { label: "Borç ödemeleri", value: c.debtTotal || 0, sign: "" },
+      { label: "Taksit ödemeleri", value: c.installmentTotal || 0, sign: "" },
+      { label: "Değişken gider kalan tahmini", value: c.variableBlokeKalan || 0, sign: "" },
+      { label: "Genel kart kalan hakkı", value: c.cardBlokeKalan || 0, sign: "" },
+      { label: "Acil tampon", value: c.emergencyBuffer || 0, sign: "" },
+    ].filter(r => r.value > 0);
+    setHeaderDetail({ title: "Bloke Detayı", rows, total: c.bloke || 0, totalLabel: "Toplam bloke", totalColor: X.w });
+  };
+
+  const showKalanDetail = () => {
+    const rows = [
+      { label: "Aylık bütçe", value: c.effectiveBudget, sign: "", hl: true },
+      { label: "Ödenen sabit giderler (hesaptan)", value: c.paidFixedAcc || 0, sign: "−" },
+      { label: "Aktarılan CC harcamaları", value: (c.transferredCC || 0) + (c.transferredFixedCC || 0), sign: "−" },
+      { label: "Aktarılan hesaptan ödemeler", value: c.transferredAcc || 0, sign: "−" },
+      { label: "Genel kart yükleme", value: c.cardLoaded || 0, sign: "−" },
+    ].filter((r, i) => i === 0 || r.value > 0);
+    setHeaderDetail({ title: "Kalan Bütçe Detayı", rows, total: c.remainingY || 0, totalLabel: `Y (banka ile eşit) = ${C(c.remainingY||0)}  |  X (bekleyenler düşük) = ${C(c.remainingX||0)}`, totalColor: (c.remainingX||0) >= 0 ? X.g : X.r });
+  };
+
   return (
     <div style={{ background: _theme.gradient, minHeight: "100vh", color: X.t, fontFamily: ff, maxWidth: 480, margin: "0 auto", position: "relative" }}>
       <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
@@ -5791,20 +5847,22 @@ export default function App() {
             <span style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", fontSize: 11, fontWeight: 800, color: headerRiskColor, fontFamily: fm }}>{headerRisk.score}</span>
           </div>
           {/* Bütçe rakamları */}
-          <div style={{ display: "flex", alignItems: "center", gap: 5, cursor: "pointer" }} onClick={showHeaderDetail}>
-            <div style={{ textAlign: "center" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+            <div style={{ textAlign: "center", cursor: "pointer" }} onClick={showHeaderDetail}>
               <div style={{ fontSize: 9, color: X.tm, fontWeight: 700, letterSpacing: 0.3, marginBottom: 2 }}>AYLIK BÜTÇE</div>
               <div style={{ fontSize: 13, fontWeight: 800, color: X.t, fontFamily: fm }}>{C(c.effectiveBudget)}</div>
             </div>
             <div style={{ color: X.td, fontSize: 12, fontWeight: 300 }}>/</div>
-            <div style={{ textAlign: "center" }}>
+            <div style={{ textAlign: "center", cursor: "pointer" }} onClick={showBlokeDetail}>
               <div style={{ fontSize: 9, color: X.w, fontWeight: 700, letterSpacing: 0.3, marginBottom: 2 }}>BLOKE</div>
-              <div style={{ fontSize: 13, fontWeight: 800, color: X.w, fontFamily: fm }}>{C(c.bloke || 0)}</div>
+              <div style={{ fontSize: 13, fontWeight: 800, color: X.w, fontFamily: fm, borderBottom: "1px dotted rgba(0,0,0,0.2)", paddingBottom: 1 }}>{C(c.bloke || 0)}</div>
             </div>
             <div style={{ color: X.td, fontSize: 12, fontWeight: 300 }}>/</div>
-            <div style={{ textAlign: "center" }}>
+            <div style={{ textAlign: "center", cursor: "pointer" }} onClick={showKalanDetail}>
               <div style={{ fontSize: 9, color: X.tm, fontWeight: 700, letterSpacing: 0.3, marginBottom: 2 }}>KALAN BÜTÇE</div>
-              <div style={{ fontSize: 13, fontWeight: 800, fontFamily: fm, borderBottom: "1px dotted rgba(0,0,0,0.2)", paddingBottom: 1, color: (() => { const pct = c.effectiveBudget > 0 ? c.remaining / c.effectiveBudget : 0; if (c.remaining < 0) return X.r; if (pct < 0.1) return X.r; if (pct < 0.2) return "#FF6B35"; if (pct < 0.35) return X.w; if (pct < 0.5) return "#84CC16"; return X.g; })() }}>{C(c.remaining)}</div>
+              <div style={{ fontSize: 13, fontWeight: 800, fontFamily: fm, borderBottom: "1px dotted rgba(0,0,0,0.2)", paddingBottom: 1, color: (() => { const pct = c.effectiveBudget > 0 ? (c.remainingX||0) / c.effectiveBudget : 0; if ((c.remainingX||0) < 0) return X.r; if (pct < 0.1) return X.r; if (pct < 0.2) return "#FF6B35"; if (pct < 0.35) return X.w; if (pct < 0.5) return "#84CC16"; return X.g; })() }}>
+                {C(c.remainingX||0)} <span style={{ fontSize: 10, color: X.td, fontWeight: 400 }}>/ {C(c.remainingY||0)}</span>
+              </div>
             </div>
           </div>
         </div>
