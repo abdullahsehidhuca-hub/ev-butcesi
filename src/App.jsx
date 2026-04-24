@@ -539,20 +539,16 @@ function calcMonth(data, m, extraInst) {
   const transferredCC = (md.ccSingle || []).filter(e => md.ccTransferred?.[`single-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
   const transferredFixedCC = data.settings.fixedExpenses.filter(e => e.paymentMethod === "cc" && md.ccTransferred?.[`fixed-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
   const transferredInst = installmentTotal > 0 && md.ccTransferred?.["inst-all"]?.transferred ? installmentTotal : 0;
-  // accountEntries tamamı Y'yi etkiler — bankadan zaten çıktı
-  // Aktarıldı/aktarılmadı durumu sadece X'i (bloke) etkiler
+  // A: sadece aktarıldı işaretli hesaptan ödemeler (bankadan çıktı)
   const transferredAcc = (md.accountEntries || []).filter(e => md.accountTransferred?.[e.id]?.transferred).reduce((s, e) => s + e.amount, 0);
-  const allAccTotal = accountTotal; // tamamı A grubuna — banka eşleşmesi için
-  const groupA = paidFixedAcc + transferredCC + transferredFixedCC + cardLoaded + allAccTotal;
+  const groupA = paidFixedAcc + transferredCC + transferredFixedCC + cardLoaded + transferredAcc;
 
   // === B GRUBU: Kesin çıkacak ama henüz çıkmamış ===
   const unpaidFixedAcc = data.settings.fixedExpenses.filter(e => e.paymentMethod === "account" && !md.fixedPaid?.[e.id]).reduce((s, e) => s + e.amount, 0);
   const untransferredCC = (md.ccSingle || []).filter(e => !md.ccTransferred?.[`single-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
   const untransferredFixedCC = data.settings.fixedExpenses.filter(e => e.paymentMethod === "cc" && !md.ccTransferred?.[`fixed-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
   const untransferredAcc = (md.accountEntries || []).filter(e => !md.accountTransferred?.[e.id]?.transferred).reduce((s, e) => s + e.amount, 0);
-  // untransferredAcc groupB'ye girmiyor — allAccTotal zaten A grubunda (Y'den düşüldü)
-  // untransferredAcc sadece bloke gösterimi için kullanılır
-  const groupB = unpaidFixedAcc + untransferredCC + untransferredFixedCC + debtTotal + installmentTotal;
+  const groupB = unpaidFixedAcc + untransferredCC + untransferredFixedCC + untransferredAcc + debtTotal + installmentTotal;
 
   // === C GRUBU: Tahmin (bloke) ===
   const variableBlokeKalan = Math.max(0, variableEstimate - categorizedTotal);
@@ -614,14 +610,13 @@ function calcFlat(data, m, extraInst) {
   const paidFixedAccF = (data.settings.fixedExpenses || []).filter(e => e.paymentMethod === "account" && md.fixedPaid?.[e.id]).reduce((s, e) => s + e.amount, 0);
   const transferredCCF = (md.ccSingle || []).filter(e => md.ccTransferred?.[`single-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
   const transferredFixedCCF = (data.settings.fixedExpenses || []).filter(e => e.paymentMethod === "cc" && md.ccTransferred?.[`fixed-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
-  const transferredAccF = (md.accountEntries || []).reduce((s, e) => s + e.amount, 0); // tüm hesaptan ödemeler bankadan çıktı
+  const transferredAccF = (md.accountEntries || []).filter(e => md.accountTransferred?.[e.id]?.transferred).reduce((s, e) => s + e.amount, 0);
   const groupAF = paidFixedAccF + transferredCCF + transferredFixedCCF + cl + transferredAccF;
-  // B grubu: kesin çıkacak
   const unpaidFixedAccF = (data.settings.fixedExpenses || []).filter(e => e.paymentMethod === "account" && !md.fixedPaid?.[e.id]).reduce((s, e) => s + e.amount, 0);
   const untransferredCCF = (md.ccSingle || []).filter(e => !md.ccTransferred?.[`single-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
   const untransferredFixedCCF = (data.settings.fixedExpenses || []).filter(e => e.paymentMethod === "cc" && !md.ccTransferred?.[`fixed-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
   const untransferredAccF = (md.accountEntries || []).filter(e => !md.accountTransferred?.[e.id]?.transferred).reduce((s, e) => s + e.amount, 0);
-  const groupBF = unpaidFixedAccF + untransferredCCF + untransferredFixedCCF + dt + inst;
+  const groupBF = unpaidFixedAccF + untransferredCCF + untransferredFixedCCF + untransferredAccF + dt + inst;
   const remainingX = b - groupAF - groupBF;
   const remaining = remainingX;
   return { remaining, totalSpent: groupAF + groupBF };
@@ -5890,7 +5885,7 @@ export default function App() {
       { label: "Aylık bütçe", value: c.effectiveBudget, sign: "", hl: true },
       { label: "Ödenen sabit giderler (hesaptan)", value: c.paidFixedAcc || 0, sign: "−" },
       { label: "Aktarılan CC harcamaları", value: (c.transferredCC || 0) + (c.transferredFixedCC || 0), sign: "−" },
-      { label: "Hesaptan ödemeler", value: c.accountTotal || 0, sign: "−" },
+      { label: "Aktarılan hesaptan ödemeler", value: c.transferredAcc || 0, sign: "−" },
       { label: "Genel kart yükleme", value: c.cardLoaded || 0, sign: "−" },
     ].filter((r, i) => i === 0 || r.value > 0);
     setHeaderDetail({ title: "Kalan Bütçe Detayı", rows, total: c.remainingY || 0, totalLabel: `Y (banka ile eşit) = ${C(c.remainingY||0)}  |  X (bekleyenler düşük) = ${C(c.remainingX||0)}`, totalColor: (c.remainingX||0) >= 0 ? X.g : X.r });
