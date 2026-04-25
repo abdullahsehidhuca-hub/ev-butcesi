@@ -559,8 +559,8 @@ function calcMonth(data, m, extraInst) {
   const remainingY = effectiveBudget - groupA;
   // X = bekleyen kesin ödemeler de düşülmüş
   const remainingX = remainingY - groupB;
-  // Bloke = C (tahminler)
-  const bloke = groupC;
+  // Bloke = B grubu (kesin çıkacak ödemeler)
+  const bloke = groupB;
   // remaining (geriye uyumluluk) = X
   const remaining = remainingX;
 
@@ -1853,7 +1853,7 @@ function CCCombinedModal({ data, mk, cards, variableExpenses, ccSingleEntries, o
                   ? <div style={{ color: X.td, fontSize: 12, padding: "4px 0" }}>Bu ay henüz tek çekim girilmedi.</div>
                   : sortedSingle.map(e => sEditId === e.id ? (
                     <div key={e.id} style={{ padding: 8, borderRadius: 7, marginBottom: 3, background: "rgba(29,78,216,0.07)", border: "1px solid rgba(29,78,216,0.2)" }}>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: X.b, marginBottom: 8 }}>{e.note || e.merchantName || "CC Harcama"} — düzenleniyor</div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: X.b, marginBottom: 8 }}>{e.note || e.merchantName || "Kredi Kartı Harcaması"} — düzenleniyor</div>
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 6 }}>
                         <div><div style={{ fontSize: 12, color: X.td, marginBottom: 3 }}>Tutar</div><input type="number" value={sEditAmt} onChange={ev => setSEditAmt(ev.target.value)} style={{ width: "100%", background: "rgba(255,255,255,0.7)", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 8, padding: "8px 10px", fontSize: 13, color: X.t, boxSizing: "border-box" }} /></div>
                         <div><div style={{ fontSize: 12, color: X.td, marginBottom: 3 }}>Tarih</div><input type="date" value={sEditDate} onChange={ev => setSEditDate(ev.target.value)} style={{ width: "100%", background: "rgba(255,255,255,0.7)", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 8, padding: "8px 10px", fontSize: 13, color: X.t, boxSizing: "border-box" }} /></div>
@@ -1867,7 +1867,7 @@ function CCCombinedModal({ data, mk, cards, variableExpenses, ccSingleEntries, o
                     </div>
                   ) : (
                     <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 10px", borderRadius: 10, marginBottom: 4, background: "rgba(255,255,255,0.35)" }}>
-                      <span style={{ fontSize: 15, fontWeight: 600, color: X.t, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.note || e.merchantName || "CC Harcama"}</span>
+                      <span style={{ fontSize: 15, fontWeight: 600, color: X.t, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.note || e.merchantName || "Kredi Kartı Harcaması"}</span>
                       <span style={{ fontSize: 13, color: X.td, whiteSpace: "nowrap", flexShrink: 0 }}>{e.date}</span>
                       <span style={{ fontSize: 15, fontWeight: 700, color: X.b, fontFamily: fm, whiteSpace: "nowrap", flexShrink: 0 }}>{C(e.amount)}</span>
                       <button onClick={() => { setSEditId(e.id); setSEditAmt(String(e.amount)); setSEditNote(e.note || e.merchantName || ""); setSEditDate(e.date || ""); }} style={{ background: "none", border: "none", color: X.b, fontSize: 22, cursor: "pointer", padding: 0, width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>✎</button>
@@ -2751,7 +2751,7 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
                   const isOpen = expandedCat === ve.id;
                   // Bu kategoriye ait tüm girişler
                   const catEntries = [
-                    ...(md.ccSingle || []).filter(e => e.categoryId === ve.id).map(e => ({ key: e.id, desc: e.note || e.merchantName || "CC Harcama", date: e.date, amount: e.amount, type: "cc" })),
+                    ...(md.ccSingle || []).filter(e => e.categoryId === ve.id).map(e => ({ key: e.id, desc: e.note || e.merchantName || "Kredi Kartı Harcaması", date: e.date, amount: e.amount, type: "cc" })),
                     ...(md.accountEntries || []).filter(e => e.categoryId === ve.id).map(e => ({ key: e.id, desc: e.note || "Hesaptan Ödeme", date: e.date, amount: e.amount, type: "acc" })),
                     ...data.installmentPlans.filter(p => p.categoryId === ve.id).reduce((arr, p) => {
                       let cur = p.startMonth; let pc = 0;
@@ -2796,15 +2796,44 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
                     </div>
                   );
                 })}
-                {uncat > 0 && (
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: `1px solid ${X.border}` }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <span style={{ fontSize: 14 }}>❓</span>
-                      <span style={{ color: X.o, fontSize: 12, fontWeight: 600 }}>Kategorisiz</span>
+                {uncat > 0 && (() => {
+                  const isUncatOpen = expandedCat === "_uncat";
+                  const uncatEntries = [
+                    ...(md.ccSingle || []).filter(e => !e.categoryId || !ves.find(ve => ve.id === e.categoryId)).map(e => ({ key: e.id, desc: e.note || e.merchantName || "Kredi Kartı Harcaması", date: e.date, amount: e.amount, type: "cc" })),
+                    ...(md.accountEntries || []).filter(e => !e.categoryId || !ves.find(ve => ve.id === e.categoryId)).map(e => ({ key: e.id, desc: e.note || "Hesaptan Ödeme", date: e.date, amount: e.amount, type: "acc" })),
+                  ].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+                  const typeBadge2 = { cc: { bg: "rgba(220,38,38,0.10)", color: X.r, label: "Kredi Kartı" }, acc: { bg: "rgba(220,38,38,0.10)", color: X.r, label: "Hesaptan" } };
+                  return (
+                    <div>
+                      <div onClick={() => setExpandedCat(isUncatOpen ? null : "_uncat")} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 6px", borderBottom: isUncatOpen ? "none" : `1px solid ${X.border}`, cursor: "pointer", borderRadius: isUncatOpen ? "8px 8px 0 0" : 0, background: isUncatOpen ? "rgba(220,38,38,0.05)" : "transparent" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <span style={{ fontSize: 14 }}>⚠️</span>
+                          <span style={{ color: X.r, fontSize: 13, fontWeight: 700 }}>Beklenmedik Giderler</span>
+                        </div>
+                        <span style={{ color: X.r, fontSize: 13, fontWeight: 800, fontFamily: fm }}>{C(uncat)}</span>
+                      </div>
+                      {isUncatOpen && (
+                        <div style={{ background: "rgba(220,38,38,0.04)", borderRadius: "0 0 8px 8px", padding: "4px 8px 8px", marginBottom: 2, borderBottom: `1px solid ${X.border}` }}>
+                          {uncatEntries.length === 0
+                            ? <div style={{ color: X.td, fontSize: 12, padding: "6px 0" }}>Detay bulunamadı.</div>
+                            : uncatEntries.map(tx => (
+                              <div key={tx.key} style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 4px", borderBottom: `1px solid rgba(0,0,0,0.04)` }}>
+                                <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 5px", borderRadius: 4, background: typeBadge2[tx.type].bg, color: typeBadge2[tx.type].color, whiteSpace: "nowrap", flexShrink: 0 }}>{typeBadge2[tx.type].label}</span>
+                                <span style={{ fontSize: 12, fontWeight: 600, color: X.t, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tx.desc}</span>
+                                <span style={{ fontSize: 11, color: X.td, whiteSpace: "nowrap", flexShrink: 0 }}>{tx.date}</span>
+                                <span style={{ fontSize: 12, fontWeight: 700, color: X.r, fontFamily: fm, whiteSpace: "nowrap", flexShrink: 0 }}>{C(tx.amount)}</span>
+                              </div>
+                            ))
+                          }
+                          <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 4px 0", marginTop: 2, borderTop: `1px solid rgba(0,0,0,0.08)` }}>
+                            <span style={{ fontSize: 12, fontWeight: 700, color: X.r }}>Toplam</span>
+                            <span style={{ fontSize: 13, fontWeight: 800, color: X.r, fontFamily: fm }}>{C(uncat)}</span>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                    <span style={{ color: X.o, fontSize: 13, fontWeight: 800, fontFamily: fm }}>{C(uncat)}</span>
-                  </div>
-                )}
+                  );
+                })()}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0 2px" }}>
                   <span style={{ color: X.tm, fontSize: 11, fontWeight: 700 }}>Kalan tahmin</span>
                   <span style={{ color: X.g, fontSize: 13, fontWeight: 800, fontFamily: fm }}>{C(Math.max(0, totalBudget - totalSpentEnv))}</span>
@@ -2861,7 +2890,7 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
       {/* DÖNEM İÇİ İŞLEMLER */}
       {(() => {
         // CC tek çekim
-        const ccTxs = (md.ccSingle || []).map(e => ({ id: "cc-" + e.id, type: "cc", date: e.date || (mk + "-01"), desc: e.note || e.merchantName || "CC Harcama", amount: e.amount }));
+        const ccTxs = (md.ccSingle || []).map(e => ({ id: "cc-" + e.id, type: "cc", date: e.date || (mk + "-01"), desc: e.note || e.merchantName || "Kredi Kartı Harcaması", amount: e.amount }));
         // Hesaptan ödeme
         const accTxs = (md.accountEntries || []).map(e => ({ id: "acc-" + e.id, type: "acc", date: e.date || (mk + "-01"), desc: e.note || "Hesaptan Ödeme", amount: e.amount }));
         // Bu ay aktif taksitler
@@ -3550,36 +3579,221 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
         );
       })()}
 
-      {view === "risk" && (
-        <>
-          <Card s={{ marginBottom: 12 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-              <div style={{ color: X.tm, fontSize: 12, fontWeight: 700 }}>RİSK SKORU DETAYI</div>
-              <div style={{ color: getRiskInfo(risk.score).color, fontSize: 22, fontWeight: 900, fontFamily: fm }}>{risk.score}<span style={{ fontSize: 11, color: X.td }}>/100</span></div>
-            </div>
-            {risk.details.map((d, i) => (
-              <div key={i} style={{ marginBottom: 6 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 2 }}>
-                  <span style={{ color: X.t, fontSize: 11, flex: 1 }}>{d.label}</span>
-                  <span style={{ color: X.tm, fontSize: 11, fontFamily: fm, flexShrink: 0 }}>{d.score}/{d.max}</span>
-                </div>
-                <div style={{ height: 3, borderRadius: 2, background: X.border }}>
-                  <div style={{ height: "100%", borderRadius: 2, background: d.score > d.max * 0.6 ? X.r : d.score > d.max * 0.3 ? X.w : X.g, width: `${(d.score / d.max) * 100}%` }} />
-                </div>
-                <div style={{ color: X.td, fontSize: 10, marginTop: 1 }}>{d.desc}</div>
-              </div>
-            ))}
-          </Card>
+      {view === "risk" && (() => {
+        const ves = data.settings.variableExpenses || [];
+        const { categories: cats } = categorizeMonthSpending(data, mk);
+        const uncategorized = cats._uncategorized || 0;
+        const variableEstimate = ves.reduce((s, ve) => s + (ve.expectedAmount || 0), 0);
+        const categorizedTotal = Object.entries(cats).filter(([k]) => k !== "_uncategorized").reduce((s, [, v]) => s + v, 0);
+        const variableBlokeKalan = Math.max(0, variableEstimate - categorizedTotal);
+        const unexpectedFund = data.settings.emergencyTampon || 0;
+        const overBudgetTotal = ves.reduce((s, ve) => { const sp = cats[ve.id] || 0; const bg = ve.expectedAmount || 0; return s + (bg > 0 && sp > bg ? sp - bg : 0); }, 0);
+        const fundUsed = overBudgetTotal + uncategorized;
+        const fundRemaining = Math.max(0, unexpectedFund - fundUsed);
+        const fundUsedPct = unexpectedFund > 0 ? Math.min(100, Math.round((fundUsed / unexpectedFund) * 100)) : 0;
+        const overCategories = ves.filter(ve => { const sp = cats[ve.id] || 0; return ve.expectedAmount > 0 && sp > ve.expectedAmount; });
 
-          <div style={{ color: X.tm, fontSize: 13, fontWeight: 700, marginBottom: 8 }}>YÖNLENDİRMELER</div>
-          {guidance.map((g, i) => (
-            <Card key={i} s={{ marginBottom: 8, borderLeft: `3px solid ${g.color}` }}>
-              <div style={{ color: g.color, fontSize: 13, fontWeight: 800, marginBottom: 4 }}>{g.title}</div>
-              <div style={{ color: X.tm, fontSize: 12, lineHeight: 1.5 }}>{g.text}</div>
+        // 12 ay sürdürülebilirlik
+        let mudm = 99; let m12 = nmk(mk);
+        for (let i = 0; i < 12; i++) { const fc = calcMonth(data, m12, null); if (fc.remainingX < 0) { mudm = i + 1; break; } m12 = nmk(m12); }
+
+        // Yaklaşan artışlar
+        let incCount = 0, incTotal = 0;
+        let um = nmk(mk);
+        for (let i = 0; i < 6; i++) {
+          data.settings.fixedExpenses.forEach(exp => { if (exp.increaseDate && exp.increaseDate.startsWith(um)) { incCount++; incTotal += exp.amount * 0.20; } });
+          um = nmk(um);
+        }
+
+        // F1: X durumu
+        const xRatio = c.effectiveBudget > 0 ? c.remainingX / c.effectiveBudget : 0;
+        const f1Status = c.remainingX < 0 ? "alarm" : xRatio < 0.05 ? "alarm" : xRatio < 0.15 ? "dikkat" : "guvenli";
+
+        // F2: X < değişken kalan tahmin
+        const f2Status = c.remainingX < variableBlokeKalan ? "alarm" : c.remainingX < variableBlokeKalan * 1.5 ? "dikkat" : "guvenli";
+
+        // F3: 12 ay sürdürülebilirlik
+        const f3Status = mudm <= 2 ? "alarm" : mudm <= 5 ? "dikkat" : "guvenli";
+
+        // F4: Kategori aşımları
+        const f4Status = overCategories.length >= 3 ? "alarm" : overCategories.length >= 1 ? "dikkat" : "guvenli";
+
+        // F5: Beklenmeyen fon kullanımı
+        const f5Status = fundUsedPct >= 90 ? "alarm" : fundUsedPct >= 60 ? "dikkat" : "guvenli";
+
+        // F6: Yaklaşan artışlar
+        const f6Status = incCount >= 3 ? "dikkat" : incCount >= 1 ? "dikkat" : "guvenli";
+
+        // F7: B grubunun Y'ye oranı
+        const bRatio = c.remainingY > 0 ? c.groupB / c.remainingY : 0;
+        const f7Status = bRatio > 0.85 ? "alarm" : bRatio > 0.65 ? "dikkat" : "guvenli";
+
+        const factors = [
+          { id: "f1", label: "Bloke Sonrası Kalan (X)", status: f1Status, desc: f1Status === "alarm" ? `X = ${C(c.remainingX)} — negatif veya kritik düşük` : f1Status === "dikkat" ? `X = ${C(c.remainingX)} — bütçenin %${Math.round(xRatio*100)}'i` : `X = ${C(c.remainingX)} — bütçenin %${Math.round(xRatio*100)}'i`, oneri: f1Status === "alarm" ? "Bekleyen ödemeleri gözden geçirin, harcamaları kısın" : f1Status === "dikkat" ? "Yeni harcama yapmadan önce bloke ödemeleri kontrol edin" : null },
+          { id: "f2", label: "Değişken Gider Karşılama", status: f2Status, desc: f2Status === "alarm" ? `X (${C(c.remainingX)}) değişken kalan tahminin (${C(variableBlokeKalan)}) altında` : `Değişken gider tahmini karşılanabilir`, oneri: f2Status === "alarm" ? "Bu ay yeni değişken harcama yapmayın, zorunluları önceliklendirin" : null },
+          { id: "f3", label: "12 Aylık Sürdürülebilirlik", status: f3Status, desc: mudm > 12 ? "Önümüzdeki 12 ayda bütçe aşımı öngörülmüyor" : `${mudm} ay sonra bütçe aşımı oluşabilir`, oneri: f3Status !== "guvenli" ? "Taksit simülatöründe gelecek ayları kontrol edin" : null },
+          { id: "f4", label: "Kategori Bütçe Aşımları", status: f4Status, desc: overCategories.length === 0 ? "Hiçbir kategori tahminini aşmadı" : `${overCategories.map(ve => ve.name).join(", ")} — ${C(overBudgetTotal)} aşım`, oneri: overCategories.length > 0 ? "Aşan kategorilerin tahminini güncellemeyi düşünün" : null },
+          { id: "f5", label: "Beklenmeyen Gider Fonu", status: f5Status, desc: unexpectedFund === 0 ? "Fon tanımlanmamış" : `%${fundUsedPct} kullanıldı — ${C(fundRemaining)} kaldı`, oneri: f5Status === "alarm" ? "Fon dolmak üzere — kategorisiz harcamaları minimumda tutun" : f5Status === "dikkat" ? "Fon hızlı tükeniyor — beklenmedik harcamalar için dikkatli olun" : null },
+          { id: "f6", label: "Yaklaşan Gider Artışları", status: f6Status, desc: incCount === 0 ? "Önümüzdeki 6 ayda bilinen artış yok" : `${incCount} kalem artış — tahmini ek yük ${C(incTotal)}/ay`, oneri: incCount > 0 ? "Taksit simülatöründe artış senaryolarını test edin" : null },
+          { id: "f7", label: "Bekleyen Ödemelerin Ağırlığı", status: f7Status, desc: `B grubu, bankadaki paranın %${Math.round(bRatio*100)}'i — ${C(c.groupB)} bekliyor`, oneri: f7Status !== "guvenli" ? "Aktarım tarihleri yaklaşan ödemeleri önceliklendirin" : null },
+        ];
+
+        const alarmCount = factors.filter(f => f.status === "alarm").length;
+        const dikkatCount = factors.filter(f => f.status === "dikkat").length;
+        const overallStatus = alarmCount >= 2 ? "alarm" : alarmCount >= 1 ? "dikkat" : dikkatCount >= 3 ? "dikkat" : "guvenli";
+        const statusConfig = { alarm: { label: "🚨 Alarm", sub: "Acil önlem alınmalı", color: X.r, bg: "rgba(220,38,38,0.08)", border: "rgba(220,38,38,0.3)" }, dikkat: { label: "⚠️ Dikkat", sub: "Bazı kalemler izlenmeli", color: X.w, bg: "rgba(180,83,9,0.08)", border: "rgba(180,83,9,0.3)" }, guvenli: { label: "✅ Güvende", sub: "Bütçeniz sağlıklı görünüyor", color: X.g, bg: "rgba(15,118,110,0.08)", border: "rgba(15,118,110,0.3)" } };
+        const sc = statusConfig[overallStatus];
+
+        // AI için veri özeti
+        const [aiText, setAiText] = useState("");
+        const [aiLoading, setAiLoading] = useState(false);
+        const past3Months = [pmk(pmk(mk)), pmk(mk)].map(pm => {
+          const pmc = calcMonth(data, pm, null);
+          const { categories: pcats } = categorizeMonthSpending(data, pm);
+          return { mk: pm, remainingX: pmc.remainingX, totalSpent: pmc.totalSpent, cats: pcats };
+        });
+
+        const callAI = async () => {
+          setAiLoading(true); setAiText("");
+          try {
+            const prompt = `Sen bir kişisel finans danışmanısın. Türkçe konuş, samimi ve pratik ol.
+
+MEVCUT AY (${ml(mk)}) VERİLERİ:
+- Aylık bütçe: ${C(c.effectiveBudget)}
+- Bankadaki reel tutar (Y): ${C(c.remainingY)}
+- Bloke sonrası kalan (X): ${C(c.remainingX)}
+- Bekleyen ödemeler (B grubu): ${C(c.groupB)}
+  - Ödenmemiş sabit giderler: ${C(c.unpaidFixedAcc || 0)}
+  - Aktarılmamış Kredi Kartı: ${C((c.untransferredCC || 0) + (c.untransferredFixedCC || 0))}
+  - Aktarılmamış hesaptan ödemeler: ${C(c.untransferredAcc || 0)}
+  - Borç ödemeleri: ${C(c.debtTotal || 0)}
+- Sabit giderler toplamı: ${C(c.fixedTotal)}
+- Değişken gider tahmini: ${C(variableEstimate)}
+- Değişken gider gerçekleşen: ${C(categorizedTotal)}
+- Beklenmedik giderler (kategorisiz): ${C(uncategorized)}
+- Beklenmeyen Gider Fonu: ${C(unexpectedFund)} (${fundUsedPct}% kullanıldı, ${C(fundRemaining)} kaldı)
+- Genel kart yükleme: ${C(c.cardLoaded)} / ${C(c.generalCardBudget)} limit
+- Kategori aşımları: ${overCategories.length === 0 ? "Yok" : overCategories.map(ve => `${ve.name}: ${C(cats[ve.id]||0)} / ${C(ve.expectedAmount)}`).join(", ")}
+- 12 ay sürdürülebilirlik: ${mudm > 12 ? "12 ay boyunca sorun yok" : `${mudm}. ayda açık oluşabilir`}
+- Yaklaşan artışlar (6 ay): ${incCount === 0 ? "Yok" : `${incCount} kalem, tahmini +${C(incTotal)}/ay`}
+
+${past3Months[0] ? `GEÇMİŞ AYLAR:
+- ${ml(past3Months[0].mk)}: X=${C(past3Months[0].remainingX)}, toplam harcama=${C(past3Months[0].totalSpent)}
+- ${ml(past3Months[1].mk)}: X=${C(past3Months[1].remainingX)}, toplam harcama=${C(past3Months[1].totalSpent)}` : ""}
+
+GÖREV: Bu verilere dayanarak 3-4 paragraflık kişisel finans tavsiyesi ver. Şunları kapsasın:
+1. Bu ayın genel durumu (iyi mi, endişe verici mi, neden)
+2. En kritik 1-2 aksiyon (somut, uygulanabilir)
+3. Eğer bir sürpriz harcama veya tatil planı olursa ne yapmalı
+4. Ay sonu için birikim tahmini ve öneri
+Sayıları tekrarlama, yorum yap. Madde madde değil paragraf yaz.`;
+
+            const res = await fetch("https://api.anthropic.com/v1/messages", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 2000, messages: [{ role: "user", content: prompt }] })
+            });
+            const d = await res.json();
+            setAiText((d.content || []).map(b => b.text || "").join(""));
+          } catch(e) { setAiText("Analiz yüklenemedi. Lütfen tekrar deneyin."); }
+          setAiLoading(false);
+        };
+
+        // Projeksiyon
+        const proj = [];
+        let pm6 = mk;
+        for (let i = 0; i < 6; i++) {
+          pm6 = nmk(pm6);
+          const pmc = calcMonth(data, pm6, null);
+          const events = [];
+          data.debts.filter(d2 => d2.remainingMonths > 0).forEach(d2 => {
+            let em = mk; for (let j = 0; j < d2.remainingMonths; j++) em = nmk(em);
+            if (em === pm6) events.push({ icon: "🎯", text: `${d2.name} borcu bitti`, color: X.g });
+          });
+          data.settings.fixedExpenses.forEach(exp => {
+            if (exp.increaseDate && exp.increaseDate.startsWith(pm6)) events.push({ icon: "📈", text: `${exp.name} artışı`, color: X.w });
+          });
+          proj.push({ mk: pm6, mc: pmc, events });
+        }
+
+        return (
+          <>
+            {/* BÖLÜM 1: GENEL DURUM */}
+            <Card s={{ marginBottom: 12, background: sc.bg, border: `1px solid ${sc.border}` }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <div>
+                  <div style={{ color: sc.color, fontSize: 18, fontWeight: 900 }}>{sc.label}</div>
+                  <div style={{ color: X.tm, fontSize: 12, marginTop: 2 }}>{sc.sub}</div>
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <div style={{ fontSize: 11, color: X.td }}>{alarmCount} alarm · {dikkatCount} dikkat · {factors.length - alarmCount - dikkatCount} iyi</div>
+                </div>
+              </div>
+              {factors.map(f => {
+                const fc = { alarm: { icon: "🔴", color: X.r }, dikkat: { icon: "🟡", color: X.w }, guvenli: { icon: "🟢", color: X.g } }[f.status];
+                return (
+                  <div key={f.id} style={{ padding: "8px 0", borderBottom: `1px solid ${X.border}` }}>
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+                      <span style={{ fontSize: 12, flexShrink: 0, marginTop: 1 }}>{fc.icon}</span>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                          <span style={{ color: X.t, fontSize: 13, fontWeight: 600 }}>{f.label}</span>
+                        </div>
+                        <div style={{ color: X.td, fontSize: 11, marginTop: 2 }}>{f.desc}</div>
+                        {f.oneri && <div style={{ color: fc.color, fontSize: 11, marginTop: 3, fontWeight: 600 }}>→ {f.oneri}</div>}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </Card>
-          ))}
-        </>
-      )}
+
+            {/* BÖLÜM 2: AI TAVSİYE */}
+            <Card s={{ marginBottom: 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                <div style={{ color: X.t, fontSize: 14, fontWeight: 800 }}>🤖 AI Finans Danışmanı</div>
+                <button onClick={callAI} disabled={aiLoading} style={{ background: X.gd, border: `1px solid ${X.g}`, borderRadius: 8, padding: "6px 12px", color: X.g, fontSize: 12, fontWeight: 700, cursor: aiLoading ? "default" : "pointer", fontFamily: ff, opacity: aiLoading ? 0.6 : 1 }}>
+                  {aiLoading ? "⏳ Analiz ediliyor..." : aiText ? "🔄 Yenile" : "✨ Analiz Et"}
+                </button>
+              </div>
+              {!aiText && !aiLoading && (
+                <div style={{ color: X.td, fontSize: 13, textAlign: "center", padding: "16px 0" }}>
+                  <div style={{ fontSize: 28, marginBottom: 6 }}>🤖</div>
+                  <div>Tüm bütçe verileriniz analiz edilip</div>
+                  <div>kişisel tavsiye üretilecek</div>
+                </div>
+              )}
+              {aiLoading && (
+                <div style={{ color: X.td, fontSize: 13, textAlign: "center", padding: "16px 0" }}>
+                  <div style={{ fontSize: 28, marginBottom: 6 }}>⏳</div>
+                  <div>Veriler işleniyor...</div>
+                </div>
+              )}
+              {aiText && <div style={{ color: X.t, fontSize: 13, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{aiText}</div>}
+            </Card>
+
+            {/* BÖLÜM 3: PROJEKSİYON */}
+            <div style={{ color: X.tm, fontSize: 12, fontWeight: 700, marginBottom: 8 }}>GELECEĞİN 6 AYI</div>
+            {proj.map((p, i) => (
+              <Card key={i} s={{ marginBottom: 8, borderLeft: p.mc.remainingX < 0 ? `3px solid ${X.r}` : p.events.length > 0 ? `3px solid ${X.w}` : `3px solid ${X.g}` }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: p.events.length > 0 ? 6 : 0 }}>
+                  <span style={{ color: X.t, fontSize: 13, fontWeight: 700 }}>{ml(p.mk)}</span>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ color: p.mc.remainingX < 0 ? X.r : X.g, fontSize: 13, fontWeight: 800, fontFamily: fm }}>{C(p.mc.remainingX)}</div>
+                    <div style={{ color: X.td, fontSize: 10 }}>bloke sonrası kalan</div>
+                  </div>
+                </div>
+                {p.events.map((ev, j) => (
+                  <div key={j} style={{ display: "flex", alignItems: "center", gap: 6, padding: "3px 0" }}>
+                    <span style={{ fontSize: 12 }}>{ev.icon}</span>
+                    <span style={{ color: ev.color, fontSize: 11, fontWeight: 600 }}>{ev.text}</span>
+                  </div>
+                ))}
+              </Card>
+            ))}
+          </>
+        );
+      })()}
 
       {view === "savings" && (() => {
         const totalSavings = getTotalSavingsTL(data);
@@ -4051,7 +4265,7 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
           if (!byDate[d]) byDate[d] = [];
           byDate[d].push({ kind, amt, note });
         };
-        (md.ccSingle || []).forEach(e => addTx(e.date, "CC Tek Çekim", e.amount, e.note || e.merchantName));
+        (md.ccSingle || []).forEach(e => addTx(e.date, "Kredi Kartı Tek Çekim", e.amount, e.note || e.merchantName));
         (md.accountEntries || []).forEach(e => addTx(e.date, "Hesaptan Ödeme", e.amount, e.note || "Hesaptan Ödeme"));
         // Sabit zorunlu giderleri de ay başı varsayalım
         data.settings.fixedExpenses.forEach(f => {
@@ -4906,7 +5120,7 @@ function Settings({ data, setData, isAdmin, family }) {
           <Btn c={X.g} onClick={() => { if (confirm("Temiz başlat: Tüm ay içi veriler, birikim havuzu ve kapanış bilgileri sıfırlanacak. Ayarlar ve yükümlülükler korunacak. Onaylıyor musunuz?")) { setData(d => ({ ...d, months: {}, savings: { TRY: [], USD: [], EUR: [], XAU: [] }, lastClosedMonth: null, lastBackup: null })); setSec(null); } }} s={{ marginTop: 4 }}>Temiz Başlat</Btn>
         </Card>
 
-        {resetItem("Kredi Kartı Tek Çekim", "💳", "Tüm aylardaki CC tek çekim harcamaları", () => clearMonthField("ccSingle", []))}
+        {resetItem("Kredi Kartı Tek Çekim", "💳", "Tüm aylardaki Kredi Kartı tek çekim harcamaları", () => clearMonthField("ccSingle", []))}
 
         {resetItem("Kredi Kartı Taksitli", "📅", "Tüm taksit planları", () => setData(d => ({ ...d, installmentPlans: [] })))}
 
@@ -4919,7 +5133,7 @@ function Settings({ data, setData, isAdmin, family }) {
 
         {resetItem("CSV Ekstre Verileri", "🧾", "Yüklenen banka ekstresi verileri", () => clearMonthField("csvByCard", {}))}
 
-        {resetItem("CC Aktarım İşaretleri", "🔄", "Kredi kartı hesabına aktarım işaretleri", () => clearMonthField("ccTransferred", {}))}
+        {resetItem("Kredi Kartı Aktarım İşaretleri", "🔄", "Kredi kartı hesabına aktarım işaretleri", () => clearMonthField("ccTransferred", {}))}
 
         {resetItem("Market Fişi Kayıtları", "📷", "Tüm aylardaki fiş verileri", () => clearMonthField("receipts", []))}
 
@@ -5868,8 +6082,8 @@ export default function App() {
   const showBlokeDetail = () => {
     const rows = [
       { label: "Ödenmemiş sabit giderler (hesaptan)", value: c.unpaidFixedAcc || 0, sign: "" },
-      { label: "Aktarılmamış CC harcamaları", value: c.untransferredCC || 0, sign: "" },
-      { label: "Aktarılmamış sabit CC ödemeleri", value: c.untransferredFixedCC || 0, sign: "" },
+      { label: "Aktarılmamış Kredi Kartı harcamaları", value: c.untransferredCC || 0, sign: "" },
+      { label: "Aktarılmamış sabit Kredi Kartı ödemeleri", value: c.untransferredFixedCC || 0, sign: "" },
       { label: "Aktarılmamış hesaptan ödemeler", value: c.untransferredAcc || 0, sign: "" },
       { label: "Borç ödemeleri", value: c.debtTotal || 0, sign: "" },
       { label: "Taksit ödemeleri", value: c.installmentTotal || 0, sign: "" },
@@ -5877,18 +6091,18 @@ export default function App() {
       { label: "Genel kart kalan hakkı", value: c.cardBlokeKalan || 0, sign: "" },
       { label: "Beklenmeyen Gider Fonu", value: c.emergencyBuffer || 0, sign: "", label: "Beklenmeyen Gider Fonu" },
     ].filter(r => r.value > 0);
-    setHeaderDetail({ title: "Bloke Detayı", rows, total: c.bloke || 0, totalLabel: "Toplam bloke", totalColor: X.w });
+    setHeaderDetail({ title: "Bloke Detayı", rows, total: c.groupB || 0, totalLabel: "Toplam bloke (kesin çıkacak ödemeler)", totalColor: X.w });
   };
 
   const showKalanDetail = () => {
     const rows = [
       { label: "Aylık bütçe", value: c.effectiveBudget, sign: "", hl: true },
       { label: "Ödenen sabit giderler (hesaptan)", value: c.paidFixedAcc || 0, sign: "−" },
-      { label: "Aktarılan CC harcamaları", value: (c.transferredCC || 0) + (c.transferredFixedCC || 0), sign: "−" },
+      { label: "Aktarılan Kredi Kartı harcamaları", value: (c.transferredCC || 0) + (c.transferredFixedCC || 0), sign: "−" },
       { label: "Aktarılan hesaptan ödemeler", value: c.transferredAcc || 0, sign: "−" },
       { label: "Genel kart yükleme", value: c.cardLoaded || 0, sign: "−" },
     ].filter((r, i) => i === 0 || r.value > 0);
-    setHeaderDetail({ title: "Kalan Bütçe Detayı", rows, total: c.remainingY || 0, totalLabel: `Y (banka ile eşit) = ${C(c.remainingY||0)}  |  X (bekleyenler düşük) = ${C(c.remainingX||0)}`, totalColor: (c.remainingX||0) >= 0 ? X.g : X.r });
+    setHeaderDetail({ title: "Kalan Bütçe Detayı", rows, total: c.remainingY || 0, totalLabel: `Bankadaki Reel Tutar: ${C(c.remainingY||0)}  |  Bloke Sonrası Kalan: ${C(c.remainingX||0)}`, totalColor: (c.remainingX||0) >= 0 ? X.g : X.r });
   };
 
   return (
@@ -5918,7 +6132,7 @@ export default function App() {
             <div style={{ color: X.td, fontSize: 12, fontWeight: 300 }}>/</div>
             <div style={{ textAlign: "center", cursor: "pointer" }} onClick={showBlokeDetail}>
               <div style={{ fontSize: 9, color: X.w, fontWeight: 700, letterSpacing: 0.3, marginBottom: 2 }}>BLOKE</div>
-              <div style={{ fontSize: 13, fontWeight: 800, color: X.w, fontFamily: fm, borderBottom: "1px dotted rgba(0,0,0,0.2)", paddingBottom: 1 }}>{C(c.bloke || 0)}</div>
+              <div style={{ fontSize: 13, fontWeight: 800, color: X.w, fontFamily: fm, borderBottom: "1px dotted rgba(0,0,0,0.2)", paddingBottom: 1 }}>{C(c.groupB || 0)}</div>
             </div>
             <div style={{ color: X.td, fontSize: 12, fontWeight: 300 }}>/</div>
             <div style={{ textAlign: "center", cursor: "pointer" }} onClick={showKalanDetail}>
