@@ -2092,7 +2092,7 @@ const RECEIPT_CATEGORIES = ["süt ürünleri", "et/tavuk", "meyve/sebze", "temel
 const RECEIPT_CAT_ICONS = { "süt ürünleri": "🥛", "et/tavuk": "🥩", "meyve/sebze": "🥬", "temel gıda": "🌾", "atıştırmalık": "🍫", "içecek": "🥤", "temizlik": "🧹", "kişisel bakım": "🧴", "bebek/çocuk": "👶", "diğer": "📦" };
 
 function analyzeReceipts(receipts) {
-  if (!receipts || receipts.length === 0) return { empty: true };
+  if (!receipts || receipts.length === 0) return null;
   const allItems = receipts.flatMap(r => (r.items || []).map(it => ({ ...it, store: r.store, date: r.date })));
   if (allItems.length === 0) return null;
 
@@ -2994,6 +2994,8 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
   const [csvCardId, setCsvCardId] = useState("");
   const [expandedAsset, setExpandedAsset] = useState(null);
   const [savingsModal, setSavingsModal] = useState(null); // { type: "buy"|"sell", asset }
+  const [aiText, setAiText] = useState("");
+  const [aiLoading, setAiLoading] = useState(false);
   const cards = data.settings.cards || [];
   const mk = selMk;
   const risk = useMemo(() => calcRisk(data, mk), [data, mk]);
@@ -3645,8 +3647,6 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
         const sc = statusConfig[overallStatus];
 
         // AI için veri özeti
-        const [aiText, setAiText] = useState("");
-        const [aiLoading, setAiLoading] = useState(false);
         const past3Months = [pmk(pmk(mk)), pmk(mk)].map(pm => {
           const pmc = calcMonth(data, pm, null);
           const { categories: pcats } = categorizeMonthSpending(data, pm);
@@ -5032,7 +5032,7 @@ function Settings({ data, setData, isAdmin, family }) {
         <div style={{ color: X.td, fontSize: 12, marginTop: -8, marginBottom: 12, lineHeight: 1.5 }}>Ay başında genel harcama kartına yüklenecek sabit limit. Kalan bütçe hesabında bu tutar bloke edilir.</div>
         <Inp label="Beklenmeyen Gider Fonu (₺)" type="number" value={form.et ?? data.settings.emergencyTampon ?? 0} onChange={v => setForm(f => ({ ...f, et: v }))} suffix="₺" />
         <div style={{ color: X.td, fontSize: 12, marginTop: -8, marginBottom: 12, lineHeight: 1.5 }}>Kategorisiz ve tahmini aşan harcamalar buradan karşılanır. Ay sonunda kullanılmayan kısım birikime eklenir.</div>
-        <Btn onClick={() => { setData(d => ({ ...d, settings: { ...d.settings, monthlyBudget: parseFloat(form.b) || d.settings.monthlyBudget, generalCardBudget: parseFloat(form.gcb) || 0, emergencyTampon: parseFloat(form.et) || 0 } })); setSec(null); }}>Kaydet</Btn>
+        <Btn onClick={() => { setData(d => ({ ...d, settings: { ...d.settings, monthlyBudget: form.b !== undefined ? (parseFloat(form.b) || d.settings.monthlyBudget) : d.settings.monthlyBudget, generalCardBudget: form.gcb !== undefined ? (parseFloat(form.gcb) || 0) : (d.settings.generalCardBudget || 0), emergencyTampon: form.et !== undefined ? (parseFloat(form.et) || 0) : (d.settings.emergencyTampon || 0) } })); setSec(null); }}>Kaydet</Btn>
       </div>
     );
   }
@@ -5612,38 +5612,80 @@ function CardsSettings({ data, setData, onBack }) {
 
 function DebtSettings({ data, setData, onBack }) {
   const [editing, setEditing] = useState(null);
-  const [n, sn] = useState(""); const [c, sc] = useState("TRY");
-  const [total, setTotal] = useState(""); const [months, setMonths] = useState("");
-  const [pDay, setPDay] = useState(""); const [pDayEnd, setPDayEnd] = useState("");
+  const [openAcc, setOpenAcc] = useState("info");
+  const [n, sn] = useState("");
+  const [c, sc] = useState("TRY");
+  const [total, setTotal] = useState("");
+  const [months, setMonths] = useState("");
+  const [pDay, setPDay] = useState("");
+  const [pDayEnd, setPDayEnd] = useState("");
+  const [startMonth, setStartMonth] = useState(cmk());
+  const [planType, setPlanType] = useState("equal");
+  const [borrowDate, setBorrowDate] = useState(td());
+  const [purpose, setPurpose] = useState("");
+  const [noteText, setNoteText] = useState("");
 
-  const startNew = () => { sn(""); sc("TRY"); setTotal(""); setMonths(""); setPDay(""); setPDayEnd(""); setEditing("new"); };
+  const toggleAcc = id => setOpenAcc(o => o === id ? null : id);
+
+  const startNew = () => {
+    sn(""); sc("TRY"); setTotal(""); setMonths(""); setPDay(""); setPDayEnd("");
+    setStartMonth(cmk()); setPlanType("equal"); setBorrowDate(td()); setPurpose(""); setNoteText("");
+    setOpenAcc("info"); setEditing("new");
+  };
+
   const startEdit = debt => {
     sn(debt.name); sc(debt.currency);
     const t = debt.totalAmount || (debt.monthlyPayment * (debt.totalMonths || debt.remainingMonths));
     const m2 = debt.totalMonths || debt.remainingMonths;
     setTotal(String(t)); setMonths(String(m2));
-    setPDay(debt.paymentDay ? String(debt.paymentDay) : ""); setPDayEnd(debt.paymentDayEnd ? String(debt.paymentDayEnd) : "");
-    setEditing(debt.id);
+    setPDay(debt.paymentDay ? String(debt.paymentDay) : "");
+    setPDayEnd(debt.paymentDayEnd ? String(debt.paymentDayEnd) : "");
+    setStartMonth(debt.startMonth || cmk());
+    setPlanType(debt.planType || "equal");
+    setBorrowDate(debt.borrowDate || td());
+    setPurpose(debt.purpose || "");
+    setNoteText(debt.noteText || "");
+    setOpenAcc("info"); setEditing(debt.id);
   };
-  const cancel = () => { setEditing(null); sn(""); sc("TRY"); setTotal(""); setMonths(""); setPDay(""); setPDayEnd(""); };
+
+  const cancel = () => { setEditing(null); };
 
   const totalNum = parseFloat(total) || 0;
   const monthsNum = parseInt(months) || 0;
   const monthlyCalc = monthsNum > 0 ? totalNum / monthsNum : 0;
 
+  const infoOk = !!n;
+  const amountOk = totalNum > 0;
+  const planOk = planType === "lump" ? !!pDay : (monthsNum > 0 && !!pDay);
+
+  const liveRate = c === "XAU" ? (data.liveRates?.XAU || 0) : c === "USD" ? (data.liveRates?.USD || 0) : c === "EUR" ? (data.liveRates?.EUR || 0) : 1;
+  const tlTotal = c === "TRY" ? totalNum : totalNum * liveRate;
+  const tlMonthly = c === "TRY" ? monthlyCalc : monthlyCalc * liveRate;
+
   const save = () => {
-    if (!n || !totalNum || !monthsNum) return;
+    if (!n || !totalNum) return;
+    if (planType !== "lump" && !monthsNum) return;
     setData(d => {
       const list = [...d.debts];
-      if (editing === "new") {
-        list.push({ id: uid(), name: n, currency: c, totalAmount: totalNum, totalMonths: monthsNum, remainingMonths: monthsNum, monthlyPayment: monthlyCalc, paymentDay: parseInt(pDay) || null, paymentDayEnd: parseInt(pDayEnd) || null });
-      } else {
+      const entry = {
+        id: editing === "new" ? uid() : editing,
+        name: n, currency: c,
+        totalAmount: totalNum,
+        totalMonths: planType === "lump" ? 1 : monthsNum,
+        remainingMonths: planType === "lump" ? 1 : monthsNum,
+        monthlyPayment: planType === "lump" ? totalNum : monthlyCalc,
+        paymentDay: parseInt(pDay) || null,
+        paymentDayEnd: parseInt(pDayEnd) || null,
+        startMonth, planType, borrowDate, purpose, noteText
+      };
+      if (editing === "new") { list.push(entry); }
+      else {
         const idx = list.findIndex(x => x.id === editing);
         if (idx >= 0) {
           const old = list[idx];
           const paidCount = (old.totalMonths || old.remainingMonths) - old.remainingMonths;
-          const newRemaining = Math.max(0, monthsNum - paidCount);
-          list[idx] = { ...old, name: n, currency: c, totalAmount: totalNum, totalMonths: monthsNum, remainingMonths: newRemaining, monthlyPayment: monthlyCalc, paymentDay: parseInt(pDay) || null, paymentDayEnd: parseInt(pDayEnd) || null };
+          const newRemaining = Math.max(0, entry.totalMonths - paidCount);
+          list[idx] = { ...entry, remainingMonths: newRemaining };
         }
       }
       return { ...d, debts: list };
@@ -5653,45 +5695,115 @@ function DebtSettings({ data, setData, onBack }) {
 
   const rm = id => { if (confirm("Bu borcu silmek istediğinize emin misiniz?")) setData(dd => ({ ...dd, debts: dd.debts.filter(x => x.id !== id) })); };
 
-  const editForm = (
-    <Card s={{ border: `1px solid ${X.w}`, marginBottom: 8 }}>
-      <div style={{ color: X.w, fontSize: 13, fontWeight: 700, marginBottom: 10 }}>{editing === "new" ? "Yeni Borç" : "Düzenle"}</div>
-      <Inp label="Ad" value={n} onChange={sn} placeholder="Örn: Ahmet Abi" />
-      <Sel label="Birim" value={c} onChange={sc} options={[{ v: "TRY", l: "₺ Türk Lirası" }, { v: "USD", l: "$ Dolar" }, { v: "EUR", l: "€ Euro" }, { v: "XAU", l: "🪙 Altın (gram)" }]} />
-      {(c === "XAU" || c === "USD" || c === "EUR") && (
-        <div style={{ marginBottom: 12 }}>
-          <a href={c === "XAU" ? HAREMALTIN_XAU : c === "USD" ? HAREMALTIN_USD : HAREMALTIN_EUR} target="_blank" rel="noopener noreferrer" style={{ display: "inline-block", background: X.wd, border: `1px solid ${X.w}`, borderRadius: 6, padding: "6px 12px", color: X.w, fontSize: 12, fontWeight: 700, textDecoration: "none" }}>🔗 Haremaltin'den fiyat kontrol</a>
+  const accHead = (id, icon, title, sub, ok) => (
+    <div onClick={() => toggleAcc(id)} style={{ background: "white", padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", borderRadius: openAcc === id ? "14px 14px 0 0" : 14, border: `1px solid rgba(0,0,0,0.08)`, borderBottom: openAcc === id ? "1px solid rgba(0,0,0,0.06)" : undefined }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <span style={{ fontSize: 18 }}>{icon}</span>
+        <div>
+          <div style={{ color: X.t, fontSize: 14, fontWeight: 700 }}>{title}</div>
+          {sub && <div style={{ color: X.td, fontSize: 11, marginTop: 1 }}>{sub}</div>}
         </div>
-      )}
-      <Inp label="Toplam Borç" type="number" value={total} onChange={setTotal} suffix={debtCurSymbol(c)} placeholder="Örn: 24" />
-      <Inp label="Geri Ödeme Süresi (ay)" type="number" value={months} onChange={setMonths} placeholder="Örn: 12" />
-      <div style={{ display: "flex", gap: 8 }}>
-        <div style={{ flex: 1 }}><Inp label="Ödeme Günü" type="number" value={pDay} onChange={setPDay} placeholder="Örn: 28" /></div>
-        <div style={{ flex: 1 }}><Inp label="Son Gün (opsiyonel)" type="number" value={pDayEnd} onChange={setPDayEnd} placeholder="Örn: 31" /></div>
       </div>
-      {totalNum > 0 && monthsNum > 0 && (
-        <Card s={{ background: X.wd, border: `1px solid ${X.w}`, marginBottom: 12, padding: "10px 14px" }}>
-          <div style={{ color: X.tm, fontSize: 11, fontWeight: 700, marginBottom: 4 }}>HESAPLANAN AYLIK TAKSİT</div>
-          <div style={{ color: X.w, fontSize: 18, fontWeight: 800, fontFamily: fm }}>
-            {monthlyCalc.toFixed(2)} {debtCurSymbol(c)}
-            {c !== "TRY" && data.liveRates && (
-              <span style={{ color: X.td, fontSize: 12, marginLeft: 6 }}>
-                ({c === "USD" && data.liveRates.USD ? C(monthlyCalc * data.liveRates.USD) : ""}
-                {c === "EUR" && data.liveRates.EUR ? C(monthlyCalc * data.liveRates.EUR) : ""}
-                {c === "XAU" && data.liveRates.XAU ? C(monthlyCalc * data.liveRates.XAU) : ""})
-              </span>
-            )}
-          </div>
-        </Card>
-      )}
-      <div style={{ display: "flex", gap: 8 }}>
-        <Btn onClick={save} c={X.w} s={{ flex: 1 }} disabled={!n || !totalNum || !monthsNum}>Kaydet</Btn>
-        <Btn onClick={cancel} v="outline" c={X.td} s={{ flex: 1 }}>İptal</Btn>
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <div style={{ width: 20, height: 20, borderRadius: "50%", background: ok ? X.g : X.border, display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontSize: 11, flexShrink: 0 }}>{ok ? "✓" : "–"}</div>
+        <span style={{ color: X.td, fontSize: 11, transform: openAcc === id ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>▼</span>
       </div>
-    </Card>
+    </div>
   );
 
-  const activeDebts = data.debts.filter(d => d.remainingMonths > 0);
+  const accBody = children => (
+    <div style={{ background: "#F5F0EB", padding: "14px 16px", borderRadius: "0 0 14px 14px", border: "1px solid rgba(0,0,0,0.08)", borderTop: "none", marginBottom: 8 }}>
+      {children}
+    </div>
+  );
+
+  const editForm = editing ? (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ color: X.w, fontSize: 14, fontWeight: 800, marginBottom: 12 }}>{editing === "new" ? "➕ Yeni Borç" : "✎ Düzenle"}</div>
+
+      {/* AKORDİYON 1: Borç Bilgileri */}
+      {accHead("info", "👤", "Borç Bilgileri", n ? `${n}${borrowDate ? " · " + borrowDate : ""}` : "Alacaklı ve tarih", infoOk)}
+      {openAcc === "info" && accBody(<>
+        <div style={{ color: X.td, fontSize: 12, marginBottom: 4, fontWeight: 600 }}>Borç Adı / Alacaklı</div>
+        <input value={n} onChange={e => sn(e.target.value)} placeholder="Örn: Dostlar Sandığı, Ahmet Abi..." style={{ width: "100%", background: "white", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 10, padding: "10px 12px", fontSize: 14, color: X.t, marginBottom: 12 }} />
+        <div style={{ color: X.td, fontSize: 12, marginBottom: 4, fontWeight: 600 }}>Alındığı Tarih</div>
+        <input type="date" value={borrowDate} onChange={e => setBorrowDate(e.target.value)} style={{ width: "100%", background: "white", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 10, padding: "10px 12px", fontSize: 14, color: X.t, marginBottom: 12 }} />
+        <div style={{ color: X.td, fontSize: 12, marginBottom: 4, fontWeight: 600 }}>Amaç (opsiyonel)</div>
+        <input value={purpose} onChange={e => setPurpose(e.target.value)} placeholder="Örn: Ev tadilatı, araba, acil ihtiyaç..." style={{ width: "100%", background: "white", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 10, padding: "10px 12px", fontSize: 14, color: X.t, marginBottom: 12 }} />
+        <div style={{ color: X.td, fontSize: 12, marginBottom: 4, fontWeight: 600 }}>Not (opsiyonel)</div>
+        <input value={noteText} onChange={e => setNoteText(e.target.value)} placeholder="Eklemek istediğiniz detaylar..." style={{ width: "100%", background: "white", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 10, padding: "10px 12px", fontSize: 14, color: X.t }} />
+      </>)}
+
+      {/* AKORDİYON 2: Tutar ve Birim */}
+      {accHead("amount", "💰", "Tutar ve Birim", amountOk ? `${totalNum} ${debtCurSymbol(c)}${c !== "TRY" && liveRate ? " · ≈ " + C(tlTotal) : ""}` : "Miktar ve para birimi", amountOk)}
+      {openAcc === "amount" && accBody(<>
+        <Sel label="Birim" value={c} onChange={sc} options={[{ v: "TRY", l: "₺ Türk Lirası" }, { v: "USD", l: "$ Dolar" }, { v: "EUR", l: "€ Euro" }, { v: "XAU", l: "🪙 Altın (gram)" }]} />
+        <div style={{ color: X.td, fontSize: 12, marginBottom: 4, fontWeight: 600 }}>Toplam Borç Miktarı</div>
+        <input type="number" value={total} onChange={e => setTotal(e.target.value)} placeholder={`Örn: ${c === "XAU" ? "56" : "50000"}`} style={{ width: "100%", background: "white", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 10, padding: "10px 12px", fontSize: 14, color: X.t, marginBottom: 12 }} />
+        {c !== "TRY" && liveRate > 0 && totalNum > 0 && (
+          <div style={{ background: "rgba(15,118,110,0.08)", border: "1px solid rgba(15,118,110,0.2)", borderRadius: 10, padding: "10px 12px", fontSize: 12, color: X.g, fontWeight: 600 }}>
+            ≈ {C(tlTotal)} ({totalNum} × {C(liveRate)}/{debtCurSymbol(c)} bugünkü kur)
+          </div>
+        )}
+      </>)}
+
+      {/* AKORDİYON 3: Geri Ödeme Planı */}
+      {accHead("plan", "📅", "Geri Ödeme Planı",
+        planOk ? (planType === "equal" ? `Eşit taksit · ${monthsNum} ay · ${pDay}'inde` : planType === "lump" ? `Toplu ödeme · ${pDay}'inde` : `Serbest · ${pDay}'inde`) : "Plan tipini seçin",
+        planOk)}
+      {openAcc === "plan" && accBody(<>
+        <div style={{ color: X.td, fontSize: 12, marginBottom: 8, fontWeight: 600 }}>Plan Tipi</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginBottom: 14 }}>
+          {[{ v: "equal", l: "📅 Eşit Taksit" }, { v: "free", l: "🔄 Serbest" }, { v: "lump", l: "💰 Toplu Ödeme" }].map(pt => (
+            <button key={pt.v} onClick={() => setPlanType(pt.v)} style={{ background: planType === pt.v ? X.g : "white", border: `1px solid ${planType === pt.v ? X.g : "rgba(0,0,0,0.08)"}`, borderRadius: 10, padding: "10px 4px", textAlign: "center", cursor: "pointer", fontSize: 11, fontWeight: 700, color: planType === pt.v ? "white" : X.td, fontFamily: ff }}>{pt.l}</button>
+          ))}
+        </div>
+        {planType !== "lump" && <>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
+            <div>
+              <div style={{ color: X.td, fontSize: 12, marginBottom: 4, fontWeight: 600 }}>Vade (ay)</div>
+              <input type="number" value={months} onChange={e => setMonths(e.target.value)} placeholder="Örn: 8" style={{ width: "100%", background: "white", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 10, padding: "10px 12px", fontSize: 14, color: X.t }} />
+            </div>
+            <div>
+              <div style={{ color: X.td, fontSize: 12, marginBottom: 4, fontWeight: 600 }}>Başlangıç Ayı</div>
+              <input type="month" value={startMonth} onChange={e => setStartMonth(e.target.value)} style={{ width: "100%", background: "white", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 10, padding: "10px 12px", fontSize: 14, color: X.t }} />
+            </div>
+          </div>
+        </>}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
+          <div>
+            <div style={{ color: X.td, fontSize: 12, marginBottom: 4, fontWeight: 600 }}>Ödeme Günü</div>
+            <input type="number" value={pDay} onChange={e => setPDay(e.target.value)} placeholder="Örn: 28" style={{ width: "100%", background: "white", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 10, padding: "10px 12px", fontSize: 14, color: X.t }} />
+          </div>
+          <div>
+            <div style={{ color: X.td, fontSize: 12, marginBottom: 4, fontWeight: 600 }}>Son Gün (ops.)</div>
+            <input type="number" value={pDayEnd} onChange={e => setPDayEnd(e.target.value)} placeholder="Örn: 31" style={{ width: "100%", background: "white", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 10, padding: "10px 12px", fontSize: 14, color: X.t }} />
+          </div>
+        </div>
+        {totalNum > 0 && (planType === "lump" || monthsNum > 0) && (
+          <div style={{ background: "rgba(180,83,9,0.08)", border: "1px solid rgba(180,83,9,0.25)", borderRadius: 12, padding: "12px 14px" }}>
+            <div style={{ color: X.w, fontSize: 10, fontWeight: 700, marginBottom: 4 }}>{planType === "lump" ? "ÖDENECEK TUTAR" : "AYLIK TAKSİT"}</div>
+            <div style={{ color: X.w, fontSize: 20, fontWeight: 800, fontFamily: fm }}>
+              {planType === "lump" ? `${totalNum} ${debtCurSymbol(c)}` : `${monthlyCalc.toFixed(c === "TRY" ? 0 : 2)} ${debtCurSymbol(c)}`}
+            </div>
+            {c !== "TRY" && liveRate > 0 && (
+              <div style={{ color: X.td, fontSize: 11, marginTop: 2 }}>
+                ≈ {C(planType === "lump" ? tlTotal : tlMonthly)}{planType !== "lump" ? `/ay · ${monthsNum} ay · toplam ${C(tlTotal)}` : ""}
+              </div>
+            )}
+            {c === "TRY" && planType !== "lump" && monthsNum > 0 && (
+              <div style={{ color: X.td, fontSize: 11, marginTop: 2 }}>{monthsNum} ay · toplam {C(totalNum)}</div>
+            )}
+          </div>
+        )}
+      </>)}
+
+      <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+        <Btn onClick={save} c={X.w} s={{ flex: 1 }} disabled={!n || !totalNum || (planType !== "lump" && !monthsNum)}>💾 Kaydet</Btn>
+        <Btn onClick={cancel} v="outline" c={X.td} s={{ flex: 1 }}>İptal</Btn>
+      </div>
+    </div>
+  ) : null;
 
   return (
     <div style={{ padding: "20px 16px 100px" }}>
@@ -5712,7 +5824,13 @@ function DebtSettings({ data, setData, onBack }) {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ color: X.t, fontWeight: 700 }}>{d.name}</div>
-                  <div style={{ color: X.tm, fontSize: 12 }}>
+                  {(d.purpose || d.borrowDate) && (
+                    <div style={{ color: X.td, fontSize: 11, marginTop: 1 }}>
+                      {d.borrowDate && <span>{d.borrowDate}</span>}
+                      {d.purpose && <span>{d.borrowDate ? " · " : ""}{d.purpose}</span>}
+                    </div>
+                  )}
+                  <div style={{ color: X.tm, fontSize: 12, marginTop: 2 }}>
                     <span style={{ fontFamily: fm }}>{d.monthlyPayment.toFixed(2)} {sym}</span>
                     {d.currency !== "TRY" && <span style={{ color: X.td }}> ({C(tlVal)})</span>}
                     <span> /ay</span>
