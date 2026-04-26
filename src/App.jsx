@@ -4359,6 +4359,174 @@ function PlanningScreen({ data, setData, mk }) {
   const [savingsModal, setSavingsModal] = useState(null);
   const [incSim, setIncSim] = useState({});
   const [detail, setDetail] = useState(null); // {title, rows, total, totalLabel, totalColor, note}
+
+  // Borç form state
+  const [debtEditing, setDebtEditing] = useState(null);
+  const [debtOpenAcc, setDebtOpenAcc] = useState("info");
+  const [debtN, setDebtN] = useState("");
+  const [debtC, setDebtC] = useState("TRY");
+  const [debtTotal, setDebtTotal] = useState("");
+  const [debtMonths, setDebtMonths] = useState("");
+  const [debtPDay, setDebtPDay] = useState("");
+  const [debtPDayEnd, setDebtPDayEnd] = useState("");
+  const [debtStartMonth, setDebtStartMonth] = useState(mk);
+  const [debtPlanType, setDebtPlanType] = useState("equal");
+  const [debtBorrowDate, setDebtBorrowDate] = useState(td());
+  const [debtPurpose, setDebtPurpose] = useState("");
+  const [debtNoteText, setDebtNoteText] = useState("");
+
+  const debtStartNew = () => {
+    setDebtN(""); setDebtC("TRY"); setDebtTotal(""); setDebtMonths("");
+    setDebtPDay(""); setDebtPDayEnd(""); setDebtStartMonth(mk);
+    setDebtPlanType("equal"); setDebtBorrowDate(td()); setDebtPurpose(""); setDebtNoteText("");
+    setDebtOpenAcc("info"); setDebtEditing("new");
+  };
+  const debtStartEdit = d2 => {
+    setDebtN(d2.name); setDebtC(d2.currency);
+    const t = d2.totalAmount || (d2.monthlyPayment * (d2.totalMonths || d2.remainingMonths));
+    setDebtTotal(String(t)); setDebtMonths(String(d2.totalMonths || d2.remainingMonths));
+    setDebtPDay(d2.paymentDay ? String(d2.paymentDay) : "");
+    setDebtPDayEnd(d2.paymentDayEnd ? String(d2.paymentDayEnd) : "");
+    setDebtStartMonth(d2.startMonth || mk);
+    setDebtPlanType(d2.planType || "equal");
+    setDebtBorrowDate(d2.borrowDate || td());
+    setDebtPurpose(d2.purpose || ""); setDebtNoteText(d2.noteText || "");
+    setDebtOpenAcc("info"); setDebtEditing(d2.id);
+  };
+  const debtCancel = () => setDebtEditing(null);
+
+  const debtTotalNum = parseFloat(debtTotal) || 0;
+  const debtMonthsNum = parseInt(debtMonths) || 0;
+  const debtMonthlyCalc = debtMonthsNum > 0 ? debtTotalNum / debtMonthsNum : 0;
+  const debtLiveRate = debtC === "XAU" ? (data.liveRates?.XAU || 0) : debtC === "USD" ? (data.liveRates?.USD || 0) : debtC === "EUR" ? (data.liveRates?.EUR || 0) : 1;
+  const debtTLTotal = debtC === "TRY" ? debtTotalNum : debtTotalNum * debtLiveRate;
+  const debtTLMonthly = debtC === "TRY" ? debtMonthlyCalc : debtMonthlyCalc * debtLiveRate;
+
+  const debtSave = () => {
+    if (!debtN || !debtTotalNum) return;
+    if (debtPlanType !== "lump" && !debtMonthsNum) return;
+    setData(d => {
+      const list = [...d.debts];
+      const entry = {
+        id: debtEditing === "new" ? uid() : debtEditing,
+        name: debtN, currency: debtC,
+        totalAmount: debtTotalNum,
+        totalMonths: debtPlanType === "lump" ? 1 : debtMonthsNum,
+        remainingMonths: debtPlanType === "lump" ? 1 : debtMonthsNum,
+        monthlyPayment: debtPlanType === "lump" ? debtTotalNum : debtMonthlyCalc,
+        paymentDay: parseInt(debtPDay) || null,
+        paymentDayEnd: parseInt(debtPDayEnd) || null,
+        startMonth: debtStartMonth, planType: debtPlanType,
+        borrowDate: debtBorrowDate, purpose: debtPurpose, noteText: debtNoteText
+      };
+      if (debtEditing === "new") { list.push(entry); }
+      else {
+        const idx = list.findIndex(x => x.id === debtEditing);
+        if (idx >= 0) {
+          const old = list[idx];
+          const paidCount = (old.totalMonths || old.remainingMonths) - old.remainingMonths;
+          list[idx] = { ...entry, remainingMonths: Math.max(0, entry.totalMonths - paidCount) };
+        }
+      }
+      return { ...d, debts: list };
+    });
+    debtCancel();
+  };
+
+  const debtRm = id => { if (confirm("Bu borcu silmek istediğinize emin misiniz?")) setData(d => ({ ...d, debts: d.debts.filter(x => x.id !== id) })); };
+
+  const debtAccHead = (id, icon, title, sub, ok) => (
+    <div onClick={() => setDebtOpenAcc(o => o === id ? null : id)} style={{ background: "white", padding: "12px 14px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", borderRadius: debtOpenAcc === id ? "12px 12px 0 0" : 12, border: `1px solid rgba(0,0,0,0.08)`, borderBottom: debtOpenAcc === id ? "1px solid rgba(0,0,0,0.06)" : undefined, marginBottom: debtOpenAcc === id ? 0 : 6 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{ fontSize: 16 }}>{icon}</span>
+        <div>
+          <div style={{ color: X.t, fontSize: 13, fontWeight: 700 }}>{title}</div>
+          {sub && <div style={{ color: X.td, fontSize: 11, marginTop: 1 }}>{sub}</div>}
+        </div>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <div style={{ width: 18, height: 18, borderRadius: "50%", background: ok ? X.g : X.border, display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontSize: 10 }}>{ok ? "✓" : "–"}</div>
+        <span style={{ color: X.td, fontSize: 10, transform: debtOpenAcc === id ? "rotate(180deg)" : "none" }}>▼</span>
+      </div>
+    </div>
+  );
+
+  const debtAccBody = children => (
+    <div style={{ background: "#F5F0EB", padding: "12px 14px", borderRadius: "0 0 12px 12px", border: "1px solid rgba(0,0,0,0.08)", borderTop: "none", marginBottom: 6 }}>
+      {children}
+    </div>
+  );
+
+  const inpStyle = { width: "100%", background: "white", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 10, padding: "10px 12px", fontSize: 14, color: X.t, boxSizing: "border-box" };
+  const lblStyle = { color: X.td, fontSize: 12, marginBottom: 4, fontWeight: 600, display: "block" };
+
+  const debtForm = debtEditing ? (
+    <div style={{ background: "rgba(180,83,9,0.04)", border: `1px solid rgba(180,83,9,0.2)`, borderRadius: 14, padding: 12, marginBottom: 12 }}>
+      <div style={{ color: X.w, fontSize: 14, fontWeight: 800, marginBottom: 10 }}>{debtEditing === "new" ? "➕ Yeni Borç" : "✎ Düzenle"}</div>
+      {debtAccHead("info", "👤", "Borç Bilgileri", debtN ? `${debtN}${debtBorrowDate ? " · " + debtBorrowDate : ""}` : "Alacaklı ve tarih", !!debtN)}
+      {debtOpenAcc === "info" && debtAccBody(<>
+        <label style={lblStyle}>Borç Adı / Alacaklı</label>
+        <input value={debtN} onChange={e => setDebtN(e.target.value)} placeholder="Örn: Dostlar Sandığı, Ahmet Abi..." style={{ ...inpStyle, marginBottom: 10 }} />
+        <label style={lblStyle}>Alındığı Tarih</label>
+        <input type="date" value={debtBorrowDate} onChange={e => setDebtBorrowDate(e.target.value)} style={{ ...inpStyle, marginBottom: 10 }} />
+        <label style={lblStyle}>Amaç (opsiyonel)</label>
+        <input value={debtPurpose} onChange={e => setDebtPurpose(e.target.value)} placeholder="Örn: Ev tadilatı, araba..." style={{ ...inpStyle, marginBottom: 10 }} />
+        <label style={lblStyle}>Not (opsiyonel)</label>
+        <input value={debtNoteText} onChange={e => setDebtNoteText(e.target.value)} placeholder="Ek detaylar..." style={inpStyle} />
+      </>)}
+
+      {debtAccHead("amount", "💰", "Tutar ve Birim", debtTotalNum > 0 ? `${debtTotalNum} ${debtCurSymbol(debtC)}${debtC !== "TRY" && debtLiveRate ? " · ≈ " + C(debtTLTotal) : ""}` : "Miktar ve para birimi", debtTotalNum > 0)}
+      {debtOpenAcc === "amount" && debtAccBody(<>
+        <label style={lblStyle}>Birim</label>
+        <select value={debtC} onChange={e => setDebtC(e.target.value)} style={{ ...inpStyle, marginBottom: 10 }}>
+          {[{ v: "TRY", l: "₺ Türk Lirası" }, { v: "USD", l: "$ Dolar" }, { v: "EUR", l: "€ Euro" }, { v: "XAU", l: "🪙 Altın (gram)" }].map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
+        </select>
+        <label style={lblStyle}>Toplam Borç Miktarı</label>
+        <input type="number" value={debtTotal} onChange={e => setDebtTotal(e.target.value)} placeholder={debtC === "XAU" ? "Örn: 56" : "Örn: 50000"} style={{ ...inpStyle, marginBottom: 10 }} />
+        {debtC !== "TRY" && debtLiveRate > 0 && debtTotalNum > 0 && (
+          <div style={{ background: "rgba(15,118,110,0.08)", border: "1px solid rgba(15,118,110,0.2)", borderRadius: 10, padding: "8px 12px", fontSize: 12, color: X.g, fontWeight: 600 }}>≈ {C(debtTLTotal)} (bugünkü kur)</div>
+        )}
+      </>)}
+
+      {debtAccHead("plan", "📅", "Geri Ödeme Planı",
+        (debtPlanType === "equal" && debtMonthsNum > 0 && debtPDay) ? `Eşit · ${debtMonthsNum} ay · ${debtPDay}'inde` :
+        debtPlanType === "lump" ? "Toplu ödeme" : "Plan tipini seçin",
+        debtPlanType === "lump" ? !!debtPDay : (debtMonthsNum > 0 && !!debtPDay))}
+      {debtOpenAcc === "plan" && debtAccBody(<>
+        <label style={lblStyle}>Plan Tipi</label>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginBottom: 12 }}>
+          {[{ v: "equal", l: "📅 Eşit" }, { v: "free", l: "🔄 Serbest" }, { v: "lump", l: "💰 Toplu" }].map(pt => (
+            <button key={pt.v} onClick={() => setDebtPlanType(pt.v)} style={{ background: debtPlanType === pt.v ? X.g : "white", border: `1px solid ${debtPlanType === pt.v ? X.g : "rgba(0,0,0,0.08)"}`, borderRadius: 10, padding: "8px 4px", textAlign: "center", cursor: "pointer", fontSize: 11, fontWeight: 700, color: debtPlanType === pt.v ? "white" : X.td, fontFamily: ff }}>{pt.l}</button>
+          ))}
+        </div>
+        {debtPlanType !== "lump" && (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
+            <div><label style={lblStyle}>Vade (ay)</label><input type="number" value={debtMonths} onChange={e => setDebtMonths(e.target.value)} placeholder="Örn: 8" style={inpStyle} /></div>
+            <div><label style={lblStyle}>Başlangıç Ayı</label><input type="month" value={debtStartMonth} onChange={e => setDebtStartMonth(e.target.value)} style={inpStyle} /></div>
+          </div>
+        )}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
+          <div><label style={lblStyle}>Ödeme Günü</label><input type="number" value={debtPDay} onChange={e => setDebtPDay(e.target.value)} placeholder="Örn: 28" style={inpStyle} /></div>
+          <div><label style={lblStyle}>Son Gün (ops.)</label><input type="number" value={debtPDayEnd} onChange={e => setDebtPDayEnd(e.target.value)} placeholder="Örn: 31" style={inpStyle} /></div>
+        </div>
+        {debtTotalNum > 0 && (debtPlanType === "lump" || debtMonthsNum > 0) && (
+          <div style={{ background: "rgba(180,83,9,0.08)", border: "1px solid rgba(180,83,9,0.25)", borderRadius: 12, padding: "10px 14px" }}>
+            <div style={{ color: X.w, fontSize: 10, fontWeight: 700, marginBottom: 3 }}>{debtPlanType === "lump" ? "ÖDENECEK TUTAR" : "AYLIK TAKSİT"}</div>
+            <div style={{ color: X.w, fontSize: 18, fontWeight: 800, fontFamily: fm }}>{debtPlanType === "lump" ? `${debtTotalNum} ${debtCurSymbol(debtC)}` : `${debtMonthlyCalc.toFixed(debtC === "TRY" ? 0 : 2)} ${debtCurSymbol(debtC)}`}</div>
+            <div style={{ color: X.td, fontSize: 11, marginTop: 2 }}>
+              {debtC !== "TRY" && debtLiveRate > 0 ? `≈ ${C(debtPlanType === "lump" ? debtTLTotal : debtTLMonthly)}${debtPlanType !== "lump" ? ` /ay · ${debtMonthsNum} ay · toplam ${C(debtTLTotal)}` : ""}` : debtPlanType !== "lump" ? `${debtMonthsNum} ay · toplam ${C(debtTotalNum)}` : ""}
+            </div>
+          </div>
+        )}
+      </>)}
+
+      <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+        <Btn onClick={debtSave} c={X.w} s={{ flex: 1 }} disabled={!debtN || !debtTotalNum || (debtPlanType !== "lump" && !debtMonthsNum)}>💾 Kaydet</Btn>
+        <Btn onClick={debtCancel} v="outline" c={X.td} s={{ flex: 1 }}>İptal</Btn>
+      </div>
+    </div>
+  ) : null;
+
   const c = calcMonth(data, mk, null);
   const assets = ["TRY", "XAU", "USD", "EUR"];
   const totalSavings = getTotalSavingsTL(data);
@@ -4549,79 +4717,91 @@ function PlanningScreen({ data, setData, mk }) {
         const activeDebts = data.debts.filter(d => d.remainingMonths > 0);
         return (
           <>
-            {activeDebts.length === 0 ? (
-              <Card s={{ textAlign: "center", padding: 24 }}>
-                <div style={{ fontSize: 36, marginBottom: 8 }}>🎉</div>
-                <div style={{ color: X.g, fontSize: 14, fontWeight: 700 }}>Aktif borcunuz yok!</div>
-              </Card>
-            ) : (
-              <>
-                <Card s={{ marginBottom: 12 }}>
-                  <div style={{ color: X.tm, fontSize: 13, fontWeight: 700, marginBottom: 12 }}>AKTİF BORÇLAR</div>
-                  {activeDebts.map(d => {
-                    const sym = debtCurSymbol(d.currency);
-                    const tlVal = debtTLValue(d, data, mk);
-                    const totalM = d.totalMonths || d.remainingMonths;
-                    const paidCount = totalM - d.remainingMonths;
-                    const end = debtEnds.find(de => de.id === d.id);
-                    const progressPct = totalM > 0 ? (paidCount / totalM) * 100 : 0;
-                    return (
-                      <div key={d.id} style={{ padding: "12px 0", borderBottom: `1px solid rgba(0,0,0,0.06)` }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                          <div style={{ color: X.t, fontSize: 14, fontWeight: 700 }}>{d.name}</div>
-                          <div style={{ color: X.w, fontSize: 15, fontWeight: 800, fontFamily: fm }}>{C(tlVal)}<span style={{ fontSize: 10, color: X.td }}>/ay</span></div>
-                        </div>
-                        {d.currency !== "TRY" && <div style={{ color: X.td, fontSize: 11 }}>{d.monthlyPayment} {sym} × {d.remainingMonths} ay kaldı</div>}
-                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: X.tm, marginTop: 4, marginBottom: 4 }}>
-                          <span>{paidCount}/{totalM} ödendi</span>
-                          <span>Bitiş: {end ? ml(end.endMonth) : "?"}</span>
-                        </div>
-                        <div style={{ height: 5, borderRadius: 3, background: "rgba(0,0,0,0.06)" }}>
-                          <div style={{ height: "100%", borderRadius: 3, background: X.g, width: `${progressPct}%` }} />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </Card>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <div style={{ color: X.tm, fontSize: 13, fontWeight: 700 }}>BORÇLAR</div>
+              {!debtEditing && <button onClick={debtStartNew} style={{ background: X.wd, border: `1px solid ${X.w}`, borderRadius: 8, padding: "6px 14px", color: X.w, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: ff }}>+ Yeni Borç</button>}
+            </div>
 
-                {/* BORÇ BİTİŞ PLANLAYICISI */}
-                {debtEnds.length > 0 && (
-                  <Card s={{ border: `1px solid ${X.g}`, background: "rgba(22,163,74,0.06)" }}>
-                    <div style={{ color: X.g, fontSize: 13, fontWeight: 700, marginBottom: 10 }}>🎯 BORÇ BİTİŞ PLANLAYICISI</div>
-                    {debtEnds.sort((a, b) => a.endMonth.localeCompare(b.endMonth)).map(d => {
-                      const sym = debtCurSymbol(d.currency);
-                      const amtText = d.currency === "TRY" ? C(d.monthlyTL) : `${C(d.monthlyTL)} (${d.monthlyPayment} ${sym})`;
-                      // Kalan ay hesapla
-                      let monthsAway = 0; let m2 = mk;
-                      while (m2 < d.endMonth && monthsAway < 60) { m2 = nmk(m2); monthsAway++; }
-                      return (
-                        <div key={d.id} style={{ padding: "10px 0", borderBottom: `1px solid rgba(0,0,0,0.06)` }}>
-                          <div style={{ color: X.t, fontSize: 13, fontWeight: 700, marginBottom: 4 }}>{d.name}</div>
-                          <div style={{ color: X.g, fontSize: 12 }}>
-                            {monthsAway} ay sonra ({ml(d.endMonth)}) bitecek → her ay {amtText} serbest kalacak.
+            {debtEditing === "new" && debtForm}
+
+            {activeDebts.length === 0 && !debtEditing ? (
+              <Card s={{ textAlign: "center", padding: 24 }}>
+                <div style={{ fontSize: 36, marginBottom: 8 }}>📌</div>
+                <div style={{ color: X.td, fontSize: 13 }}>Henüz borç kaydı yok</div>
+                <div style={{ color: X.td, fontSize: 11, marginTop: 4 }}>Yukarıdaki "+ Yeni Borç" ile ekleyin</div>
+              </Card>
+            ) : activeDebts.map(d => {
+              const sym = debtCurSymbol(d.currency);
+              const tlVal = debtTLValue(d, data, mk);
+              const totalM = d.totalMonths || d.remainingMonths;
+              const paidCount = totalM - d.remainingMonths;
+              const end = debtEnds.find(de => de.id === d.id);
+              const progressPct = totalM > 0 ? (paidCount / totalM) * 100 : 0;
+              return (
+                <div key={d.id}>
+                  <Card s={{ marginBottom: debtEditing === d.id ? 0 : 8, borderRadius: debtEditing === d.id ? "14px 14px 0 0" : 14, borderLeft: `3px solid ${X.w}` }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ color: X.t, fontSize: 14, fontWeight: 700 }}>{d.name}</div>
+                        {(d.borrowDate || d.purpose) && (
+                          <div style={{ color: X.td, fontSize: 11, marginTop: 2 }}>
+                            {d.borrowDate && <span>{d.borrowDate}</span>}
+                            {d.purpose && <span>{d.borrowDate ? " · " : ""}{d.purpose}</span>}
                           </div>
-                          <div style={{ color: X.tm, fontSize: 11, marginTop: 6, lineHeight: 1.5 }}>
-                            💡 Bu tutar serbest kalınca: acil durum fonuna yönlendirebilir, yeni birikim başlatabilir veya sabit gider artışlarını absorbe edebilirsiniz.
-                          </div>
-                        </div>
-                      );
-                    })}
-                    {(() => {
-                      const totalFree = debtEnds.reduce((s, d) => s + d.monthlyTL, 0);
-                      const emTarget = data.settings.emergencyFundTarget || 0;
-                      const remaining = emTarget - totalSavings;
-                      const monthsToTarget = totalFree > 0 && remaining > 0 ? Math.ceil(remaining / totalFree) : 0;
-                      return emTarget > 0 && remaining > 0 ? (
-                        <div style={{ marginTop: 10, padding: "8px 10px", background: "rgba(15,118,110,0.32)", borderRadius: 8 }}>
-                          <div style={{ color: X.g, fontSize: 11, fontWeight: 700 }}>
-                            Tüm borçlar bitince aylık {C(totalFree)} serbest kalacak. Bu tutarı acil durum fonuna yönlendirirseniz {monthsToTarget} ayda hedefe ulaşırsınız.
-                          </div>
-                        </div>
-                      ) : null;
-                    })()}
+                        )}
+                        {d.noteText && <div style={{ color: X.td, fontSize: 11, fontStyle: "italic", marginTop: 2 }}>{d.noteText}</div>}
+                      </div>
+                      <div style={{ display: "flex", gap: 6, flexShrink: 0, marginLeft: 8 }}>
+                        <button onClick={() => debtEditing === d.id ? debtCancel() : debtStartEdit(d)} style={{ background: X.bd, border: `1px solid ${X.b}`, borderRadius: 6, padding: "4px 10px", color: X.b, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{debtEditing === d.id ? "▲" : "✎"}</button>
+                        <button onClick={() => debtRm(d.id)} style={{ background: X.rd, border: `1px solid ${X.r}`, borderRadius: 6, padding: "4px 10px", color: X.r, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>✕</button>
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                      <div style={{ color: X.tm, fontSize: 12 }}>
+                        <span style={{ fontFamily: fm, fontWeight: 700 }}>{d.monthlyPayment.toFixed(d.currency === "TRY" ? 0 : 2)} {sym}</span>
+                        {d.currency !== "TRY" && <span style={{ color: X.td }}> ({C(tlVal)})</span>}
+                        <span style={{ color: X.td }}> /ay</span>
+                      </div>
+                      <div style={{ color: X.td, fontSize: 11 }}>{paidCount}/{totalM} · {end ? ml(end.endMonth) + "'de biter" : `${d.remainingMonths} ay kaldı`}</div>
+                    </div>
+                    <div style={{ height: 5, borderRadius: 3, background: "rgba(0,0,0,0.06)" }}>
+                      <div style={{ height: "100%", borderRadius: 3, background: X.g, width: `${progressPct}%`, transition: "width 0.4s" }} />
+                    </div>
                   </Card>
-                )}
-              </>
+                  {debtEditing === d.id && <div style={{ marginBottom: 8 }}>{debtForm}</div>}
+                </div>
+              );
+            })}
+
+            {/* BORÇ BİTİŞ PLANLAYICISI */}
+            {debtEnds.length > 0 && (
+              <Card s={{ border: `1px solid ${X.g}`, background: "rgba(22,163,74,0.06)", marginTop: 8 }}>
+                <div style={{ color: X.g, fontSize: 13, fontWeight: 700, marginBottom: 10 }}>🎯 BORÇ BİTİŞ PLANLAYICISI</div>
+                {debtEnds.sort((a, b) => a.endMonth.localeCompare(b.endMonth)).map(d => {
+                  const sym = debtCurSymbol(d.currency);
+                  const amtText = d.currency === "TRY" ? C(d.monthlyTL) : `${C(d.monthlyTL)} (${d.monthlyPayment} ${sym})`;
+                  let monthsAway = 0; let m2 = mk;
+                  while (m2 < d.endMonth && monthsAway < 60) { m2 = nmk(m2); monthsAway++; }
+                  return (
+                    <div key={d.id} style={{ padding: "10px 0", borderBottom: `1px solid rgba(0,0,0,0.06)` }}>
+                      <div style={{ color: X.t, fontSize: 13, fontWeight: 700, marginBottom: 4 }}>{d.name}</div>
+                      <div style={{ color: X.g, fontSize: 12 }}>{monthsAway} ay sonra ({ml(d.endMonth)}) bitecek → her ay {amtText} serbest kalacak.</div>
+                      <div style={{ color: X.tm, fontSize: 11, marginTop: 6, lineHeight: 1.5 }}>💡 Bu tutar serbest kalınca: acil durum fonuna yönlendirebilir, yeni birikim başlatabilir veya sabit gider artışlarını absorbe edebilirsiniz.</div>
+                    </div>
+                  );
+                })}
+                {(() => {
+                  const totalFree = debtEnds.reduce((s, d) => s + d.monthlyTL, 0);
+                  const emTarget = data.settings.emergencyFundTarget || 0;
+                  const remaining = emTarget - totalSavings;
+                  const monthsToTarget = totalFree > 0 && remaining > 0 ? Math.ceil(remaining / totalFree) : 0;
+                  return emTarget > 0 && remaining > 0 ? (
+                    <div style={{ marginTop: 10, padding: "8px 10px", background: "rgba(15,118,110,0.32)", borderRadius: 8 }}>
+                      <div style={{ color: X.g, fontSize: 11, fontWeight: 700 }}>Tüm borçlar bitince aylık {C(totalFree)} serbest kalacak. Bu tutarı acil durum fonuna yönlendirirseniz {monthsToTarget} ayda hedefe ulaşırsınız.</div>
+                    </div>
+                  ) : null;
+                })()}
+              </Card>
             )}
           </>
         );
@@ -5002,7 +5182,7 @@ function Settings({ data, setData, isAdmin, family }) {
     { id: "fixed", l: "Sabit Giderler", i: "🔒", d: `${data.settings.fixedExpenses.length} kalem` },
     { id: "variable", l: "Harcama Kategorileri", i: "🔄", d: `${data.settings.variableExpenses.length} kategori` },
     { id: "billbudgets", l: "Fatura Bütçeleri", i: "🧾", d: (() => { const bt = data.settings.billTypes || []; return bt.length > 0 ? `${bt.length} tür tanımlı` : "Henüz eklenmedi"; })() },
-    { id: "debts", l: "Borçlar", i: "📌", d: `${data.debts.filter(d => d.remainingMonths > 0).length} aktif` },
+    
     { id: "emergency", l: "Birikim Güvenlik Eşiği", i: "🛡️", d: data.settings.emergencyFundTarget ? C(data.settings.emergencyFundTarget) : "Henüz belirlenmedi" },
     { id: "rates", l: "Güncel Kurlar", i: "💱", d: data.liveRates?.USD ? `$${data.liveRates.USD.toFixed(2)}` : "Henüz girilmedi" },
     ...(isAdmin ? [{ id: "backup", l: "Yedekleme", i: "💾", d: "Yedek Al / Geri Yükle" }] : []),
@@ -5041,7 +5221,7 @@ function Settings({ data, setData, isAdmin, family }) {
   if (sec === "cards") return <CardsSettings data={data} setData={setData} onBack={() => setSec(null)} />;
   if (sec === "variable") return <VariableSettings data={data} setData={setData} onBack={() => setSec(null)} />;
   if (sec === "billbudgets") return <BillBudgetsSettings data={data} setData={setData} onBack={() => setSec(null)} />;
-  if (sec === "debts") return <DebtSettings data={data} setData={setData} onBack={() => setSec(null)} />;
+
   if (sec === "emergency") return <EmergencyFundSettings data={data} setData={setData} onBack={() => setSec(null)} />;
   if (sec === "rates") return <RatesSettings data={data} setData={setData} onBack={() => setSec(null)} />;
   if (sec === "backup") return <BackupSettings data={data} setData={setData} onBack={() => setSec(null)} />;
