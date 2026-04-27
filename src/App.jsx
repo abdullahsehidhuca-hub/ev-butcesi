@@ -2241,15 +2241,23 @@ function ReceiptModal({ receipts, onClose, onSave, onDelete }) {
       {step === "list" && (
         <div>
 
-          {/* Yükleme butonu */}
-          <label style={{ display: "block", cursor: "pointer", marginBottom: 16 }}>
-            <input type="file" accept="image/*" capture="environment" onChange={handleFile} style={{ display: "none" }} />
-            <div style={{ ...glass, borderRadius: 14, padding: "24px 16px", textAlign: "center", border: `2px dashed ${X.g}40` }}>
-              <div style={{ fontSize: 36, marginBottom: 8 }}>📷</div>
-              <div style={{ color: X.g, fontSize: 14, fontWeight: 700 }}>Fiş Fotoğrafı Çek / Seç</div>
-              <div style={{ color: X.td, fontSize: 11, marginTop: 4 }}>Kamera açılır veya galeriden seçebilirsiniz</div>
-            </div>
-          </label>
+          {/* Yükleme butonları */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
+            <label style={{ cursor: "pointer" }}>
+              <input type="file" accept="image/*" capture="environment" onChange={handleFile} style={{ display: "none" }} />
+              <div style={{ ...glass, borderRadius: 14, padding: "20px 8px", textAlign: "center", border: `2px dashed ${X.g}40` }}>
+                <div style={{ fontSize: 32, marginBottom: 6 }}>📷</div>
+                <div style={{ color: X.g, fontSize: 13, fontWeight: 700 }}>Fotoğraf Çek</div>
+              </div>
+            </label>
+            <label style={{ cursor: "pointer" }}>
+              <input type="file" accept="image/*" onChange={handleFile} style={{ display: "none" }} />
+              <div style={{ ...glass, borderRadius: 14, padding: "20px 8px", textAlign: "center", border: `2px dashed ${X.b}40` }}>
+                <div style={{ fontSize: 32, marginBottom: 6 }}>🖼️</div>
+                <div style={{ color: X.b, fontSize: 13, fontWeight: 700 }}>Galeriden Seç</div>
+              </div>
+            </label>
+          </div>
 
           {/* Bu aydaki fişler */}
           {receipts.length === 0 && (
@@ -2457,6 +2465,7 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
   const [info, setInfo] = useState(null);
   const [msg, setMsg] = useState(null);
   const [detail, setDetail] = useState(null);
+  const [menuTab, setMenuTab] = useState(null); // "fixed" | "cc" | "variable" | "history"
 
   const md = gmd(mk); const c = calcMonth(data, mk, null);
   const showMonthDetail = () => { const bd = getMonthBreakdown(data, mk); setDetail({ title: `${ml(mk)} — Bütçe Dökümü`, rows: bd.rows, total: bd.mc.remaining, totalLabel: "Serbest bütçe", totalColor: bd.mc.remaining > bd.mc.effectiveBudget * 0.1 ? X.g : bd.mc.remaining >= 0 ? X.w : X.r }); };
@@ -2581,8 +2590,6 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
   return (
     <div style={{ padding: "12px 16px 100px" }}>
       {msg && <div style={{ background: X.gd, border: `1px solid ${X.g}`, borderRadius: 10, padding: 10, marginBottom: 10, color: X.g, fontSize: 14, fontWeight: 600, textAlign: "center" }}>{msg}</div>}
-
-      <RiskBar score={risk.score} onInfo={() => setInfo("risk")} warnings={warnings} />
 
       {/* ÖDEME HATIRLATICI */}
       {(() => {
@@ -2715,97 +2722,152 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
           <div style={{ color: X.p, fontSize: 13, fontWeight: 800 }}>Taksit Simülasyonu</div>
         </div>
 
-        {/* Savings full width */}
-        <div style={{ gridColumn: "1 / -1", background: "rgba(15,118,110,0.35)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(15,118,110,0.30)", borderRadius: 16, padding: "10px 14px", position: "relative", minHeight: 74, display: "flex", flexDirection: "column", justifyContent: "space-between", boxShadow: neu }}>
-          <InfoBtn onClick={() => setInfo("savings")} />
-          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
-            <span style={{ fontSize: 20 }}>💰</span>
-            <div style={{ color: X.g, fontSize: 13, fontWeight: 800 }}>Bu Ayın Birikimi</div>
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
-            <span style={{ color: c.remaining >= 0 ? X.g : X.r, fontSize: 19, fontWeight: 800, fontFamily: fm }}>{C(Math.max(0, c.remaining))}</span>
-            <span style={{ color: X.tm, fontSize: 13, fontFamily: fm }}>/ {C(c.savingsTarget)} hedef</span>
-          </div>
-          <div style={{ height: 6, borderRadius: 3, boxShadow: neuIn }}>
-            <div style={{ height: "100%", borderRadius: 3, background: X.g, width: `${savingsProgress}%`, transition: "width 0.5s" }} />
-          </div>
-        </div>
+
       </div>
         );
       })()}
 
-      {/* DEĞİŞKEN GİDER TAKİBİ */}
+
+      {/* 4 SEKME KUTUSU */}
       {(() => {
+        const menuBoxStyle = (id) => ({
+          background: menuTab === id ? "rgba(15,118,110,0.06)" : "white",
+          borderRadius: 12,
+          border: `1px solid ${menuTab === id ? "rgba(15,118,110,0.3)" : "rgba(0,0,0,0.07)"}`,
+          overflow: "hidden",
+          cursor: "pointer",
+        });
+        const menuHeadStyle = {
+          padding: "10px 12px",
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+        };
+
+        // Sabit gider özet
+        const totalFixed = data.settings.fixedExpenses.length;
+        const paidFixed = data.settings.fixedExpenses.filter(e => md.fixedPaid?.[e.id]).length;
+
+        // KK aktarım özet
+        const pendingCC = ccTransferItems.filter(i => !md.ccTransferred?.[i.key]?.transferred).length;
+
+        // Değişken gider özet
         const ves = data.settings.variableExpenses || [];
-        const { categories: cats, instByCategory } = ves.length > 0 ? categorizeMonthSpending(data, mk) : { categories: {}, instByCategory: {} };
-        // Kategori detay için inline expand — expandedCat state Dashboard'da tanımlı
+        const { categories: cats } = ves.length > 0 ? categorizeMonthSpending(data, mk) : { categories: {} };
         const totalBudget = ves.reduce((s, ve) => s + (ve.expectedAmount || 0), 0);
         const totalSpentEnv = Object.entries(cats).filter(([k]) => k !== "_uncategorized").reduce((s, [, v]) => s + v, 0);
         const uncat = cats._uncategorized || 0;
+
+        // Dönem içi işlemler
+        const ccTxs = (md.ccSingle || []).length;
+        const accTxs = (md.accountEntries || []).length;
+        const instTxs = data.installmentPlans.filter(p => { let cur = p.startMonth; for (let i = 0; i < p.months; i++) { if (cur === mk) return true; cur = nmk(cur); } return false; }).length;
+        const totalTxs = ccTxs + accTxs + instTxs;
+
+        const menus = [
+          { id: "fixed", icon: "🔒", title: "Sabit Gider Onayları", sub: `${paidFixed}/${totalFixed} ödendi` },
+          { id: "cc", icon: "💳", title: "KK Aktarımları", sub: pendingCC > 0 ? `${pendingCC} bekliyor` : "Tümü aktarıldı" },
+          { id: "variable", icon: "📈", title: "Değişken Gider Takibi", sub: `${C(totalSpentEnv)} / ${C(totalBudget)}` },
+          { id: "history", icon: "📋", title: "Aylık İşlem Geçmişi", sub: `${totalTxs} işlem` },
+        ];
+
         return (
-          <div style={{ margin: "10px 0" }}>
-            <div onClick={() => toggle("envelopes")} style={{ ...glassSolid, borderRadius: 14, padding: "14px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontSize: 28, lineHeight: 1 }}>📊</span>
-                <span style={{ color: X.t, fontSize: 14, fontWeight: 700 }}>Değişken Gider Takibi</span>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <span style={{ color: totalSpentEnv > totalBudget ? X.r : X.t, fontSize: 17, fontWeight: 800, fontFamily: fm }}>{C(totalSpentEnv)}</span>
-                <span style={{ color: X.td, fontSize: 11 }}>/ {C(totalBudget)}</span>
-                <span style={{ color: X.td, fontSize: 12, transform: expanded === "envelopes" ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>▼</span>
-              </div>
+          <div style={{ marginTop: 10 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+              {menus.map(m => (
+                <div key={m.id} style={menuBoxStyle(m.id)} onClick={() => setMenuTab(menuTab === m.id ? null : m.id)}>
+                  <div style={menuHeadStyle}>
+                    <span style={{ fontSize: 16, flexShrink: 0 }}>{m.icon}</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: "#141008", lineHeight: 1.3 }}>{m.title}</div>
+                      <div style={{ fontSize: 9, color: "#5A5045", marginTop: 2 }}>{m.sub}</div>
+                    </div>
+                    <span style={{ color: menuTab === m.id ? X.g : X.td, fontSize: 9, flexShrink: 0 }}>{menuTab === m.id ? "▲" : "▼"}</span>
+                  </div>
+                </div>
+              ))}
             </div>
-            {expanded === "envelopes" && (
-              <div style={{ ...glassSolid, borderRadius: "0 0 14px 14px", marginTop: -1, padding: "8px 16px 12px", borderTop: `1px solid ${X.border}` }}>
-                {ves.length === 0 && <div style={{ color: X.td, fontSize: 12, padding: "6px 0" }}>Kategori tanımlanmamış. Ayarlar &#8594; Değişken Giderler&#39;den ekleyin.</div>}
+
+            {/* AÇIK SEKME İÇERİĞİ */}
+            {menuTab === "fixed" && (
+              <div style={{ background: "white", border: "1px solid rgba(15,118,110,0.2)", borderTop: "none", borderRadius: "0 0 12px 12px", padding: "4px 0 8px", marginTop: -3 }}>
+                {data.settings.fixedExpenses.length === 0 && <div style={{ color: X.td, fontSize: 12, padding: "10px 14px" }}>Ayarlar'dan sabit gider ekleyin.</div>}
+                {data.settings.fixedExpenses.map(exp => {
+                  const paid = md.fixedPaid?.[exp.id];
+                  return <ItemRow key={exp.id} label={exp.name} sub={`${exp.paymentMethod === "cc" ? "💳" : "🏦"}${exp.autoPayment ? " ⚡oto" : ""}${exp.increaseDate ? " • Artış: " + exp.increaseDate : ""}`} value={exp.amount} color={paid ? X.g : X.t} toggle={!!paid} toggleOn={() => handleFixedPay(exp.id)} toggleOff={() => handleFixedUnpay(exp.id)} toggleLabelOn="Ödendi" toggleLabelOff="Öde" />;
+                })}
+              </div>
+            )}
+
+            {menuTab === "cc" && (
+              <div style={{ background: "white", border: "1px solid rgba(15,118,110,0.2)", borderTop: "none", borderRadius: "0 0 12px 12px", padding: "4px 0 8px", marginTop: -3 }}>
+                {ccTransferByCard.length > 0 && (
+                  <div style={{ display: "flex", gap: 8, padding: "8px 14px 4px", borderBottom: `1px solid ${X.border}` }}>
+                    {ccTransferByCard.map(card => (
+                      <div key={card.name} style={{ background: X.bd, borderRadius: 8, padding: "4px 10px", display: "flex", justifyContent: "space-between", gap: 8 }}>
+                        <span style={{ color: X.b, fontSize: 12, fontWeight: 700 }}>💳 {card.name}</span>
+                        <span style={{ color: X.b, fontSize: 14, fontWeight: 800, fontFamily: fm }}>{C(card.total)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {ccTransferItems.map(item => {
+                  const transferred = md.ccTransferred?.[item.key]?.transferred;
+                  const isSingle = item.key.startsWith("single-");
+                  const isInst = item.key.startsWith("inst-");
+                  const sourceId = item.key.split("-").slice(1).join("-");
+                  return <ItemRow key={item.key} label={item.label} sub={item.sub} value={item.amount} color={transferred ? X.g : X.t}
+                    toggle={!!transferred}
+                    toggleOn={() => handleCCTransfer(item.key)}
+                    toggleOff={() => undoCCTransfer(item.key)}
+                    toggleLabelOn="Aktarıldı"
+                    toggleLabelOff="Aktar"
+                    onEdit={isSingle ? () => editCCSingle(sourceId) : isInst ? () => editInstallment(sourceId) : null}
+                    onDelete={isSingle ? () => deleteCCSingle(sourceId) : isInst ? () => deleteInstallment(sourceId) : null}
+                  />;
+                })}
+              </div>
+            )}
+
+            {menuTab === "variable" && (
+              <div style={{ background: "white", border: "1px solid rgba(15,118,110,0.2)", borderTop: "none", borderRadius: "0 0 12px 12px", padding: "8px 0", marginTop: -3 }}>
+                {ves.length === 0 && <div style={{ color: X.td, fontSize: 12, padding: "8px 14px" }}>Ayarlar'dan kategori ekleyin.</div>}
                 {ves.map(ve => {
                   const spent = cats[ve.id] || 0;
-                  const instAmt = instByCategory[ve.id] || 0;
                   const budget = ve.expectedAmount || 0;
+                  const pct2 = budget > 0 ? Math.min((spent / budget) * 100, 100) : 0;
                   const over = budget > 0 && spent > budget;
                   const isOpen = expandedCat === ve.id;
-                  // Bu kategoriye ait tüm girişler
                   const catEntries = [
-                    ...(md.ccSingle || []).filter(e => e.categoryId === ve.id).map(e => ({ key: e.id, desc: e.note || e.merchantName || "Kredi Kartı Harcaması", date: e.date, amount: e.amount, type: "cc" })),
-                    ...(md.accountEntries || []).filter(e => e.categoryId === ve.id).map(e => ({ key: e.id, desc: e.note || "Hesaptan Ödeme", date: e.date, amount: e.amount, type: "acc" })),
-                    ...data.installmentPlans.filter(p => p.categoryId === ve.id).reduce((arr, p) => {
-                      let cur = p.startMonth; let pc = 0;
-                      for (let i = 0; i < p.months; i++) { if (cur === mk) { arr.push({ key: p.id, desc: p.note || "Taksitli", date: `${pc + 1}/${p.months}`, amount: p.monthlyPayment, type: "inst" }); break; } if (cur < mk) pc++; cur = nmk(cur); }
-                      return arr;
-                    }, []),
+                    ...(md.ccSingle || []).filter(e => e.categoryId === ve.id).map(e => ({ key: e.id, desc: e.note || e.merchantName || "KK Harcaması", date: e.date, amount: e.amount, type: "cc" })),
+                    ...(md.accountEntries || []).filter(e => e.categoryId === ve.id).map(e => ({ key: e.id, desc: e.note || "Hesaptan", date: e.date, amount: e.amount, type: "acc" })),
                   ].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
-                  const typeBadge = { cc: { bg: "rgba(29,78,216,0.12)", color: X.b, label: "Tek Çekim" }, acc: { bg: "rgba(15,118,110,0.12)", color: X.g, label: "Hesaptan" }, inst: { bg: "rgba(124,58,237,0.12)", color: X.p, label: "Taksitli" } };
                   return (
                     <div key={ve.id}>
-                      <div onClick={() => setExpandedCat(isOpen ? null : ve.id)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 6px", borderBottom: isOpen ? "none" : `1px solid ${X.border}`, cursor: "pointer", borderRadius: isOpen ? "8px 8px 0 0" : 0, background: isOpen ? "rgba(29,78,216,0.06)" : "transparent" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1, minWidth: 0 }}>
-                          <span style={{ fontSize: 14 }}>{ve.icon || "📋"}</span>
-                          <span style={{ color: X.t, fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ve.name}</span>
-                          {instAmt > 0 && <span style={{ color: X.p, fontSize: 9, fontWeight: 700, background: X.pd, padding: "1px 4px", borderRadius: 4 }}>+taksit</span>}
+                      <div onClick={() => setExpandedCat(isOpen ? null : ve.id)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 14px", borderBottom: `1px solid ${X.border}`, cursor: "pointer", background: isOpen ? "rgba(0,0,0,0.02)" : "transparent" }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
+                            <span style={{ fontSize: 14 }}>{ve.icon || "📋"}</span>
+                            <span style={{ color: X.t, fontSize: 13, fontWeight: 700 }}>{ve.name}</span>
+                            {over && <span style={{ fontSize: 10, background: X.rd, color: X.r, borderRadius: 4, padding: "1px 5px", fontWeight: 700 }}>+{C(spent - budget)}</span>}
+                          </div>
+                          {budget > 0 && <div style={{ height: 3, borderRadius: 2, background: "rgba(0,0,0,0.06)" }}><div style={{ height: "100%", borderRadius: 2, background: over ? X.r : X.g, width: `${pct2}%` }} /></div>}
                         </div>
-                        <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 8 }}>
-                          <span style={{ color: over ? X.r : X.t, fontSize: 13, fontWeight: 800, fontFamily: fm }}>{C(spent)}</span>
-                          {budget > 0 && <span style={{ color: X.td, fontSize: 11 }}> / {C(budget)}</span>}
-                          {budget === 0 && spent > 0 && <span style={{ color: X.w, fontSize: 10, marginLeft: 4 }}>tahmin yok</span>}
+                        <div style={{ textAlign: "right", marginLeft: 10, flexShrink: 0 }}>
+                          <div style={{ color: over ? X.r : X.t, fontSize: 13, fontWeight: 800, fontFamily: fm }}>{C(spent)}</div>
+                          {budget > 0 && <div style={{ color: X.td, fontSize: 10 }}>/ {C(budget)}</div>}
                         </div>
                       </div>
-                      {isOpen && (
-                        <div style={{ background: "rgba(29,78,216,0.04)", borderRadius: "0 0 8px 8px", padding: "4px 8px 8px", marginBottom: 2, borderBottom: `1px solid ${X.border}` }}>
-                          {catEntries.length === 0
-                            ? <div style={{ color: X.td, fontSize: 12, padding: "6px 0" }}>Bu kategoride henüz giriş yok.</div>
-                            : catEntries.map(tx => (
-                              <div key={tx.key} style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 4px", borderBottom: `1px solid rgba(0,0,0,0.04)` }}>
-                                <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 5px", borderRadius: 4, background: typeBadge[tx.type].bg, color: typeBadge[tx.type].color, whiteSpace: "nowrap", flexShrink: 0 }}>{typeBadge[tx.type].label}</span>
-                                <span style={{ fontSize: 12, fontWeight: 600, color: X.t, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tx.desc}</span>
-                                <span style={{ fontSize: 11, color: X.td, whiteSpace: "nowrap", flexShrink: 0 }}>{tx.date}</span>
-                                <span style={{ fontSize: 12, fontWeight: 700, color: X.t, fontFamily: fm, whiteSpace: "nowrap", flexShrink: 0 }}>{C(tx.amount)}</span>
-                              </div>
-                            ))
-                          }
-                          <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 4px 0", marginTop: 2, borderTop: `1px solid rgba(0,0,0,0.08)` }}>
-                            <span style={{ fontSize: 12, fontWeight: 700, color: X.tm }}>Toplam</span>
-                            <span style={{ fontSize: 13, fontWeight: 800, color: over ? X.r : X.t, fontFamily: fm }}>{C(spent)}</span>
-                          </div>
+                      {isOpen && catEntries.length > 0 && (
+                        <div style={{ background: "rgba(0,0,0,0.02)", padding: "4px 14px 8px", borderBottom: `1px solid ${X.border}` }}>
+                          {catEntries.map(tx => (
+                            <div key={tx.key} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 0", borderBottom: `1px solid rgba(0,0,0,0.03)` }}>
+                              <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 5px", borderRadius: 3, background: tx.type === "cc" ? "rgba(29,78,216,0.1)" : "rgba(15,118,110,0.1)", color: tx.type === "cc" ? X.b : X.g, flexShrink: 0 }}>{tx.type === "cc" ? "KK" : "Hesap"}</span>
+                              <span style={{ fontSize: 12, color: X.t, flex: 1 }}>{tx.desc}</span>
+                              <span style={{ fontSize: 10, color: X.td, flexShrink: 0 }}>{tx.date}</span>
+                              <span style={{ fontSize: 12, fontWeight: 700, color: X.t, fontFamily: fm, flexShrink: 0 }}>{C(tx.amount)}</span>
+                            </div>
+                          ))}
                         </div>
                       )}
                     </div>
@@ -2817,10 +2879,9 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
                     ...(md.ccSingle || []).filter(e => !e.categoryId || !ves.find(ve => ve.id === e.categoryId)).map(e => ({ key: e.id, desc: e.note || e.merchantName || "Kredi Kartı Harcaması", date: e.date, amount: e.amount, type: "cc" })),
                     ...(md.accountEntries || []).filter(e => !e.categoryId || !ves.find(ve => ve.id === e.categoryId)).map(e => ({ key: e.id, desc: e.note || "Hesaptan Ödeme", date: e.date, amount: e.amount, type: "acc" })),
                   ].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
-                  const typeBadge2 = { cc: { bg: "rgba(220,38,38,0.10)", color: X.r, label: "Kredi Kartı" }, acc: { bg: "rgba(220,38,38,0.10)", color: X.r, label: "Hesaptan" } };
                   return (
                     <div>
-                      <div onClick={() => setExpandedCat(isUncatOpen ? null : "_uncat")} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 6px", borderBottom: isUncatOpen ? "none" : `1px solid ${X.border}`, cursor: "pointer", borderRadius: isUncatOpen ? "8px 8px 0 0" : 0, background: isUncatOpen ? "rgba(220,38,38,0.05)" : "transparent" }}>
+                      <div onClick={() => setExpandedCat(isUncatOpen ? null : "_uncat")} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 14px", borderBottom: `1px solid ${X.border}`, cursor: "pointer" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                           <span style={{ fontSize: 14 }}>⚠️</span>
                           <span style={{ color: X.r, fontSize: 13, fontWeight: 700 }}>Beklenmedik Giderler</span>
@@ -2828,130 +2889,47 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
                         <span style={{ color: X.r, fontSize: 13, fontWeight: 800, fontFamily: fm }}>{C(uncat)}</span>
                       </div>
                       {isUncatOpen && (
-                        <div style={{ background: "rgba(220,38,38,0.04)", borderRadius: "0 0 8px 8px", padding: "4px 8px 8px", marginBottom: 2, borderBottom: `1px solid ${X.border}` }}>
-                          {uncatEntries.length === 0
-                            ? <div style={{ color: X.td, fontSize: 12, padding: "6px 0" }}>Detay bulunamadı.</div>
-                            : uncatEntries.map(tx => (
-                              <div key={tx.key} style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 4px", borderBottom: `1px solid rgba(0,0,0,0.04)` }}>
-                                <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 5px", borderRadius: 4, background: typeBadge2[tx.type].bg, color: typeBadge2[tx.type].color, whiteSpace: "nowrap", flexShrink: 0 }}>{typeBadge2[tx.type].label}</span>
-                                <span style={{ fontSize: 12, fontWeight: 600, color: X.t, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tx.desc}</span>
-                                <span style={{ fontSize: 11, color: X.td, whiteSpace: "nowrap", flexShrink: 0 }}>{tx.date}</span>
-                                <span style={{ fontSize: 12, fontWeight: 700, color: X.r, fontFamily: fm, whiteSpace: "nowrap", flexShrink: 0 }}>{C(tx.amount)}</span>
-                              </div>
-                            ))
-                          }
-                          <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 4px 0", marginTop: 2, borderTop: `1px solid rgba(0,0,0,0.08)` }}>
-                            <span style={{ fontSize: 12, fontWeight: 700, color: X.r }}>Toplam</span>
-                            <span style={{ fontSize: 13, fontWeight: 800, color: X.r, fontFamily: fm }}>{C(uncat)}</span>
-                          </div>
+                        <div style={{ background: "rgba(220,38,38,0.03)", padding: "4px 14px 8px", borderBottom: `1px solid ${X.border}` }}>
+                          {uncatEntries.map(tx => (
+                            <div key={tx.key} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 0" }}>
+                              <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 5px", borderRadius: 3, background: "rgba(220,38,38,0.1)", color: X.r, flexShrink: 0 }}>{tx.type === "cc" ? "KK" : "Hesap"}</span>
+                              <span style={{ fontSize: 12, color: X.t, flex: 1 }}>{tx.desc}</span>
+                              <span style={{ fontSize: 12, fontWeight: 700, color: X.r, fontFamily: fm, flexShrink: 0 }}>{C(tx.amount)}</span>
+                            </div>
+                          ))}
                         </div>
                       )}
                     </div>
                   );
                 })()}
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0 2px" }}>
-                  <span style={{ color: X.tm, fontSize: 11, fontWeight: 700 }}>Kalan tahmin</span>
-                  <span style={{ color: X.g, fontSize: 13, fontWeight: 800, fontFamily: fm }}>{C(Math.max(0, totalBudget - totalSpentEnv))}</span>
-                </div>
               </div>
             )}
-          </div>
-        );
-      })()}
 
-      {/* CC TRANSFER */}
-      {true && (
-        <CatButton icon="💳" label="Kredi Kartı Hesabına Aktar" total={ccTransferTotal} color={X.b} dimColor={X.bd} expanded={expanded === "ccTransfer"} onToggle={() => toggle("ccTransfer")} onInfo={() => setInfo("ccTransfer")}>
-          {ccTransferTotal === 0
-            ? <div style={{ color: X.td, fontSize: 12, padding: "4px 0" }}>Bu ay aktarılacak işlem yok.</div>
-            : <div style={{ color: X.td, fontSize: 11, marginBottom: 8 }}>
-            {ccTransferredCount}/{ccTransferItems.length} kalem aktarıldı
-          </div>}
-          {/* Kart bazlı özet */}
-          {ccTransferByCard.length > 0 && (
-            <div style={{ marginBottom: 10, padding: "8px 10px", borderRadius: 10, background: "rgba(37,99,235,0.06)", border: "1px solid rgba(37,99,235,0.12)" }}>
-              {ccTransferByCard.map((card, i) => (
-                <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 0", borderBottom: i < ccTransferByCard.length - 1 ? "1px solid rgba(29,78,216,0.24)" : "none" }}>
-                  <span style={{ color: X.b, fontSize: 12, fontWeight: 700 }}>💳 {card.name}</span>
-                  <span style={{ color: X.b, fontSize: 14, fontWeight: 800, fontFamily: fm }}>{C(card.total)}</span>
-                </div>
-              ))}
-            </div>
-          )}
-          {ccTransferItems.map(item => {
-            const transferred = md.ccTransferred?.[item.key]?.transferred;
-            const isSingle = item.key.startsWith("single-");
-            const isInst = item.key.startsWith("inst-");
-            const sourceId = item.key.split("-").slice(1).join("-");
-            return <ItemRow key={item.key} label={item.label} sub={item.sub} value={item.amount} color={transferred ? X.g : X.t}
-              toggle={!!transferred}
-              toggleOn={() => handleCCTransfer(item.key)}
-              toggleOff={() => undoCCTransfer(item.key)}
-              toggleLabelOn="Aktarıldı"
-              toggleLabelOff="Aktar"
-              onEdit={isSingle ? () => editCCSingle(sourceId) : isInst ? () => editInstallment(sourceId) : null}
-              onDelete={isSingle ? () => deleteCCSingle(sourceId) : isInst ? () => deleteInstallment(sourceId) : null}
-            />;
-          })}
-        </CatButton>
-      )}
-
-      {/* CATEGORIES */}
-      <CatButton icon="🔒" label="Sabit Zorunlu Giderler" total={c.fixedTotal} color={X.w} dimColor={X.wd} expanded={expanded === "fixed"} onToggle={() => toggle("fixed")} onInfo={() => setInfo("fixed")}>
-        {data.settings.fixedExpenses.length === 0 && <div style={{ color: X.td, fontSize: 12, padding: 8 }}>Ayarlar'dan ekleyin</div>}
-        {data.settings.fixedExpenses.map(exp => { const paid = md.fixedPaid?.[exp.id]; return <ItemRow key={exp.id} label={exp.name} sub={`${exp.paymentMethod === "cc" ? "💳" : "🏦"}${exp.autoPayment ? " ⚡oto" : ""}${exp.increaseDate ? " • Artış: " + exp.increaseDate : ""}`} value={exp.amount} color={paid ? X.g : X.t} toggle={!!paid} toggleOn={() => handleFixedPay(exp.id)} toggleOff={() => handleFixedUnpay(exp.id)} toggleLabelOn="Ödendi" toggleLabelOff="Öde" />; })}
-      </CatButton>
-
-      {/* DÖNEM İÇİ İŞLEMLER */}
-      {(() => {
-        // CC tek çekim
-        const ccTxs = (md.ccSingle || []).map(e => ({ id: "cc-" + e.id, type: "cc", date: e.date || (mk + "-01"), desc: e.note || e.merchantName || "Kredi Kartı Harcaması", amount: e.amount }));
-        // Hesaptan ödeme
-        const accTxs = (md.accountEntries || []).map(e => ({ id: "acc-" + e.id, type: "acc", date: e.date || (mk + "-01"), desc: e.note || "Hesaptan Ödeme", amount: e.amount }));
-        // Bu ay aktif taksitler
-        const instTxs = data.installmentPlans.filter(p => {
-          let cur = p.startMonth;
-          for (let i = 0; i < p.months; i++) { if (cur === mk) return true; cur = nmk(cur); }
-          return false;
-        }).map(p => {
-          let paidCount = 0; let cur = p.startMonth;
-          for (let i = 0; i < p.months; i++) { if (cur < mk) paidCount++; else break; cur = nmk(cur); }
-          return { id: "inst-" + p.id, type: "inst", date: mk + "-01", desc: p.note || "Taksitli Harcama", amount: p.monthlyPayment, paidCount: paidCount + 1, totalMonths: p.months };
-        });
-        const allTxs = [...ccTxs, ...accTxs, ...instTxs].sort((a, b) => b.date.localeCompare(a.date));
-        const fmtDate = d => { try { const dt = new Date(d); return dt.toLocaleDateString("tr-TR", { day: "numeric", month: "short", year: "numeric" }); } catch { return d; } };
-        const rowBg = { cc: "rgba(29,78,216,0.10)", inst: "rgba(124,58,237,0.12)", acc: "rgba(15,118,110,0.10)" };
-        const badgeBg = { cc: "rgba(29,78,216,0.18)", inst: "rgba(124,58,237,0.18)", acc: "rgba(15,118,110,0.18)" };
-        const badgeColor = { cc: X.b, inst: X.p, acc: X.g };
-        const amtColor = { cc: X.b, inst: X.p, acc: X.g };
-        const badgeLabel = { cc: "Tek Çekim", inst: "Taksitli", acc: "Hesaptan" };
-        return (
-          <div style={{ marginBottom: 8 }}>
-            <div onClick={() => toggle("periodTx")} style={{ ...glassSolid, borderRadius: expanded === "periodTx" ? "14px 14px 0 0" : 14, padding: "14px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontSize: 28, lineHeight: 1 }}>📋</span>
-                <span style={{ color: X.t, fontSize: 14, fontWeight: 700 }}>Dönem İçi İşlemler</span>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <span style={{ color: X.td, fontSize: 11 }}>{allTxs.length} işlem</span>
-                <span style={{ color: X.td, fontSize: 11, transform: expanded === "periodTx" ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>▼</span>
-              </div>
-            </div>
-            {expanded === "periodTx" && (
-              <div style={{ ...glassSolid, borderRadius: "0 0 14px 14px", borderTop: `1px solid ${X.border}`, padding: "6px 10px 10px" }}>
-                {allTxs.length === 0 && <div style={{ color: X.td, fontSize: 12, padding: "6px 0" }}>Bu ay henüz işlem girilmedi.</div>}
-                {allTxs.map(tx => (
-                  <div key={tx.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 10px", borderRadius: 8, marginBottom: 4, background: rowBg[tx.type] }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 4, whiteSpace: "nowrap", flexShrink: 0, background: badgeBg[tx.type], color: badgeColor[tx.type] }}>{badgeLabel[tx.type]}</span>
-                      <div>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: X.t }}>{tx.desc}</div>
-                        <div style={{ fontSize: 10, color: X.td, marginTop: 1 }}>{tx.type === "inst" ? `${ml(mk).split(" ")[0]} ${new Date().getFullYear()} · ${tx.paidCount}/${tx.totalMonths}` : fmtDate(tx.date)}</div>
+            {menuTab === "history" && (
+              <div style={{ background: "white", border: "1px solid rgba(15,118,110,0.2)", borderTop: "none", borderRadius: "0 0 12px 12px", padding: "4px 0 8px", marginTop: -3 }}>
+                {(() => {
+                  const allTxs2 = [
+                    ...(md.ccSingle || []).map(e => ({ id: "cc-" + e.id, type: "cc", date: e.date || mk + "-01", desc: e.note || e.merchantName || "Kredi Kartı", amount: e.amount })),
+                    ...(md.accountEntries || []).map(e => ({ id: "acc-" + e.id, type: "acc", date: e.date || mk + "-01", desc: e.note || "Hesaptan Ödeme", amount: e.amount })),
+                    ...data.installmentPlans.filter(p => { let cur = p.startMonth; for (let i = 0; i < p.months; i++) { if (cur === mk) return true; cur = nmk(cur); } return false; }).map(p => { let pc = 0; let cur = p.startMonth; for (let i = 0; i < p.months; i++) { if (cur < mk) pc++; else break; cur = nmk(cur); } return { id: "inst-" + p.id, type: "inst", date: mk + "-01", desc: p.note || "Taksitli", amount: p.monthlyPayment }; }),
+                  ].sort((a, b) => b.date.localeCompare(a.date));
+                  const rowBg = { cc: "rgba(29,78,216,0.08)", inst: "rgba(124,58,237,0.08)", acc: "rgba(15,118,110,0.08)" };
+                  const badgeColor = { cc: X.b, inst: X.p, acc: X.g };
+                  const badgeLabel = { cc: "Tek Çekim", inst: "Taksitli", acc: "Hesaptan" };
+                  if (allTxs2.length === 0) return <div style={{ color: X.td, fontSize: 12, padding: "8px 14px" }}>Bu ay henüz işlem girilmedi.</div>;
+                  return allTxs2.map(tx => (
+                    <div key={tx.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 14px", borderBottom: `1px solid ${X.border}`, background: rowBg[tx.type] }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 4, background: "rgba(0,0,0,0.08)", color: badgeColor[tx.type], flexShrink: 0 }}>{badgeLabel[tx.type]}</span>
+                        <div>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: X.t }}>{tx.desc}</div>
+                          <div style={{ fontSize: 10, color: X.td }}>{tx.date}</div>
+                        </div>
                       </div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: badgeColor[tx.type], fontFamily: fm }}>{C(tx.amount)}</div>
                     </div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: amtColor[tx.type], whiteSpace: "nowrap", fontFamily: fm }}>{C(tx.amount)}</div>
-                  </div>
-                ))}
+                  ));
+                })()}
               </div>
             )}
           </div>
@@ -6530,36 +6508,36 @@ export default function App() {
       <div style={{ position: "fixed", top: 60, left: -50, width: 200, height: 200, borderRadius: "50%", background: "rgba(22,163,74,0.07)", filter: "blur(60px)", pointerEvents: "none" }} />
       <div style={{ position: "fixed", top: 280, right: -40, width: 170, height: 170, borderRadius: "50%", background: "rgba(37,99,235,0.06)", filter: "blur(50px)", pointerEvents: "none" }} />
       <div style={{ position: "fixed", bottom: 250, left: 10, width: 140, height: 140, borderRadius: "50%", background: "rgba(124,58,237,0.05)", filter: "blur(45px)", pointerEvents: "none" }} />
-      <div style={{ ...glassSolid, borderBottom: "none", borderRadius: "0 0 18px 18px", padding: "calc(12px + env(safe-area-inset-top)) 16px 12px", display: "flex", justifyContent: "space-between", alignItems: "center", position: "sticky", top: 0, zIndex: 50, boxShadow: "0 4px 16px rgba(0,0,0,0.06)" }}>
-        <div><div style={{ fontSize: 15, fontWeight: 800, letterSpacing: "-0.3px", color: X.t }}>EV BÜTÇESİ</div><div style={{ fontSize: 11, color: X.td }}>{ml(mk)}</div></div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          {/* Risk Circle */}
-          <div onClick={() => setTab("report")} style={{ position: "relative", width: 36, height: 36, cursor: "pointer", flexShrink: 0 }}>
-            <svg width="36" height="36" viewBox="0 0 36 36">
-              <circle cx="18" cy="18" r="15" fill="none" stroke="rgba(0,0,0,0.08)" strokeWidth="3" />
-              <circle cx="18" cy="18" r="15" fill="none" stroke={headerRiskColor} strokeWidth="3" strokeDasharray={`${94.2}`} strokeDashoffset={`${94.2 * (1 - headerRisk.score / 100)}`} strokeLinecap="round" transform="rotate(-90 18 18)" />
+      <div style={{ background: "linear-gradient(160deg,#0d2e2e 0%,#0F766E 60%,#16a34a 100%)", padding: "12px 14px 14px", position: "relative", overflow: "hidden" }}>
+        <div style={{ position: "absolute", top: -40, right: -20, width: 130, height: 130, borderRadius: "50%", background: "rgba(255,255,255,0.04)" }} />
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, position: "relative", zIndex: 1 }}>
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 900, letterSpacing: 1, color: "white" }}>EV BÜTÇESİ</div>
+            <div style={{ fontSize: 10, color: "rgba(255,255,255,0.6)", marginTop: 1 }}>{ml(mk)}</div>
+          </div>
+          <div onClick={() => setTab("report")} style={{ position: "relative", width: 44, height: 44, cursor: "pointer", flexShrink: 0 }}>
+            <svg width="44" height="44" viewBox="0 0 44 44" style={{ transform: "rotate(-90deg)" }}>
+              <circle cx="22" cy="22" r="18" fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="3.5" />
+              <circle cx="22" cy="22" r="18" fill="none" stroke="#6EE7B7" strokeWidth="3.5" strokeDasharray="113.1" strokeDashoffset={113.1 * (1 - (risk?.score || 0) / 100)} strokeLinecap="round" />
             </svg>
-            <span style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", fontSize: 11, fontWeight: 800, color: headerRiskColor, fontFamily: fm }}>{headerRisk.score}</span>
-          </div>
-          {/* Bütçe rakamları */}
-          <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-            <div style={{ textAlign: "center", cursor: "pointer" }} onClick={showHeaderDetail}>
-              <div style={{ fontSize: 9, color: X.tm, fontWeight: 700, letterSpacing: 0.3, marginBottom: 2 }}>AYLIK BÜTÇE</div>
-              <div style={{ fontSize: 13, fontWeight: 800, color: X.t, fontFamily: fm }}>{C(c.effectiveBudget)}</div>
-            </div>
-            <div style={{ color: X.td, fontSize: 12, fontWeight: 300 }}>/</div>
-            <div style={{ textAlign: "center", cursor: "pointer" }} onClick={showBlokeDetail}>
-              <div style={{ fontSize: 9, color: X.w, fontWeight: 700, letterSpacing: 0.3, marginBottom: 2 }}>BLOKE</div>
-              <div style={{ fontSize: 13, fontWeight: 800, color: X.w, fontFamily: fm, borderBottom: "1px dotted rgba(0,0,0,0.2)", paddingBottom: 1 }}>{C(c.groupB || 0)}</div>
-            </div>
-            <div style={{ color: X.td, fontSize: 12, fontWeight: 300 }}>/</div>
-            <div style={{ textAlign: "center", cursor: "pointer" }} onClick={showKalanDetail}>
-              <div style={{ fontSize: 9, color: X.tm, fontWeight: 700, letterSpacing: 0.3, marginBottom: 2 }}>KALAN BÜTÇE</div>
-              <div style={{ fontSize: 13, fontWeight: 800, fontFamily: fm, borderBottom: "1px dotted rgba(0,0,0,0.2)", paddingBottom: 1, color: (() => { const pct = c.effectiveBudget > 0 ? (c.remainingX||0) / c.effectiveBudget : 0; if ((c.remainingX||0) < 0) return X.r; if (pct < 0.1) return X.r; if (pct < 0.2) return "#FF6B35"; if (pct < 0.35) return X.w; if (pct < 0.5) return "#84CC16"; return X.g; })() }}>
-                {C(c.remainingX||0)} <span style={{ fontSize: 10, color: X.td, fontWeight: 400 }}>/ {C(c.remainingY||0)}</span>
-              </div>
+            <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", textAlign: "center" }}>
+              <div style={{ fontSize: 12, fontWeight: 900, color: "white", lineHeight: 1 }}>{risk?.score || 0}</div>
+              <div style={{ fontSize: 6, color: "rgba(255,255,255,0.55)", fontWeight: 600, letterSpacing: 0.5 }}>RİSK</div>
             </div>
           </div>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, position: "relative", zIndex: 1 }}>
+          {[
+            { label: "Aylık Bütçe", val: C(c.effectiveBudget), color: "white", onClick: null },
+            { label: "Bankadaki Tutar", val: C(c.remainingY || 0), color: "white", onClick: showKalanDetail },
+            { label: "Blokeli Tutar", val: C(c.groupB || 0), color: "#FCA5A5", onClick: showBlokeDetail },
+            { label: "Blokeden Kalan", val: C(c.remainingX || 0), color: "#6EE7B7", onClick: showKalanDetail },
+          ].map((box, i) => (
+            <div key={i} onClick={box.onClick} style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 11, padding: "8px 10px", cursor: box.onClick ? "pointer" : "default" }}>
+              <div style={{ fontSize: 7, fontWeight: 800, letterSpacing: "0.07em", color: "rgba(255,255,255,0.5)", textTransform: "uppercase", marginBottom: 3 }}>{box.label}</div>
+              <div style={{ fontSize: 15, fontWeight: 900, color: box.color, fontFamily: fm, lineHeight: 1 }}>{box.val}</div>
+            </div>
+          ))}
         </div>
       </div>
       {/* Üye yedekleme kilidi */}
