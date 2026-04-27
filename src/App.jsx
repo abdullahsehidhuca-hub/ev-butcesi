@@ -2781,42 +2781,21 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
       })()}
 
 
-      {/* 4 SEKME KUTUSU */}
+      {/* 4 SEKME KUTUSU + SLIDE-UP PANEL */}
       {(() => {
-        const menuBoxStyle = (id) => ({
-          background: menuTab === id ? "rgba(15,118,110,0.06)" : "white",
-          borderRadius: 12,
-          border: `1px solid ${menuTab === id ? "rgba(15,118,110,0.3)" : "rgba(0,0,0,0.07)"}`,
-          overflow: "hidden",
-          cursor: "pointer",
-          minHeight: 58,
-        });
-        const menuHeadStyle = {
-          padding: "14px 12px",
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-        };
-
-        // Sabit gider özet
         const totalFixed = data.settings.fixedExpenses.length;
         const paidFixed = data.settings.fixedExpenses.filter(e => md.fixedPaid?.[e.id]).length;
-
-        // KK aktarım özet
         const pendingCC = ccTransferItems.filter(i => !md.ccTransferred?.[i.key]?.transferred).length;
-
-        // Değişken gider özet
         const ves = data.settings.variableExpenses || [];
         const { categories: cats } = ves.length > 0 ? categorizeMonthSpending(data, mk) : { categories: {} };
         const totalBudget = ves.reduce((s, ve) => s + (ve.expectedAmount || 0), 0);
         const totalSpentEnv = Object.entries(cats).filter(([k]) => k !== "_uncategorized").reduce((s, [, v]) => s + v, 0);
         const uncat = cats._uncategorized || 0;
-
-        // Dönem içi işlemler
-        const ccTxs = (md.ccSingle || []).length;
-        const accTxs = (md.accountEntries || []).length;
-        const instTxs = data.installmentPlans.filter(p => { let cur = p.startMonth; for (let i = 0; i < p.months; i++) { if (cur === mk) return true; cur = nmk(cur); } return false; }).length;
-        const totalTxs = ccTxs + accTxs + instTxs;
+        const overBudgetTotal2 = ves.reduce((s, ve) => { const sp = cats[ve.id] || 0; const bg = ve.expectedAmount || 0; return s + (bg > 0 && sp > bg ? sp - bg : 0); }, 0);
+        const ccTxsLen = (md.ccSingle || []).length;
+        const accTxsLen = (md.accountEntries || []).length;
+        const instTxsLen = data.installmentPlans.filter(p => { let cur = p.startMonth; for (let i = 0; i < p.months; i++) { if (cur === mk) return true; cur = nmk(cur); } return false; }).length;
+        const totalTxs = ccTxsLen + accTxsLen + instTxsLen;
 
         const menus = [
           { id: "fixed", icon: "🔒", title: "Sabit Gider Onayları", sub: `${paidFixed}/${totalFixed} ödendi` },
@@ -2825,211 +2804,232 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
           { id: "history", icon: "📋", title: "Aylık İşlem Geçmişi", sub: `${totalTxs} işlem` },
         ];
 
+        const menuBoxStyle = (id) => ({
+          background: menuTab === id ? "rgba(15,118,110,0.08)" : "white",
+          borderRadius: 12,
+          border: `1px solid ${menuTab === id ? "rgba(15,118,110,0.3)" : "rgba(0,0,0,0.07)"}`,
+          overflow: "hidden",
+          cursor: "pointer",
+          minHeight: 58,
+        });
+        const menuHeadStyle = { padding: "14px 12px", display: "flex", alignItems: "center", gap: 8 };
+
+        // Panel içerikleri
+        const renderPanelContent = () => {
+          if (menuTab === "fixed") return (
+            <div style={{ padding: "14px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <div style={{ color: X.tm, fontSize: 10, fontWeight: 800, letterSpacing: "0.07em", textTransform: "uppercase" }}>Sabit Zorunlu Giderler</div>
+                <span style={{ color: X.w, fontSize: 14, fontWeight: 800, fontFamily: fm }}>{C(c.fixedTotal)}</span>
+              </div>
+              {data.settings.fixedExpenses.length === 0 && <div style={{ color: X.td, fontSize: 12 }}>Ayarlar'dan sabit gider ekleyin.</div>}
+              {data.settings.fixedExpenses.map(exp => {
+                const paid = md.fixedPaid?.[exp.id];
+                return <ItemRow key={exp.id} label={exp.name} sub={`${exp.paymentMethod === "cc" ? "💳" : "🏦"}${exp.autoPayment ? " ⚡oto" : ""}${exp.increaseDate ? " • Artış: " + exp.increaseDate : ""}`} value={exp.amount} color={paid ? X.g : X.t} toggle={!!paid} toggleOn={() => handleFixedPay(exp.id)} toggleOff={() => handleFixedUnpay(exp.id)} toggleLabelOn="Ödendi" toggleLabelOff="Öde" />;
+              })}
+            </div>
+          );
+
+          if (menuTab === "cc") return (
+            <div style={{ padding: "14px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <div style={{ color: X.tm, fontSize: 10, fontWeight: 800, letterSpacing: "0.07em", textTransform: "uppercase" }}>KK Aktarımları</div>
+                <span style={{ color: X.b, fontSize: 14, fontWeight: 800, fontFamily: fm }}>{C(ccTransferTotal)}</span>
+              </div>
+              {ccTransferByCard.length > 0 && (
+                <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+                  {ccTransferByCard.map(card => (
+                    <div key={card.name} style={{ background: X.bd, borderRadius: 8, padding: "4px 10px", display: "flex", gap: 6 }}>
+                      <span style={{ color: X.b, fontSize: 12, fontWeight: 700 }}>💳 {card.name}</span>
+                      <span style={{ color: X.b, fontSize: 12, fontWeight: 800, fontFamily: fm }}>{C(card.total)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {ccTransferItems.map(item => {
+                const transferred = md.ccTransferred?.[item.key]?.transferred;
+                const isSingle = item.key.startsWith("single-");
+                const isInst = item.key.startsWith("inst-");
+                const sourceId = item.key.split("-").slice(1).join("-");
+                return <ItemRow key={item.key} label={item.label} sub={item.sub} value={item.amount} color={transferred ? X.g : X.t} toggle={!!transferred} toggleOn={() => handleCCTransfer(item.key)} toggleOff={() => undoCCTransfer(item.key)} toggleLabelOn="Aktarıldı" toggleLabelOff="Aktar" onEdit={isSingle ? () => editCCSingle(sourceId) : isInst ? () => editInstallment(sourceId) : null} onDelete={isSingle ? () => deleteCCSingle(sourceId) : isInst ? () => deleteInstallment(sourceId) : null} />;
+              })}
+            </div>
+          );
+
+          if (menuTab === "variable") return (
+            <div style={{ padding: "14px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <div style={{ color: X.tm, fontSize: 10, fontWeight: 800, letterSpacing: "0.07em", textTransform: "uppercase" }}>Değişken Gider Takibi</div>
+                <span style={{ color: X.t, fontSize: 14, fontWeight: 800, fontFamily: fm }}>{C(totalSpentEnv)} / {C(totalBudget)}</span>
+              </div>
+              {ves.length === 0 && <div style={{ color: X.td, fontSize: 12 }}>Ayarlar'dan kategori ekleyin.</div>}
+              {ves.map(ve => {
+                const spent = cats[ve.id] || 0;
+                const budget = ve.expectedAmount || 0;
+                const pct2 = budget > 0 ? Math.min((spent / budget) * 100, 100) : 0;
+                const over = budget > 0 && spent > budget;
+                const isOpen = expandedCat === ve.id;
+                const catEntries = [
+                  ...(md.ccSingle || []).filter(e => e.categoryId === ve.id).map(e => ({ key: e.id, desc: e.note || e.merchantName || "KK", date: e.date, amount: e.amount, type: "cc" })),
+                  ...(md.accountEntries || []).filter(e => e.categoryId === ve.id).map(e => ({ key: e.id, desc: e.note || "Hesaptan", date: e.date, amount: e.amount, type: "acc" })),
+                ].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+                return (
+                  <div key={ve.id}>
+                    <div onClick={() => setExpandedCat(isOpen ? null : ve.id)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `1px solid ${X.border}`, cursor: "pointer" }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
+                          <span style={{ fontSize: 14 }}>{ve.icon || "📋"}</span>
+                          <span style={{ color: X.t, fontSize: 13, fontWeight: 700 }}>{ve.name}</span>
+                          {over && <span style={{ fontSize: 10, background: X.rd, color: X.r, borderRadius: 4, padding: "1px 5px", fontWeight: 700 }}>+{C(spent - budget)}</span>}
+                        </div>
+                        {budget > 0 && <div style={{ height: 3, borderRadius: 2, background: "rgba(0,0,0,0.06)" }}><div style={{ height: "100%", borderRadius: 2, background: over ? X.r : X.g, width: `${pct2}%` }} /></div>}
+                      </div>
+                      <div style={{ textAlign: "right", marginLeft: 10, flexShrink: 0 }}>
+                        <div style={{ color: over ? X.r : X.t, fontSize: 13, fontWeight: 800, fontFamily: fm }}>{C(spent)}</div>
+                        {budget > 0 && <div style={{ color: X.td, fontSize: 10 }}>/ {C(budget)}</div>}
+                      </div>
+                    </div>
+                    {isOpen && catEntries.length > 0 && (
+                      <div style={{ background: "rgba(0,0,0,0.02)", padding: "4px 0 8px" }}>
+                        {catEntries.map(tx => (
+                          <div key={tx.key} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 0" }}>
+                            <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 5px", borderRadius: 3, background: tx.type === "cc" ? "rgba(29,78,216,0.1)" : "rgba(15,118,110,0.1)", color: tx.type === "cc" ? X.b : X.g }}>{tx.type === "cc" ? "KK" : "Hesap"}</span>
+                            <span style={{ fontSize: 12, color: X.t, flex: 1 }}>{tx.desc}</span>
+                            <span style={{ fontSize: 10, color: X.td }}>{tx.date}</span>
+                            <span style={{ fontSize: 12, fontWeight: 700, color: X.t, fontFamily: fm }}>{C(tx.amount)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {uncat > 0 && (() => {
+                const isUncatOpen = expandedCat === "_uncat";
+                const uncatEntries = [
+                  ...(md.ccSingle || []).filter(e => !e.categoryId || !ves.find(ve => ve.id === e.categoryId)).map(e => ({ key: e.id, desc: e.note || e.merchantName || "KK", date: e.date, amount: e.amount, type: "cc" })),
+                  ...(md.accountEntries || []).filter(e => !e.categoryId || !ves.find(ve => ve.id === e.categoryId)).map(e => ({ key: e.id, desc: e.note || "Hesaptan", date: e.date, amount: e.amount, type: "acc" })),
+                ].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+                return (
+                  <div>
+                    <div onClick={() => setExpandedCat(isUncatOpen ? null : "_uncat")} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `1px solid ${X.border}`, cursor: "pointer" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ fontSize: 14 }}>⚠️</span><span style={{ color: X.r, fontSize: 13, fontWeight: 700 }}>Beklenmedik Giderler</span></div>
+                      <span style={{ color: X.r, fontSize: 13, fontWeight: 800, fontFamily: fm }}>{C(uncat)}</span>
+                    </div>
+                    {isUncatOpen && uncatEntries.map(tx => (
+                      <div key={tx.key} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 0" }}>
+                        <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 5px", borderRadius: 3, background: "rgba(220,38,38,0.1)", color: X.r }}>{tx.type === "cc" ? "KK" : "Hesap"}</span>
+                        <span style={{ fontSize: 12, color: X.t, flex: 1 }}>{tx.desc}</span>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: X.r, fontFamily: fm }}>{C(tx.amount)}</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+              {/* Beklenmeyen Gider Fonu */}
+              {(() => {
+                const unexpFund = data.settings.emergencyTampon || 0;
+                if (unexpFund === 0) return null;
+                const fundUsedAmt = overBudgetTotal2 + uncat;
+                const fundRem = Math.max(0, unexpFund - fundUsedAmt);
+                const fundPct = Math.min(100, Math.round((fundUsedAmt / unexpFund) * 100));
+                const isFundOpen = expandedCat === "_fund";
+                return (
+                  <div style={{ borderTop: `2px solid ${X.border}`, marginTop: 4 }}>
+                    <div onClick={() => setExpandedCat(isFundOpen ? null : "_fund")} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", cursor: "pointer" }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                          <span style={{ fontSize: 14 }}>🛡️</span>
+                          <span style={{ color: X.t, fontSize: 13, fontWeight: 700 }}>Beklenmeyen Gider Fonu</span>
+                          <span style={{ fontSize: 10, background: fundPct >= 90 ? X.rd : fundPct >= 60 ? X.wd : X.gd, color: fundPct >= 90 ? X.r : fundPct >= 60 ? X.w : X.g, borderRadius: 4, padding: "1px 5px", fontWeight: 700 }}>%{fundPct}</span>
+                        </div>
+                        <div style={{ height: 3, borderRadius: 2, background: "rgba(0,0,0,0.06)" }}><div style={{ height: "100%", borderRadius: 2, background: fundPct >= 90 ? X.r : fundPct >= 60 ? X.w : X.g, width: `${fundPct}%` }} /></div>
+                      </div>
+                      <div style={{ textAlign: "right", marginLeft: 10, flexShrink: 0 }}>
+                        <div style={{ color: X.t, fontSize: 13, fontWeight: 800, fontFamily: fm }}>{C(fundRem)}</div>
+                        <div style={{ color: X.td, fontSize: 10 }}>/ {C(unexpFund)}</div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          );
+
+          if (menuTab === "history") return (
+            <div style={{ padding: "14px" }}>
+              <div style={{ color: X.tm, fontSize: 10, fontWeight: 800, letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 12 }}>Aylık İşlem Geçmişi</div>
+              {(() => {
+                const allTxs2 = [
+                  ...(md.ccSingle || []).map(e => ({ id: "cc-" + e.id, type: "cc", date: e.date || mk + "-01", desc: e.note || e.merchantName || "Kredi Kartı", amount: e.amount })),
+                  ...(md.accountEntries || []).map(e => ({ id: "acc-" + e.id, type: "acc", date: e.date || mk + "-01", desc: e.note || "Hesaptan Ödeme", amount: e.amount })),
+                  ...data.installmentPlans.filter(p => { let cur = p.startMonth; for (let i = 0; i < p.months; i++) { if (cur === mk) return true; cur = nmk(cur); } return false; }).map(p => ({ id: "inst-" + p.id, type: "inst", date: mk + "-01", desc: p.note || "Taksitli", amount: p.monthlyPayment })),
+                ].sort((a, b) => b.date.localeCompare(a.date));
+                const rowBg = { cc: "rgba(29,78,216,0.08)", inst: "rgba(124,58,237,0.08)", acc: "rgba(15,118,110,0.08)" };
+                const badgeColor = { cc: X.b, inst: X.p, acc: X.g };
+                const badgeLabel = { cc: "Tek Çekim", inst: "Taksitli", acc: "Hesaptan" };
+                if (allTxs2.length === 0) return <div style={{ color: X.td, fontSize: 12 }}>Bu ay henüz işlem girilmedi.</div>;
+                return allTxs2.map(tx => (
+                  <div key={tx.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: `1px solid ${X.border}`, background: rowBg[tx.type] }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 4, background: "rgba(0,0,0,0.08)", color: badgeColor[tx.type] }}>{badgeLabel[tx.type]}</span>
+                      <div><div style={{ fontSize: 12, fontWeight: 600, color: X.t }}>{tx.desc}</div><div style={{ fontSize: 10, color: X.td }}>{tx.date}</div></div>
+                    </div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: badgeColor[tx.type], fontFamily: fm }}>{C(tx.amount)}</div>
+                  </div>
+                ));
+              })()}
+            </div>
+          );
+          return null;
+        };
+
         return (
-          <div style={{ marginTop: 8 }}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gridTemplateRows: "1fr 1fr", gap: 6 }}>
+          <>
+            {/* 2x2 sekme kutuları */}
+            <div style={{ marginTop: 8, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
               {menus.map(m => (
-                <div key={m.id} style={menuBoxStyle(m.id)} onClick={() => setMenuTab(menuTab === m.id ? null : m.id)}>
+                <div key={m.id} style={menuBoxStyle(m.id)} onClick={() => setMenuTab(m.id)}>
                   <div style={menuHeadStyle}>
                     <span style={{ fontSize: 20, flexShrink: 0 }}>{m.icon}</span>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: "#141008", lineHeight: 1.3 }}>{m.title}</div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: menuTab === m.id ? "#0F766E" : "#141008", lineHeight: 1.3 }}>{m.title}</div>
                       <div style={{ fontSize: 10, color: "#5A5045", marginTop: 3 }}>{m.sub}</div>
                     </div>
-                    <span style={{ color: menuTab === m.id ? X.g : X.td, fontSize: 9, flexShrink: 0 }}>{menuTab === m.id ? "▲" : "▼"}</span>
+                    <span style={{ color: menuTab === m.id ? X.g : X.td, fontSize: 9, flexShrink: 0 }}>▼</span>
                   </div>
                 </div>
               ))}
             </div>
 
-            {/* AÇIK SEKME İÇERİĞİ */}
-            {menuTab === "fixed" && (
-              <div style={{ background: "white", border: "1px solid rgba(15,118,110,0.2)", borderTop: "none", borderRadius: "0 0 12px 12px", padding: "4px 0 8px", marginTop: -3 }}>
-                {data.settings.fixedExpenses.length === 0 && <div style={{ color: X.td, fontSize: 12, padding: "10px 14px" }}>Ayarlar'dan sabit gider ekleyin.</div>}
-                {data.settings.fixedExpenses.map(exp => {
-                  const paid = md.fixedPaid?.[exp.id];
-                  return <ItemRow key={exp.id} label={exp.name} sub={`${exp.paymentMethod === "cc" ? "💳" : "🏦"}${exp.autoPayment ? " ⚡oto" : ""}${exp.increaseDate ? " • Artış: " + exp.increaseDate : ""}`} value={exp.amount} color={paid ? X.g : X.t} toggle={!!paid} toggleOn={() => handleFixedPay(exp.id)} toggleOff={() => handleFixedUnpay(exp.id)} toggleLabelOn="Ödendi" toggleLabelOff="Öde" />;
-                })}
-              </div>
-            )}
-
-            {menuTab === "cc" && (
-              <div style={{ background: "white", border: "1px solid rgba(15,118,110,0.2)", borderTop: "none", borderRadius: "0 0 12px 12px", padding: "4px 0 8px", marginTop: -3 }}>
-                {ccTransferByCard.length > 0 && (
-                  <div style={{ display: "flex", gap: 8, padding: "8px 14px 4px", borderBottom: `1px solid ${X.border}` }}>
-                    {ccTransferByCard.map(card => (
-                      <div key={card.name} style={{ background: X.bd, borderRadius: 8, padding: "4px 10px", display: "flex", justifyContent: "space-between", gap: 8 }}>
-                        <span style={{ color: X.b, fontSize: 12, fontWeight: 700 }}>💳 {card.name}</span>
-                        <span style={{ color: X.b, fontSize: 14, fontWeight: 800, fontFamily: fm }}>{C(card.total)}</span>
+            {/* SLIDE-UP PANEL */}
+            {menuTab && (
+              <div style={{ position: "fixed", top: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 480, height: "100%", background: "#EBE3DB", zIndex: 80, display: "flex", flexDirection: "column" }}>
+                {/* Üst: geri + 2x2 sekme grid */}
+                <div style={{ background: "white", padding: "12px 12px 10px", borderBottom: "1px solid rgba(0,0,0,0.07)", flexShrink: 0 }}>
+                  <div onClick={() => setMenuTab(null)} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, cursor: "pointer" }}>
+                    <div style={{ width: 28, height: 28, borderRadius: "50%", background: "#F0F0EB", border: "1px solid rgba(0,0,0,0.08)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 700, color: "#5A5045" }}>←</div>
+                    <div style={{ fontSize: 12, color: "#5A5045", fontWeight: 600 }}>Güncel Durum'a Dön</div>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                    {menus.map(m => (
+                      <div key={m.id} onClick={() => setMenuTab(m.id)} style={{ background: menuTab === m.id ? "rgba(15,118,110,0.08)" : "white", borderRadius: 12, border: `1px solid ${menuTab === m.id ? "rgba(15,118,110,0.3)" : "rgba(0,0,0,0.07)"}`, padding: "11px 12px", display: "flex", alignItems: "center", gap: 8, cursor: "pointer", minHeight: 58 }}>
+                        <span style={{ fontSize: 20, flexShrink: 0 }}>{m.icon}</span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: menuTab === m.id ? "#0F766E" : "#141008", lineHeight: 1.3 }}>{m.title}</div>
+                          <div style={{ fontSize: 10, color: "#5A5045", marginTop: 3 }}>{m.sub}</div>
+                        </div>
                       </div>
                     ))}
                   </div>
-                )}
-                {ccTransferItems.map(item => {
-                  const transferred = md.ccTransferred?.[item.key]?.transferred;
-                  const isSingle = item.key.startsWith("single-");
-                  const isInst = item.key.startsWith("inst-");
-                  const sourceId = item.key.split("-").slice(1).join("-");
-                  return <ItemRow key={item.key} label={item.label} sub={item.sub} value={item.amount} color={transferred ? X.g : X.t}
-                    toggle={!!transferred}
-                    toggleOn={() => handleCCTransfer(item.key)}
-                    toggleOff={() => undoCCTransfer(item.key)}
-                    toggleLabelOn="Aktarıldı"
-                    toggleLabelOff="Aktar"
-                    onEdit={isSingle ? () => editCCSingle(sourceId) : isInst ? () => editInstallment(sourceId) : null}
-                    onDelete={isSingle ? () => deleteCCSingle(sourceId) : isInst ? () => deleteInstallment(sourceId) : null}
-                  />;
-                })}
+                </div>
+                {/* Kaydırılabilir içerik */}
+                <div style={{ flex: 1, overflowY: "auto" }}>
+                  {renderPanelContent()}
+                </div>
               </div>
             )}
-
-            {menuTab === "variable" && (
-              <div style={{ background: "white", border: "1px solid rgba(15,118,110,0.2)", borderTop: "none", borderRadius: "0 0 12px 12px", padding: "8px 0", marginTop: -3 }}>
-                {ves.length === 0 && <div style={{ color: X.td, fontSize: 12, padding: "8px 14px" }}>Ayarlar'dan kategori ekleyin.</div>}
-                {ves.map(ve => {
-                  const spent = cats[ve.id] || 0;
-                  const budget = ve.expectedAmount || 0;
-                  const pct2 = budget > 0 ? Math.min((spent / budget) * 100, 100) : 0;
-                  const over = budget > 0 && spent > budget;
-                  const isOpen = expandedCat === ve.id;
-                  const catEntries = [
-                    ...(md.ccSingle || []).filter(e => e.categoryId === ve.id).map(e => ({ key: e.id, desc: e.note || e.merchantName || "KK Harcaması", date: e.date, amount: e.amount, type: "cc" })),
-                    ...(md.accountEntries || []).filter(e => e.categoryId === ve.id).map(e => ({ key: e.id, desc: e.note || "Hesaptan", date: e.date, amount: e.amount, type: "acc" })),
-                  ].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
-                  return (
-                    <div key={ve.id}>
-                      <div onClick={() => setExpandedCat(isOpen ? null : ve.id)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 14px", borderBottom: `1px solid ${X.border}`, cursor: "pointer", background: isOpen ? "rgba(0,0,0,0.02)" : "transparent" }}>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
-                            <span style={{ fontSize: 14 }}>{ve.icon || "📋"}</span>
-                            <span style={{ color: X.t, fontSize: 13, fontWeight: 700 }}>{ve.name}</span>
-                            {over && <span style={{ fontSize: 10, background: X.rd, color: X.r, borderRadius: 4, padding: "1px 5px", fontWeight: 700 }}>+{C(spent - budget)}</span>}
-                          </div>
-                          {budget > 0 && <div style={{ height: 3, borderRadius: 2, background: "rgba(0,0,0,0.06)" }}><div style={{ height: "100%", borderRadius: 2, background: over ? X.r : X.g, width: `${pct2}%` }} /></div>}
-                        </div>
-                        <div style={{ textAlign: "right", marginLeft: 10, flexShrink: 0 }}>
-                          <div style={{ color: over ? X.r : X.t, fontSize: 13, fontWeight: 800, fontFamily: fm }}>{C(spent)}</div>
-                          {budget > 0 && <div style={{ color: X.td, fontSize: 10 }}>/ {C(budget)}</div>}
-                        </div>
-                      </div>
-                      {isOpen && catEntries.length > 0 && (
-                        <div style={{ background: "rgba(0,0,0,0.02)", padding: "4px 14px 8px", borderBottom: `1px solid ${X.border}` }}>
-                          {catEntries.map(tx => (
-                            <div key={tx.key} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 0", borderBottom: `1px solid rgba(0,0,0,0.03)` }}>
-                              <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 5px", borderRadius: 3, background: tx.type === "cc" ? "rgba(29,78,216,0.1)" : "rgba(15,118,110,0.1)", color: tx.type === "cc" ? X.b : X.g, flexShrink: 0 }}>{tx.type === "cc" ? "KK" : "Hesap"}</span>
-                              <span style={{ fontSize: 12, color: X.t, flex: 1 }}>{tx.desc}</span>
-                              <span style={{ fontSize: 10, color: X.td, flexShrink: 0 }}>{tx.date}</span>
-                              <span style={{ fontSize: 12, fontWeight: 700, color: X.t, fontFamily: fm, flexShrink: 0 }}>{C(tx.amount)}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-                {uncat > 0 && (() => {
-                  const isUncatOpen = expandedCat === "_uncat";
-                  const uncatEntries = [
-                    ...(md.ccSingle || []).filter(e => !e.categoryId || !ves.find(ve => ve.id === e.categoryId)).map(e => ({ key: e.id, desc: e.note || e.merchantName || "Kredi Kartı Harcaması", date: e.date, amount: e.amount, type: "cc" })),
-                    ...(md.accountEntries || []).filter(e => !e.categoryId || !ves.find(ve => ve.id === e.categoryId)).map(e => ({ key: e.id, desc: e.note || "Hesaptan Ödeme", date: e.date, amount: e.amount, type: "acc" })),
-                  ].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
-                  return (
-                    <div>
-                      <div onClick={() => setExpandedCat(isUncatOpen ? null : "_uncat")} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 14px", borderBottom: `1px solid ${X.border}`, cursor: "pointer" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                          <span style={{ fontSize: 14 }}>⚠️</span>
-                          <span style={{ color: X.r, fontSize: 13, fontWeight: 700 }}>Beklenmedik Giderler</span>
-                        </div>
-                        <span style={{ color: X.r, fontSize: 13, fontWeight: 800, fontFamily: fm }}>{C(uncat)}</span>
-                      </div>
-                      {isUncatOpen && (
-                        <div style={{ background: "rgba(220,38,38,0.03)", padding: "4px 14px 8px", borderBottom: `1px solid ${X.border}` }}>
-                          {uncatEntries.map(tx => (
-                            <div key={tx.key} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 0" }}>
-                              <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 5px", borderRadius: 3, background: "rgba(220,38,38,0.1)", color: X.r, flexShrink: 0 }}>{tx.type === "cc" ? "KK" : "Hesap"}</span>
-                              <span style={{ fontSize: 12, color: X.t, flex: 1 }}>{tx.desc}</span>
-                              <span style={{ fontSize: 12, fontWeight: 700, color: X.r, fontFamily: fm, flexShrink: 0 }}>{C(tx.amount)}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
-                {/* BEKLENMEYEn GİDER FONU SATIRI */}
-                {(() => {
-                  const unexpFund = data.settings.emergencyTampon || 0;
-                  if (unexpFund === 0) return null;
-                  const fundUsedAmt = overBudgetTotal + uncat;
-                  const fundRem = Math.max(0, unexpFund - fundUsedAmt);
-                  const fundPct = Math.min(100, Math.round((fundUsedAmt / unexpFund) * 100));
-                  const isFundOpen = expandedCat === "_fund";
-                  const fundEntries = [
-                    ...overCategories.map(ve => ({ key: "over-" + ve.id, desc: `${ve.name} aşımı`, amount: (cats[ve.id] || 0) - ve.expectedAmount, color: X.w })),
-                    ...(uncat > 0 ? [{ key: "uncat", desc: "Kategorisiz harcamalar", amount: uncat, color: X.r }] : []),
-                  ];
-                  return (
-                    <div style={{ borderTop: `2px solid ${X.border}`, marginTop: 4 }}>
-                      <div onClick={() => setExpandedCat(isFundOpen ? null : "_fund")} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", cursor: "pointer", background: fundPct >= 90 ? "rgba(220,38,38,0.04)" : fundPct >= 60 ? "rgba(180,83,9,0.04)" : "transparent" }}>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
-                            <span style={{ fontSize: 14 }}>🛡️</span>
-                            <span style={{ color: X.t, fontSize: 13, fontWeight: 700 }}>Beklenmeyen Gider Fonu</span>
-                            <span style={{ fontSize: 10, background: fundPct >= 90 ? X.rd : fundPct >= 60 ? X.wd : X.gd, color: fundPct >= 90 ? X.r : fundPct >= 60 ? X.w : X.g, borderRadius: 4, padding: "1px 5px", fontWeight: 700 }}>%{fundPct}</span>
-                          </div>
-                          <div style={{ height: 3, borderRadius: 2, background: "rgba(0,0,0,0.06)" }}>
-                            <div style={{ height: "100%", borderRadius: 2, background: fundPct >= 90 ? X.r : fundPct >= 60 ? X.w : X.g, width: `${fundPct}%` }} />
-                          </div>
-                        </div>
-                        <div style={{ textAlign: "right", marginLeft: 10, flexShrink: 0 }}>
-                          <div style={{ color: X.t, fontSize: 13, fontWeight: 800, fontFamily: fm }}>{C(fundRem)}</div>
-                          <div style={{ color: X.td, fontSize: 10 }}>/ {C(unexpFund)} kaldı</div>
-                        </div>
-                      </div>
-                      {isFundOpen && fundEntries.length > 0 && (
-                        <div style={{ background: "rgba(0,0,0,0.02)", padding: "4px 14px 8px", borderTop: `1px solid ${X.border}` }}>
-                          {fundEntries.map(fe => (
-                            <div key={fe.key} style={{ display: "flex", justifyContent: "space-between", padding: "4px 0" }}>
-                              <span style={{ fontSize: 12, color: X.tm }}>{fe.desc}</span>
-                              <span style={{ fontSize: 12, fontWeight: 700, fontFamily: fm, color: fe.color }}>{C(fe.amount)}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
-              </div>
-            )}
-
-            {menuTab === "history" && (
-              <div style={{ background: "white", border: "1px solid rgba(15,118,110,0.2)", borderTop: "none", borderRadius: "0 0 12px 12px", padding: "4px 0 8px", marginTop: -3 }}>
-                {(() => {
-                  const allTxs2 = [
-                    ...(md.ccSingle || []).map(e => ({ id: "cc-" + e.id, type: "cc", date: e.date || mk + "-01", desc: e.note || e.merchantName || "Kredi Kartı", amount: e.amount })),
-                    ...(md.accountEntries || []).map(e => ({ id: "acc-" + e.id, type: "acc", date: e.date || mk + "-01", desc: e.note || "Hesaptan Ödeme", amount: e.amount })),
-                    ...data.installmentPlans.filter(p => { let cur = p.startMonth; for (let i = 0; i < p.months; i++) { if (cur === mk) return true; cur = nmk(cur); } return false; }).map(p => { let pc = 0; let cur = p.startMonth; for (let i = 0; i < p.months; i++) { if (cur < mk) pc++; else break; cur = nmk(cur); } return { id: "inst-" + p.id, type: "inst", date: mk + "-01", desc: p.note || "Taksitli", amount: p.monthlyPayment }; }),
-                  ].sort((a, b) => b.date.localeCompare(a.date));
-                  const rowBg = { cc: "rgba(29,78,216,0.08)", inst: "rgba(124,58,237,0.08)", acc: "rgba(15,118,110,0.08)" };
-                  const badgeColor = { cc: X.b, inst: X.p, acc: X.g };
-                  const badgeLabel = { cc: "Tek Çekim", inst: "Taksitli", acc: "Hesaptan" };
-                  if (allTxs2.length === 0) return <div style={{ color: X.td, fontSize: 12, padding: "8px 14px" }}>Bu ay henüz işlem girilmedi.</div>;
-                  return allTxs2.map(tx => (
-                    <div key={tx.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 14px", borderBottom: `1px solid ${X.border}`, background: rowBg[tx.type] }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 4, background: "rgba(0,0,0,0.08)", color: badgeColor[tx.type], flexShrink: 0 }}>{badgeLabel[tx.type]}</span>
-                        <div>
-                          <div style={{ fontSize: 12, fontWeight: 600, color: X.t }}>{tx.desc}</div>
-                          <div style={{ fontSize: 10, color: X.td }}>{tx.date}</div>
-                        </div>
-                      </div>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: badgeColor[tx.type], fontFamily: fm }}>{C(tx.amount)}</div>
-                    </div>
-                  ));
-                })()}
-              </div>
-            )}
-          </div>
+          </>
         );
       })()}
 
