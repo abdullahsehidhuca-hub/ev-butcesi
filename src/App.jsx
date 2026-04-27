@@ -3906,61 +3906,130 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
               return `  ${g.name}${g.purpose ? " ("+g.purpose+")" : ""}: ${C(totalAct)} / ${C(targetTL)} TL hedef, öncelik #${g.priority}`;
             }).join("\n");
 
-            const prompt = `Sen bir kişisel finans danışmanısın. Türkçe konuş, samimi ve SOMUT ol.
+            // Dönem bilgisi — 15'lik döngü
+            const periodStart = 15;
+            const periodStartDate = new Date(today.getFullYear(), today.getMonth(), periodStart);
+            if (today.getDate() < periodStart) periodStartDate.setMonth(periodStartDate.getMonth() - 1);
+            const periodEndDate = new Date(periodStartDate.getFullYear(), periodStartDate.getMonth() + 1, periodStart - 1);
+            const periodDays = Math.round((periodEndDate - periodStartDate) / 86400000) + 1;
+            const daysIntoPeriod = Math.max(1, Math.round((today - periodStartDate) / 86400000));
+            const daysLeftInPeriod = periodDays - daysIntoPeriod;
+            const periodProgress = Math.round((daysIntoPeriod / periodDays) * 100);
+
+            // Geçmiş dönem verileri — ilk dönemse boş, birikerek gelişir
+            const pastPeriods = [pmk(mk), pmk(pmk(mk)), pmk(pmk(pmk(mk)))].map(m => {
+              if (!data.months[m]) return null;
+              const pmc = calcMonth(data, m, null);
+              const { categories: pc } = categorizeMonthSpending(data, m);
+              return { mk: m, label: ml(m), remainingX: pmc.remainingX, totalSpent: pmc.totalSpent, cats: pc };
+            }).filter(Boolean);
+            const hasPastData = pastPeriods.length > 0;
+
+            // Kategori karşılaştırma
+            const catDeltaLines = ves.map(ve => {
+              const cur = cats[ve.id] || 0;
+              if (!hasPastData) return `  ${ve.name}: ${C(cur)} (ilk dönem — karşılaştırma henüz yok)`;
+              const pastAmts = pastPeriods.map(p => p.cats[ve.id] || 0).filter(v => v > 0);
+              const avg3 = pastAmts.length > 0 ? Math.round(pastAmts.reduce((a,b) => a+b,0) / pastAmts.length) : 0;
+              const prev = pastPeriods[0]?.cats[ve.id] || 0;
+              const delta = prev > 0 ? Math.round(((cur - prev) / prev) * 100) : null;
+              let trend = "";
+              if (pastAmts.length >= 2) trend = pastAmts[0] < pastAmts[1] ? " [↑ artış trendi]" : pastAmts[0] > pastAmts[1] ? " [↓ düşüş trendi]" : " [→ sabit]";
+              return `  ${ve.name}: bu dönem ${C(cur)}${prev > 0 ? `, önceki ${C(prev)} (${delta !== null ? (delta >= 0 ? "+" : "") + delta + "%" : ""})` : ""}${avg3 > 0 ? `, ${pastAmts.length} dönem ort: ${C(avg3)}` : ""}${trend}`;
+            }).join("\n");
+
+            // Aktarılmamış KK kalemleri
+            const untransferred = ccTransferItems.filter(i => !md.ccTransferred?.[i.key]?.transferred);
+            const untransferredLines = untransferred.map(i => `  ${i.label}: ${C(i.amount)}`).join("\n");
+
+            // Dönem içi harcama yığılması
+            const allTxDates2 = [...(md.ccSingle || []), ...(md.accountEntries || [])].map(e => e.date).filter(Boolean);
+            const periodMidDay = new Date(periodStartDate); periodMidDay.setDate(periodStartDate.getDate() + Math.floor(periodDays / 2));
+            const firstHalfTxCount = allTxDates2.filter(d => new Date(d) <= periodMidDay).length;
+            const firstHalfPct = allTxDates2.length > 0 ? Math.round((firstHalfTxCount / allTxDates2.length) * 100) : 0;
+
+            // Setcard/Multinet kullanım
+            const setcardTotal = (md.ccSingle || []).filter(e => (e.note||"").toLowerCase().includes("setcard") || (e.note||"").toLowerCase().includes("multinet")).reduce((s,e) => s + e.amount, 0);
+
+            // Altın borcu kur riski
+            const goldDebt = data.debts.find(d2 => d2.currency === "XAU" && d2.remainingMonths > 0);
+            const goldRate = data.liveRates?.XAU || 0;
+            const goldRiskLine = goldDebt && goldRate > 0 ? `  ${goldDebt.name}: ${goldDebt.monthlyPayment} gr/ay = ${C(Math.round(goldDebt.monthlyPayment * goldRate))} TL (kur: ${C(goldRate)}/gr), ${goldDebt.remainingMonths} ay kaldı, toplam kalan: ~${C(Math.round(goldDebt.monthlyPayment * goldDebt.remainingMonths * goldRate))} TL` : null;
+
+            // Sabit gider yük oranı
+            const fixedRatioPct = c.effectiveBudget > 0 ? Math.round((c.fixedTotal / c.effectiveBudget) * 100) : 0;
+            const upcomingIncreaseCount = data.settings.fixedExpenses.filter(e => e.increaseDate && e.increaseDate > mk).length;
+
+            const prompt = `Sen bir kişisel finans analistsin. Türkçe yaz. Teşvik edici veya motive edici olmaya çalışma — sadece gerçekçi analiz yap.
 
 KURALLAR:
-- Verilen sayıları TEKRARLAMA, sadece yorum yap
+- Verilen sayıları TEKRARLAMA, yorumla
 - "Tasarruf edin" gibi boş tavsiye VERME
-- Kendi verilerinle çelişme — özellikle fon tutarlarına dikkat et
-- Olmayan veriyi UYDURMA, eksik veri varsa belirt
-- Paragraf yaz, madde madde değil
+- Olmayan veriyi UYDURMA
+- Geçmiş dönem yoksa karşılaştırma yapma, "ilk dönem" olduğunu belirt
+- MADDE MADDE yaz, paragraf değil — her başlık altında kısa maddeler
 
-DÖNEM BİLGİSİ:
-- Bugün: ${today.toLocaleDateString("tr-TR")} — ayın ${dayOfMonth}. günü
-- Ayda ${daysInMonth} gün var, ${daysLeft} gün kaldı (ay %${monthProgress} tamamlandı)
-- Bu ay döngüsü ${mk} — bütçe döngüsü ay başı/sonu
+ÖDEME DÖNEMİ:
+- Döngü: her ayın 15'inden takip eden ayın 14'üne
+- Kart ekstre kapanışı: her ayın 15'i
+- Mevcut dönem: ${mk} → ${periodStartDate.toLocaleDateString("tr-TR")} – ${periodEndDate.toLocaleDateString("tr-TR")}
+- Dönemin ${daysIntoPeriod}. günü, ${daysLeftInPeriod} gün kaldı (%${periodProgress})
 
-BÜTÇE DURUMU:
-- Aylık bütçe: ${C(c.effectiveBudget)}
-- Bankadaki tutar (Y): ${C(c.remainingY)}
-- Blokeli tutar (B): ${C(c.groupB)} (bu ödemeler kesinlikle çıkacak)
-- Kullanılabilir bütçe (X = Y-B): ${C(c.remainingX)}
-- Sabit giderler: ${C(c.fixedTotal)} (bütçenin %${Math.round(c.fixedTotal/c.effectiveBudget*100)}'i)
+BÜTÇE:
+- Bütçe: ${C(c.effectiveBudget)} | Bankada (Y): ${C(c.remainingY)} | Bloke (B): ${C(c.groupB)} | Kullanılabilir (X): ${C(c.remainingX)}
+- Sabit giderler bütçenin %${fixedRatioPct}'i | Yaklaşan artış: ${upcomingIncreaseCount} kalem
 
-HARCAMA HIZI ANALİZİ:
-- Bugüne kadar değişken harcama: ${C(categorizedTotal)} (${daysLeft === 0 ? "ay bitti" : `günlük ort. ${C(Math.round(dailySpend))}`})
-- Bu hızda ay sonu tahmini: ${C(Math.round(projectedMonthEnd))} (tahmin: ${C(variableEstimate)})
-- Beklenmedik giderler: ${C(uncategorized)} — günlük ${C(Math.round(dailyUnexpected))}, ay sonu tahmini: ${C(Math.round(projectedUnexpected))}
-- Beklenmeyen Gider Fonu: ${C(unexpectedFund)} tanımlı, %${fundUsedPct} kullanıldı, ${C(fundRemaining)} kaldı
-  → Bu hızda ay sonunda fondan tahminen ${C(Math.round(fundEndEstimate))} kalır
+HARCAMA HIZI:
+- Değişken harcama: ${C(categorizedTotal)} / ${daysIntoPeriod} gün = günlük ${C(Math.round(categorizedTotal/daysIntoPeriod))}
+- Dönem sonu tahmini: ${C(Math.round((categorizedTotal/daysIntoPeriod)*periodDays))} (bütçe: ${C(variableEstimate)})
+- Kategorisiz: ${C(uncategorized)} | Beklenmeyen Fon: %${fundUsedPct} kullanıldı, ${C(fundRemaining)} kaldı
+- Harcama yığılması: işlemlerin %${firstHalfPct}'i dönemin ilk yarısında
+${setcardTotal > 0 ? `- Setcard/Multinet bu dönem: ${C(setcardTotal)}` : ""}
 
-KATEGORİ DETAYLARI:
-${catDetails}
+KATEGORİ (bu dönem${hasPastData ? " vs geçmiş" : " — ilk dönem"}):
+${catDeltaLines}
 
-HESAPTAN ÖDEMELER (bu ay):
+HESAPTAN ÖDEMELER:
 ${accEntries || "  Kayıt yok"}
 
-KREDİ KARTI TEK ÇEKİM (bu ay):
+KREDİ KARTI TEK ÇEKİM:
 ${ccEntries || "  Kayıt yok"}
-${receiptLines.length > 0 ? "\nMARKET FİŞİ VERİSİ:" + receiptLines.join("\n") : "\nMARKET FİŞİ: Bu ay fiş yüklenmemiş"}
-${csvLines.length > 0 ? "\nBANKA EKSTRESİ:" + csvLines.join("\n") : ""}
-${historyLines ? "\nGEÇMİŞ AYLAR:\n" + historyLines : ""}
+
+AKTARILMAMIŞ KK (henüz hesaba geçmedi):
+${untransferredLines || "  Tümü aktarıldı"}
+${receiptLines.length > 0 ? "\nMARKET FİŞİ:" + receiptLines.join("\n") : "\nMARKET FİŞİ: Yok"}
+${csvLines.length > 0 ? "\nEKSTRE:" + csvLines.join("\n") : ""}
+${pastPeriods.length > 0 ? "\nGEÇMİŞ DÖNEMLER:\n" + pastPeriods.map(p => `  ${p.label}: harcama=${C(p.totalSpent)}, X=${C(p.remainingX)}`).join("\n") : "\nGEÇMİŞ: İlk dönem, veri yok"}
 
 BORÇLAR:
-${debtLines || "  Aktif borç yok"}
+${goldRiskLine ? goldRiskLine : (debtLines || "  Aktif borç yok")}
 
 BİRİKİM HEDEFLERİ:
-${goalLines || "  Henüz hedef tanımlanmamış"}
+${goalLines || "  Tanımlanmamış"}
 
-BEKLEYEN KRİTİK ÖDEMELER:
-${data.settings.fixedExpenses.filter(e => !data.months[mk]?.fixedPaid?.[e.id]).map(e => `  ${e.name}: ${C(e.amount)} — ${e.paymentDay}'inde`).join("\n") || "  Tümü ödendi"}
+BEKLEYEN ÖDEMELER:
+${data.settings.fixedExpenses.filter(e => !data.months[mk]?.fixedPaid?.[e.id]).map(e => `  ${e.name}: ${C(e.amount)} — ${e.paymentDay || "?"}. günde`).join("\n") || "  Tümü ödendi"}
 
-GÖREV: Yukarıdaki tüm veriyi analiz et ve 4-5 paragraflık kişisel finans değerlendirmesi yap:
-1. Bu ayın genel seyri — harcama hızına göre ay sonu nasıl kapanır?
-2. Fiş ve KK harcamalarından öğrenilen alışkanlık — neyi değiştirmeli?
-3. Bekleyen ödemelerin bütçeye etkisi — kritik olan var mı?
-4. Birikim hedeflerine bu ay ne kadar katkı yapılabilir, gerçekçi bir tahmin ver
-5. 1-2 somut, uygulanabilir aksiyon öner — genel değil, bu aileye özel`;
+GÖREV — aşağıdaki başlıklar altında madde madde yaz:
+
+## Dönem Seyri
+- Harcama hızı dönem sonuna kadar ne getirir? Sayısal tahmin.
+- Bütçeyi aşma riski var mı?
+
+## Kategori Analizi  
+- Hangi kategori beklenenden sapıyor?
+- ${hasPastData ? "Geçmiş dönemlerle kıyasla, trend var mı?" : "İlk dönem olduğunu belirt, karşılaştırma yok."}
+
+## Nakit Akışı
+- Aktarılmamış ödemeler hesaba geçince X ne olur?
+- Kritik sıkışma noktası var mı?
+
+## Dönem Sonu Tahmini
+- Birikim havuzuna ne kadar girecek? Alt ve üst tahmin.
+${goldRiskLine ? "- Altın borcu kur değişiminin etkisini değerlendir." : ""}
+
+## Aksiyonlar
+- Bu döneme özel 2 somut aksiyon. Rakam ver, genel tavsiye verme.`;
 
             const res = await fetch("https://api.anthropic.com/v1/messages", {
               method: "POST",
