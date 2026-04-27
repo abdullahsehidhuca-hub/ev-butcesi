@@ -3976,7 +3976,7 @@ GÖREV: Yukarıdaki tüm veriyi analiz et ve 4-5 paragraflık kişisel finans de
         // Projeksiyon
         const proj = [];
         let pm6 = mk;
-        for (let i2 = 0; i2 < 6; i2++) {
+        for (let i2 = 0; i2 < 12; i2++) {
           pm6 = nmk(pm6);
           const pmc3 = calcMonth(data, pm6, null);
           const events = [];
@@ -4054,66 +4054,12 @@ GÖREV: Yukarıdaki tüm veriyi analiz et ve 4-5 paragraflık kişisel finans de
                   <div>kişisel tavsiye üretilecek</div>
                 </div>
               )}
-              {aiLoading && <div style={{ color: X.td, fontSize: 13, textAlign: "center", padding: "16px 0" }}><div style={{ fontSize: 28, marginBottom: 6 }}>⏳</div><div>Veriler işleniyor...</div></div>}
+              {aiLoading && (<div style={{ color: X.td, fontSize: 13, textAlign: "center", padding: "16px 0" }}><div style={{ fontSize: 28, marginBottom: 6 }}>⏳</div><div>Veriler işleniyor...</div></div>)}
               {aiText && <div style={{ color: X.t, fontSize: 13, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{aiText}</div>}
             </Card>
 
             {/* BÖLÜM 3: PROJEKSİYON */}
-            <Card s={{ marginBottom: 12, background: sc.bg, border: `1px solid ${sc.border}` }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                <div>
-                  <div style={{ color: sc.color, fontSize: 18, fontWeight: 900 }}>{sc.label}</div>
-                  <div style={{ color: X.tm, fontSize: 12, marginTop: 2 }}>{sc.sub}</div>
-                </div>
-                <div style={{ textAlign: "right" }}>
-                  <div style={{ fontSize: 11, color: X.td }}>{alarmCount} alarm · {dikkatCount} dikkat · {factors.length - alarmCount - dikkatCount} iyi</div>
-                </div>
-              </div>
-              {factors.map(f => {
-                const fc = { alarm: { icon: "🔴", color: X.r }, dikkat: { icon: "🟡", color: X.w }, guvenli: { icon: "🟢", color: X.g } }[f.status];
-                return (
-                  <div key={f.id} style={{ padding: "8px 0", borderBottom: `1px solid ${X.border}` }}>
-                    <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
-                      <span style={{ fontSize: 12, flexShrink: 0, marginTop: 1 }}>{fc.icon}</span>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                          <span style={{ color: X.t, fontSize: 13, fontWeight: 600 }}>{f.label}</span>
-                        </div>
-                        <div style={{ color: X.td, fontSize: 11, marginTop: 2 }}>{f.desc}</div>
-                        {f.oneri && <div style={{ color: fc.color, fontSize: 11, marginTop: 3, fontWeight: 600 }}>→ {f.oneri}</div>}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </Card>
-
-            {/* BÖLÜM 2: AI TAVSİYE */}
-            <Card s={{ marginBottom: 12 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                <div style={{ color: X.t, fontSize: 14, fontWeight: 800 }}>🤖 AI Finans Danışmanı</div>
-                <button onClick={callAI} disabled={aiLoading} style={{ background: X.gd, border: `1px solid ${X.g}`, borderRadius: 8, padding: "6px 12px", color: X.g, fontSize: 12, fontWeight: 700, cursor: aiLoading ? "default" : "pointer", fontFamily: ff, opacity: aiLoading ? 0.6 : 1 }}>
-                  {aiLoading ? "⏳ Analiz ediliyor..." : aiText ? "🔄 Yenile" : "✨ Analiz Et"}
-                </button>
-              </div>
-              {!aiText && !aiLoading && (
-                <div style={{ color: X.td, fontSize: 13, textAlign: "center", padding: "16px 0" }}>
-                  <div style={{ fontSize: 28, marginBottom: 6 }}>🤖</div>
-                  <div>Tüm bütçe verileriniz analiz edilip</div>
-                  <div>kişisel tavsiye üretilecek</div>
-                </div>
-              )}
-              {aiLoading && (
-                <div style={{ color: X.td, fontSize: 13, textAlign: "center", padding: "16px 0" }}>
-                  <div style={{ fontSize: 28, marginBottom: 6 }}>⏳</div>
-                  <div>Veriler işleniyor...</div>
-                </div>
-              )}
-              {aiText && <div style={{ color: X.t, fontSize: 13, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{aiText}</div>}
-            </Card>
-
-            {/* BÖLÜM 3: PROJEKSİYON */}
-            <div style={{ color: X.tm, fontSize: 12, fontWeight: 700, marginBottom: 8 }}>GELECEĞİN 6 AYI</div>
+            <div style={{ color: X.tm, fontSize: 12, fontWeight: 700, marginBottom: 8 }}>GELECEĞİN 12 AYI</div>
             {proj.map((p, i) => (
               <Card key={i} s={{ marginBottom: 8, borderLeft: p.mc.remainingX < 0 ? `3px solid ${X.r}` : p.events.length > 0 ? `3px solid ${X.w}` : `3px solid ${X.g}` }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: p.events.length > 0 ? 6 : 0 }}>
