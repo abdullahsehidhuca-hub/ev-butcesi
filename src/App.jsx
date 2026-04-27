@@ -134,6 +134,7 @@ async function loadDB(familyId) {
 
 async function saveDB(d, familyId) {
   const clean = JSON.parse(JSON.stringify(d));
+  if (clean.settings) delete clean.settings.claudeApiKey;
   try { if (familyId) await set(ref(rtdb, `families/${familyId}/data`), clean); } catch (e) { console.warn("Firebase kayıt hatası:", e); }
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); } catch {}
 }
@@ -2312,7 +2313,7 @@ function ReceiptModal({ receipts, onClose, onSave, onDelete }) {
           </div>
           {/* ÖDEME YÖNTEMİ */}
           <div style={{ color: X.tm, fontSize: 10, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 8 }}>Ödeme Yöntemi</div>
-          <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+          <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
             {[{ v: "cc", l: "💳 Kredi Kartı" }, { v: "setcard", l: "🍽️ Setcard" }, { v: "multinet", l: "🏪 Multinet" }].map(opt => (
               <button key={opt.v} onClick={() => setPaymentMethod(opt.v)} style={{ padding: "7px 12px", borderRadius: 20, border: `1.5px solid ${paymentMethod === opt.v ? X.g : "rgba(0,0,0,0.1)"}`, background: paymentMethod === opt.v ? X.g : "white", color: paymentMethod === opt.v ? "white" : X.tm, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: ff, whiteSpace: "nowrap" }}>{opt.l}</button>
             ))}
@@ -2651,7 +2652,7 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
   const savingsProgress = c.effectiveBudget > 0 ? Math.min((c.remaining / c.effectiveBudget) * 100, 100) : 0;
 
   return (
-    <div style={{ flex: 1, overflow: "auto", padding: "12px 16px 16px" }}>
+    <div style={{ flex: 1, overflow: "auto", padding: "12px 16px 90px" }}>
       {msg && <div style={{ background: X.gd, border: `1px solid ${X.g}`, borderRadius: 10, padding: 10, marginBottom: 10, color: X.g, fontSize: 14, fontWeight: 600, textAlign: "center" }}>{msg}</div>}
 
       {/* ÖDEME HATIRLATICI */}
@@ -3015,7 +3016,7 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
 
             {/* SLIDE-UP PANEL */}
             {menuTab && (
-              <div style={{ position: "fixed", top: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 480, height: "100%", background: "#EBE3DB", zIndex: 80, display: "flex", flexDirection: "column" }}>
+              <div style={{ position: "fixed", top: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 480, height: "100%", background: "#EBE3DB", zIndex: 110, display: "flex", flexDirection: "column" }}>
                 {/* Üst: geri + 2x2 sekme grid */}
                 <div style={{ background: "white", padding: "12px 12px 10px", borderBottom: "1px solid rgba(0,0,0,0.07)", flexShrink: 0 }}>
                   <div onClick={() => setMenuTab(null)} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, cursor: "pointer" }}>
@@ -3514,7 +3515,7 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
   }, [risk, data, c, debtEnds, mk]);
 
   return (
-    <div style={{ padding: "20px 16px 100px" }}>
+    <div style={{ flex: 1, overflow: "auto", padding: "20px 16px 90px" }}>
       {/* AY SEÇİCİ */}
       <Card s={{ marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 16px" }}>
         <button onClick={() => setSelMk(pmk(selMk))} style={{ background: "none", border: "none", color: X.g, fontSize: 24, fontWeight: 700, cursor: "pointer", padding: "0 8px" }}>‹</button>
@@ -4018,12 +4019,10 @@ GÖREV: Yukarıdaki tüm veriyi analiz et ve 4-5 paragraflık kişisel finans de
                 return (
                   <div key={f.id} style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "7px 0", borderBottom: `1px solid ${X.border}` }}>
                     <span style={{ fontSize: 11, flexShrink: 0, marginTop: 2 }}>{icon}</span>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 6 }}>
-                        <span style={{ color: X.t, fontSize: 13, fontWeight: 700 }}>{f.label}</span>
-                        {f.oneri && <span style={{ color, fontSize: 11, fontWeight: 600, textAlign: "right", flexShrink: 0 }}>→ {f.oneri}</span>}
-                      </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ color: X.t, fontSize: 13, fontWeight: 700 }}>{f.label}</div>
                       <div style={{ color: X.td, fontSize: 11, marginTop: 1 }}>{f.desc}</div>
+                      {f.oneri && <div style={{ color, fontSize: 11, fontWeight: 600, marginTop: 3 }}>→ {f.oneri}</div>}
                     </div>
                   </div>
                 );
@@ -4634,7 +4633,21 @@ function PlanningScreen({ data, setData, mk }) {
   const [expandedAsset, setExpandedAsset] = useState(null);
   const [savingsModal, setSavingsModal] = useState(null);
   const [incSim, setIncSim] = useState({});
-  const [detail, setDetail] = useState(null); // {title, rows, total, totalLabel, totalColor, note}
+  const [detail, setDetail] = useState(null);
+
+  // Goals state — top level (hook kuralı gereği IIFE içinde olamaz)
+  const [gEditing, setGEditing] = useState(null);
+  const [gOpenAcc, setGOpenAcc] = useState("info");
+  const [gName, setGName] = useState("");
+  const [gPurpose, setGPurpose] = useState("");
+  const [gPriority, setGPriority] = useState(1);
+  const [gDeadline, setGDeadline] = useState("");
+  const [gCurrency, setGCurrency] = useState("TRY");
+  const [gAmount, setGAmount] = useState("");
+  const [gNote, setGNote] = useState("");
+  const [gTransferModal, setGTransferModal] = useState(null);
+  const [gTransferAmt, setGTransferAmt] = useState("");
+  const [gTransferFrom, setGTransferFrom] = useState("savings");
 
   // Borç form state
   const [debtEditing, setDebtEditing] = useState(null);
@@ -4881,7 +4894,7 @@ function PlanningScreen({ data, setData, mk }) {
   ];
 
   return (
-    <div style={{ padding: "20px 16px 100px" }}>
+    <div style={{ flex: 1, overflow: "auto", padding: "20px 16px 90px" }}>
       {/* SEKME SEÇİCİ */}
       <div style={{ display: "grid", gridTemplateColumns: `repeat(${views.length}, 1fr)`, gap: 6, marginBottom: 12 }}>
         {views.map(v => (
@@ -5174,20 +5187,6 @@ function PlanningScreen({ data, setData, mk }) {
         const completedGoals = data.completedGoals || [];
         const activeGoals = goals.filter(g => !g.completed);
         const canAddMore = activeGoals.length < 5;
-
-        // Goal form state
-        const [gEditing, setGEditing] = useState(null);
-        const [gOpenAcc, setGOpenAcc] = useState("info");
-        const [gName, setGName] = useState("");
-        const [gPurpose, setGPurpose] = useState("");
-        const [gPriority, setGPriority] = useState(1);
-        const [gDeadline, setGDeadline] = useState("");
-        const [gCurrency, setGCurrency] = useState("TRY");
-        const [gAmount, setGAmount] = useState("");
-        const [gNote, setGNote] = useState("");
-        const [gTransferModal, setGTransferModal] = useState(null);
-        const [gTransferAmt, setGTransferAmt] = useState("");
-        const [gTransferFrom, setGTransferFrom] = useState("savings");
 
         const gRate = gCurrency === "XAU" ? (data.liveRates?.XAU || 0) : gCurrency === "USD" ? (data.liveRates?.USD || 0) : gCurrency === "EUR" ? (data.liveRates?.EUR || 0) : 1;
         const gAmtNum = parseFloat(gAmount) || 0;
@@ -5699,13 +5698,13 @@ function Settings({ data, setData, isAdmin, family }) {
     { id: "logout", l: "Çıkış Yap", i: "🚪", d: auth.currentUser?.email || "" },
   ];
   const BackBtn = () => <button onClick={() => setSec(null)} style={{ background: "none", border: "none", color: X.g, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff, padding: 0, marginBottom: 16 }}>← Geri</button>;
-  if (!sec) return (<div style={{ padding: "20px 16px 100px" }}><h2 style={{ color: X.t, fontSize: 20, margin: "0 0 16px", fontFamily: ff }}>Ayarlar</h2><div style={{ display: "flex", flexDirection: "column", gap: 8 }}>{secs.map(s => (<Card key={s.id} onClick={() => { setSec(s.id); setForm({}); }} s={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 14 }}><span style={{ fontSize: 24 }}>{s.i}</span><div style={{ flex: 1 }}><div style={{ color: X.t, fontWeight: 700, fontSize: 15 }}>{s.l}</div><div style={{ color: X.td, fontSize: 12 }}>{s.d}</div></div><span style={{ color: X.td }}>›</span></Card>))}</div></div>);
+  if (!sec) return (<div style={{ flex: 1, overflow: "auto", padding: "20px 16px 90px" }}><h2 style={{ color: X.t, fontSize: 20, margin: "0 0 16px", fontFamily: ff }}>Ayarlar</h2><div style={{ display: "flex", flexDirection: "column", gap: 8 }}>{secs.map(s => (<Card key={s.id} onClick={() => { setSec(s.id); setForm({}); }} s={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 14 }}><span style={{ fontSize: 24 }}>{s.i}</span><div style={{ flex: 1 }}><div style={{ color: X.t, fontWeight: 700, fontSize: 15 }}>{s.l}</div><div style={{ color: X.td, fontSize: 12 }}>{s.d}</div></div><span style={{ color: X.td }}>›</span></Card>))}</div></div>);
   if (sec === "budget") {
     const curMk = cmk();
     const ayBasladi = data.months[curMk] && (Object.keys(data.months[curMk].fixedPaid || {}).length > 0 || (data.months[curMk].ccSingle || []).length > 0 || (data.months[curMk].accountEntries || []).length > 0);
     const budgetChanged = form.b !== undefined && parseFloat(form.b) !== data.settings.monthlyBudget;
     return (
-      <div style={{ padding: "20px 16px 100px" }}>
+      <div style={{ padding: "20px 16px 90px" }}>
         <BackBtn />
         <Inp label="Aylık Bütçe (₺)" type="number" value={form.b ?? data.settings.monthlyBudget} onChange={v => setForm(f => ({ ...f, b: v }))} suffix="₺" />
         {ayBasladi && budgetChanged && (
@@ -5734,7 +5733,7 @@ function Settings({ data, setData, isAdmin, family }) {
   if (sec === "calendar") {
     const hasPayDays = data.settings.fixedExpenses.some(e => e.paymentDay) || data.debts.some(d => d.paymentDay);
     return (
-      <div style={{ padding: "20px 16px 100px" }}>
+      <div style={{ padding: "20px 16px 90px" }}>
         <BackBtn />
         <h3 style={{ color: X.t, fontSize: 16, margin: "0 0 12px" }}>📅 Takvim Hatırlatıcı</h3>
         <p style={{ color: X.td, fontSize: 12, marginBottom: 16, lineHeight: 1.6 }}>
@@ -5790,7 +5789,7 @@ function Settings({ data, setData, isAdmin, family }) {
       });
     };
     return (
-      <div style={{ padding: "20px 16px 100px" }}>
+      <div style={{ padding: "20px 16px 90px" }}>
         <BackBtn />
         <h3 style={{ color: X.t, fontSize: 16, margin: "0 0 6px" }}>🗑️ Sıfırlama Seçenekleri</h3>
         <p style={{ color: X.td, fontSize: 12, marginBottom: 16 }}>Seçtiğiniz veri grubunu sıfırlayabilirsiniz. Ayar ve yapılandırma verileri korunur.</p>
@@ -5840,7 +5839,7 @@ function Settings({ data, setData, isAdmin, family }) {
     );
   }
   if (sec === "theme") return (
-    <div style={{ padding: "20px 16px 100px" }}>
+    <div style={{ padding: "20px 16px 90px" }}>
       <BackBtn />
       <h3 style={{ color: X.t, fontSize: 16, margin: "0 0 12px" }}>🎨 Tema Seçimi</h3>
       <p style={{ color: X.td, fontSize: 12, marginBottom: 16 }}>Uygulamanın görünümünü değiştirin.</p>
@@ -5866,7 +5865,7 @@ function Settings({ data, setData, isAdmin, family }) {
     </div>
   );
   if (sec === "family") return (<FamilyManagement isAdmin={isAdmin} family={family} onBack={() => setSec(null)} />);
-  if (sec === "logout") return (<div style={{ padding: "20px 16px 100px" }}><BackBtn /><Card s={{ textAlign: "center", padding: 24 }}><div style={{ fontSize: 36, marginBottom: 8 }}>🚪</div><div style={{ color: X.t, fontSize: 14, marginBottom: 8 }}>Giriş: <strong>{family?.name || auth.currentUser?.email}</strong></div><div style={{ color: X.tm, fontSize: 12, marginBottom: 16 }}>Çıkış yaptığınızda verileriniz bulutta güvende kalır. İsminiz ve şifrenizle tekrar giriş yapabilirsiniz.</div><Btn c={X.r} onClick={() => signOut(auth)}>Çıkış Yap</Btn></Card></div>);
+  if (sec === "logout") return (<div style={{ padding: "20px 16px 90px" }}><BackBtn /><Card s={{ textAlign: "center", padding: 24 }}><div style={{ fontSize: 36, marginBottom: 8 }}>🚪</div><div style={{ color: X.t, fontSize: 14, marginBottom: 8 }}>Giriş: <strong>{family?.name || auth.currentUser?.email}</strong></div><div style={{ color: X.tm, fontSize: 12, marginBottom: 16 }}>Çıkış yaptığınızda verileriniz bulutta güvende kalır. İsminiz ve şifrenizle tekrar giriş yapabilirsiniz.</div><Btn c={X.r} onClick={() => signOut(auth)}>Çıkış Yap</Btn></Card></div>);
   return null;
 }
 function BillBudgetsSettings({ data, setData, onBack }) {
@@ -5907,7 +5906,7 @@ function BillBudgetsSettings({ data, setData, onBack }) {
   const totalBudget = list.reduce((s, bt) => s + (bt.budget || 0), 0);
 
   return (
-    <div style={{ padding: "20px 16px 100px" }}>
+    <div style={{ padding: "20px 16px 90px" }}>
       <BackBtn />
       <h3 style={{ color: X.t, fontSize: 16, margin: "0 0 6px", fontFamily: ff }}>🧾 Fatura Bütçeleri</h3>
       <p style={{ color: X.td, fontSize: 12, marginBottom: 16, lineHeight: 1.5 }}>
@@ -6043,7 +6042,7 @@ function FixedSettings({ data, setData, onBack }) {
   );
 
   return (
-    <div style={{ padding: "20px 16px 100px" }}>
+    <div style={{ padding: "20px 16px 90px" }}>
       <button onClick={onBack} style={{ background: "none", border: "none", color: X.g, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff, padding: 0, marginBottom: 16 }}>← Geri</button>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
         <h3 style={{ color: X.t, fontSize: 16, margin: 0 }}>🔒 Sabit Giderler</h3>
@@ -6126,7 +6125,7 @@ function VariableSettings({ data, setData, onBack }) {
   );
 
   return (
-    <div style={{ padding: "20px 16px 100px" }}>
+    <div style={{ padding: "20px 16px 90px" }}>
       <button onClick={onBack} style={{ background: "none", border: "none", color: X.g, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff, padding: 0, marginBottom: 16 }}>← Geri</button>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
         <h3 style={{ color: X.t, fontSize: 16, margin: 0 }}>🔄 Harcama Kategorileri</h3>
@@ -6184,7 +6183,7 @@ function RatesSettings({ data, setData, onBack }) {
   };
 
   return (
-    <div style={{ padding: "20px 16px 100px" }}>
+    <div style={{ padding: "20px 16px 90px" }}>
       <button onClick={onBack} style={{ background: "none", border: "none", color: X.g, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff, padding: 0, marginBottom: 16 }}>← Geri</button>
       <h3 style={{ color: X.t, fontSize: 16, margin: "0 0 12px" }}>💱 Döviz & Altın Kuru</h3>
       <p style={{ color: X.td, fontSize: 12, marginBottom: 16 }}>Kurlar manuel girilir. Altın için haremaltin.com sayfasını yeni sekmede açabilirsiniz.</p>
@@ -6267,7 +6266,7 @@ function CardsSettings({ data, setData, onBack }) {
   );
 
   return (
-    <div style={{ padding: "20px 16px 100px" }}>
+    <div style={{ padding: "20px 16px 90px" }}>
       <button onClick={onBack} style={{ background: "none", border: "none", color: X.g, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff, padding: 0, marginBottom: 16 }}>← Geri</button>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
         <h3 style={{ color: X.t, fontSize: 16, margin: 0 }}>💳 Kartlarım</h3>
@@ -6492,7 +6491,7 @@ function DebtSettings({ data, setData, onBack }) {
   ) : null;
 
   return (
-    <div style={{ padding: "20px 16px 100px" }}>
+    <div style={{ padding: "20px 16px 90px" }}>
       <button onClick={onBack} style={{ background: "none", border: "none", color: X.g, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff, padding: 0, marginBottom: 16 }}>← Geri</button>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
         <h3 style={{ color: X.t, fontSize: 16, margin: 0 }}>📌 Borçlar</h3>
