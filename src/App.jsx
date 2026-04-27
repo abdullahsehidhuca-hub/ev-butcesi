@@ -2737,9 +2737,10 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
           border: `1px solid ${menuTab === id ? "rgba(15,118,110,0.3)" : "rgba(0,0,0,0.07)"}`,
           overflow: "hidden",
           cursor: "pointer",
+          minHeight: 58,
         });
         const menuHeadStyle = {
-          padding: "10px 12px",
+          padding: "14px 12px",
           display: "flex",
           alignItems: "center",
           gap: 8,
@@ -2778,10 +2779,10 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
               {menus.map(m => (
                 <div key={m.id} style={menuBoxStyle(m.id)} onClick={() => setMenuTab(menuTab === m.id ? null : m.id)}>
                   <div style={menuHeadStyle}>
-                    <span style={{ fontSize: 16, flexShrink: 0 }}>{m.icon}</span>
+                    <span style={{ fontSize: 20, flexShrink: 0 }}>{m.icon}</span>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: "#141008", lineHeight: 1.3 }}>{m.title}</div>
-                      <div style={{ fontSize: 9, color: "#5A5045", marginTop: 2 }}>{m.sub}</div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: "#141008", lineHeight: 1.3 }}>{m.title}</div>
+                      <div style={{ fontSize: 10, color: "#5A5045", marginTop: 3 }}>{m.sub}</div>
                     </div>
                     <span style={{ color: menuTab === m.id ? X.g : X.td, fontSize: 9, flexShrink: 0 }}>{menuTab === m.id ? "▲" : "▼"}</span>
                   </div>
