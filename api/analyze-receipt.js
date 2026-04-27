@@ -1,18 +1,15 @@
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
-
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    return res.status(500).json({ error: "API anahtarı yapılandırılmamış" });
+    return res.status(500).json({ error: "API anahtari yapilandirilmamis" });
   }
-
   const { base64, mediaType } = req.body;
   if (!base64 || !mediaType) {
-    return res.status(400).json({ error: "Görsel verisi eksik" });
+    return res.status(400).json({ error: "Gorsel verisi eksik" });
   }
-
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -27,26 +24,18 @@ export default async function handler(req, res) {
         messages: [{
           role: "user",
           content: [
-            {
-              type: "image",
-              source: { type: "base64", media_type: mediaType, data: base64 }
-            },
-            {
-              type: "text",
-              text: `Bu bir market/mağaza fişi. Fişi analiz et ve SADECE aşağıdaki JSON formatında yanıt ver, başka hiçbir şey yazma:\n{"store":"mağaza adı","totalAmount":toplam_tutar_sayı,"items":[{"name":"ürün adı","qty":adet_sayı,"price":birim_fiyat_sayı,"brand":"marka veya boş string","category":"kategori"}]}\ncategory değerleri SADECE şunlardan biri olmalı: süt ürünleri, et/tavuk, meyve/sebze, temel gıda, atıştırmalık, içecek, temizlik, kişisel bakım, bebek/çocuk, diğer.\nFiyatlar Türk Lirası cinsindendir. Eğer fiş okunamıyorsa {"error":"Fiş okunamadı"} döndür.`
-            }
+            { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
+            { type: "text", text: "Bu bir market/magaza fisi. Fisi analiz et ve SADECE asagidaki JSON formatinda yanit ver, baska hicbir sey yazma:\n{\"store\":\"magaza adi\",\"totalAmount\":toplam_tutar_sayi,\"items\":[{\"name\":\"urun adi\",\"qty\":adet_sayi,\"price\":birim_fiyat_sayi,\"brand\":\"marka veya bos string\",\"category\":\"kategori\"}]}\ncategory degerleri SADECE sunlardan biri olmali: sut urunleri, et/tavuk, meyve/sebze, temel gida, atistirmalik, icecek, temizlik, kisisel bakim, bebek/cocuk, diger.\nFiyatlar Turk Lirasi cinsindendir. Eger fis okunamiyor sa {\"error\":\"Fis okunamadi\"} dondur." }
           ]
         }]
       })
     });
-
     const data = await response.json();
     const text = (data.content || []).map(c => c.text || "").join("");
     const clean = text.replace(/```json|```/g, "").trim();
     const parsed = JSON.parse(clean);
     return res.status(200).json(parsed);
   } catch (err) {
-    console.error("Fiş analizi hatası:", err);
-    return res.status(500).json({ error: "Fiş analiz edilemedi" });
+    return res.status(500).json({ error: "Fis analiz edilemedi" });
   }
-}
+};
