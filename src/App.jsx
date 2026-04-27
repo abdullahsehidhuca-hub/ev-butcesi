@@ -2164,12 +2164,27 @@ function ReceiptModal({ receipts, onClose, onSave, onDelete }) {
     try {
       const base64 = imgSrc.split(",")[1];
       const mediaType = imgSrc.split(";")[0].split(":")[1] || "image/jpeg";
-      const resp = await fetch("/api/analyze-receipt", {
+      const resp = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ base64, mediaType }),
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": import.meta.env.VITE_ANTHROPIC_API_KEY,
+          "anthropic-version": "2023-06-01",
+          "anthropic-dangerous-direct-browser-access": "true"
+        },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 2000,
+          messages: [{ role: "user", content: [
+            { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
+            { type: "text", text: "Bu bir market/mağaza fişi. Fişi analiz et ve SADECE aşağıdaki JSON formatında yanıt ver, başka hiçbir şey yazma:\n{\"store\":\"mağaza adı\",\"totalAmount\":toplam_tutar_sayı,\"items\":[{\"name\":\"ürün adı\",\"qty\":adet_sayı,\"price\":birim_fiyat_sayı,\"brand\":\"marka veya boş string\",\"category\":\"kategori\"}]}\ncategory değerleri SADECE şunlardan biri olmalı: süt ürünleri, et/tavuk, meyve/sebze, temel gıda, atıştırmalık, içecek, temizlik, kişisel bakım, bebek/çocuk, diğer.\nFiyatlar Türk Lirası cinsindendir. Eğer fiş okunamıyorsa {\"error\":\"Fiş okunamadı\"} döndür." }
+          ]}]
+        })
       });
-      const parsed = await resp.json();
+      const rawData = await resp.json();
+      const rawText = (rawData.content || []).map(c => c.text || "").join("");
+      const cleanText = rawText.replace(/```json|```/g, "").trim();
+      const parsed = JSON.parse(cleanText);
       if (parsed.error) { setError(parsed.error); setStep("capture"); }
       else { setResult(parsed); setStep("result"); }
     } catch (err) {
@@ -3607,37 +3622,106 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
           um = nmk(um);
         }
 
-        // F1: X durumu
-        const xRatio = c.effectiveBudget > 0 ? c.remainingX / c.effectiveBudget : 0;
-        const f1Status = c.remainingX < 0 ? "alarm" : xRatio < 0.05 ? "alarm" : xRatio < 0.15 ? "dikkat" : "guvenli";
+        // F1: X durumu — bütçenin yüzde kaçı kaldı
+        const xRatioOfBudget = c.effectiveBudget > 0 ? c.remainingX / c.effectiveBudget : 0;
+        const f1Status = c.remainingX < 0 ? "alarm" : xRatioOfBudget < 0.05 ? "alarm" : xRatioOfBudget < 0.15 ? "dikkat" : "guvenli";
+        const f1Desc = c.remainingX < 0
+          ? `X = ${C(c.remainingX)} — bütçe açık veriyor. Bekleyen ödemeler bankadaki parayı aşıyor.`
+          : xRatioOfBudget < 0.05
+          ? `X = ${C(c.remainingX)} — bütçenin yalnızca %${Math.round(xRatioOfBudget*100)}'i kaldı. Kritik düşük.`
+          : xRatioOfBudget < 0.15
+          ? `X = ${C(c.remainingX)} — bütçenin %${Math.round(xRatioOfBudget*100)}'i kaldı. Manevra alanı dar.`
+          : `X = ${C(c.remainingX)} — bütçenin %${Math.round(xRatioOfBudget*100)}'i kaldı. Sağlıklı seviye.`;
+        const f1Oneri = c.remainingX < 0
+          ? "Acil: hangi bekleyen ödemeleri erteleyebileceğinizi değerlendirin. Yeni harcama kesinlikle yapmayın."
+          : xRatioOfBudget < 0.15
+          ? `Genel kart yüklemesini ${C(Math.min(c.cardLoadRemaining, c.remainingX * 0.5))} ile sınırlı tutun.`
+          : null;
 
         // F2: X < değişken kalan tahmin
-        const f2Status = c.remainingX < variableBlokeKalan ? "alarm" : c.remainingX < variableBlokeKalan * 1.5 ? "dikkat" : "guvenli";
+        const f2Status = c.remainingX < variableBlokeKalan ? "alarm" : c.remainingX < variableBlokeKalan * 1.3 ? "dikkat" : "guvenli";
+        const f2Desc = f2Status === "alarm"
+          ? `Kalan X (${C(c.remainingX)}) bu ayın kalan değişken gider tahminini (${C(variableBlokeKalan)}) karşılamıyor. Fark: ${C(variableBlokeKalan - c.remainingX)}.`
+          : f2Status === "dikkat"
+          ? `X (${C(c.remainingX)}) değişken tahmine (${C(variableBlokeKalan)}) yakın. Tampon çok ince.`
+          : `X (${C(c.remainingX)}), kalan değişken tahminin (${C(variableBlokeKalan)}) ${Math.round((c.remainingX/Math.max(variableBlokeKalan,1)-1)*100)}% üzerinde. Yeterli tampon var.`;
+        const f2Oneri = f2Status === "alarm"
+          ? `Değişken giderlerde ${C(variableBlokeKalan - c.remainingX)} tasarruf yapılmalı. Market ve akaryakıt harcamalarını ertelenebilecek kadar kısın.`
+          : f2Status === "dikkat" ? "Bu ay büyük beklenmedik harcama yapmaktan kaçının." : null;
 
-        // F3: 12 ay sürdürülebilirlik
+        // F3: 12 ay sürdürülebilirlik — daha anlamlı bağlam
         const f3Status = mudm <= 2 ? "alarm" : mudm <= 5 ? "dikkat" : "guvenli";
+        const f3Desc = mudm > 12
+          ? "Mevcut gelir-gider dengesinde önümüzdeki 12 ayda bütçe aşımı öngörülmüyor."
+          : mudm <= 2
+          ? `Kritik: ${mudm} ay içinde bütçe açığa düşebilir. Yaklaşan ${incCount > 0 ? "gider artışları ve " : ""}yüksek sabit giderler baskı yaratıyor.`
+          : `${mudm}. ayda bütçe baskıya girebilir. ${incCount > 0 ? `${incCount} kalemde artış bekleniyor.` : "Sabit gider yükü yüksek."}`;
+        const f3Oneri = f3Status !== "guvenli"
+          ? `Taksit simülatöründe ${mudm}. ayı kontrol edin. Yeni taksitli alım yapmayı erteleyin.` : null;
 
-        // F4: Kategori aşımları
-        const f4Status = overCategories.length >= 3 ? "alarm" : overCategories.length >= 1 ? "dikkat" : "guvenli";
+        // F4: Kategori aşımları — hangi kategori ne kadar aştı
+        const f4Status = overBudgetTotal > variableEstimate * 0.3 ? "alarm" : overCategories.length >= 2 ? "dikkat" : overCategories.length >= 1 ? "dikkat" : "guvenli";
+        const f4Desc = overCategories.length === 0
+          ? "Tüm kategoriler bütçe içinde. İyi iş!"
+          : overCategories.map(ve => {
+              const sp = cats[ve.id] || 0;
+              const ov = sp - ve.expectedAmount;
+              return `${ve.name}: ${C(sp)} / ${C(ve.expectedAmount)} (${C(ov)} aşım, %${Math.round((ov/ve.expectedAmount)*100)})`;
+            }).join(" • ");
+        const f4Oneri = overCategories.length > 0
+          ? overBudgetTotal > variableEstimate * 0.3
+            ? `Toplam ${C(overBudgetTotal)} aşım var — bu bütçenin ciddi bir kısmı. Aşan kategorilerin gerçek ortalamasına göre tahmini güncelleyin.`
+            : `${overCategories[0].name} tahminini gerçek harcamaya göre revize etmeyi düşünün.`
+          : null;
 
-        // F5: Beklenmeyen fon kullanımı
-        const f5Status = fundUsedPct >= 90 ? "alarm" : fundUsedPct >= 60 ? "dikkat" : "guvenli";
+        // F5: Beklenmeyen fon — kalan para ayın kaçında
+        const ayinKaciGecti = (() => { const now = new Date(); return now.getDate(); })();
+        const gunKaldi = 30 - ayinKaciGecti;
+        const fonGunlukYanik = ayinKaciGecti > 0 ? fundUsed / ayinKaciGecti : 0;
+        const tahminiAySonuFon = Math.max(0, fundRemaining - fonGunlukYanik * gunKaldi);
+        const f5Status = unexpectedFund === 0 ? "dikkat" : fundUsedPct >= 90 ? "alarm" : fundUsedPct >= 60 ? "dikkat" : "guvenli";
+        const f5Desc = unexpectedFund === 0
+          ? "Beklenmeyen Gider Fonu tanımlanmamış. Kategorisiz harcamalar kontrolsüz."
+          : fundUsedPct >= 90
+          ? `Fon neredeyse tükendi (%${fundUsedPct}). Sadece ${C(fundRemaining)} kaldı, ay sonu tahmini: ${C(tahminiAySonuFon)}.`
+          : `%${fundUsedPct} kullanıldı. ${C(fundRemaining)} kaldı. Günlük yakma: ${C(Math.round(fonGunlukYanik))}.`;
+        const f5Oneri = unexpectedFund === 0
+          ? "Ayarlar'dan Beklenmeyen Gider Fonu tanımlayın. Önerilen: aylık değişken tahminin %25-30'u."
+          : f5Status === "alarm"
+          ? "Ay sonuna kadar yalnızca zorunlu kategorisiz harcama yapın."
+          : f5Status === "dikkat"
+          ? `Mevcut tempoda ay sonunda fon tükenebilir. ${C(Math.round(fonGunlukYanik * 5))} haftalık limite çekin.`
+          : null;
 
-        // F6: Yaklaşan artışlar
-        const f6Status = incCount >= 3 ? "dikkat" : incCount >= 1 ? "dikkat" : "guvenli";
+        // F6: Yaklaşan artışlar — aylara göre detay
+        const f6Status = incTotal > c.effectiveBudget * 0.05 ? "alarm" : incCount >= 1 ? "dikkat" : "guvenli";
+        const f6Desc = incCount === 0
+          ? "Önümüzdeki 6 ayda tanımlı gider artışı yok."
+          : `${incCount} kalemde artış bekleniyor — aylık ek yük tahmini: ${C(incTotal)}. Bu bütçenin %${Math.round((incTotal/c.effectiveBudget)*100)}'i.`;
+        const f6Oneri = incCount > 0
+          ? incTotal > c.effectiveBudget * 0.05
+            ? `Artışlar bütçenin %${Math.round((incTotal/c.effectiveBudget)*100)}'ini oluşturuyor. Şimdiden tasarruf planı yapın veya bütçeyi gözden geçirin.`
+            : "Gelecek aylarda bütçe revizyonu yapın."
+          : null;
 
         // F7: B grubunun Y'ye oranı
         const bRatio = c.remainingY > 0 ? c.groupB / c.remainingY : 0;
         const f7Status = bRatio > 0.85 ? "alarm" : bRatio > 0.65 ? "dikkat" : "guvenli";
+        const f7Desc = `Bekleyen ödemeler (${C(c.groupB)}) bankadaki paranın %${Math.round(bRatio*100)}'ini oluşturuyor.${bRatio > 0.85 ? " Bankadaki paranın büyük çoğunluğu zaten bağlı." : ""}`;
+        const f7Oneri = bRatio > 0.85
+          ? "Likidite riski yüksek. Ödemeler tamamlandığında rahatlar, ama bu süreçte yeni harcama yapmayın."
+          : bRatio > 0.65
+          ? "Bekleyen ödemelerin çoğu tamamlanınca X düzelecek. Sabırlı olun."
+          : null;
 
         const factors = [
-          { id: "f1", label: "Bloke Sonrası Kalan (X)", status: f1Status, desc: f1Status === "alarm" ? `X = ${C(c.remainingX)} — negatif veya kritik düşük` : f1Status === "dikkat" ? `X = ${C(c.remainingX)} — bütçenin %${Math.round(xRatio*100)}'i` : `X = ${C(c.remainingX)} — bütçenin %${Math.round(xRatio*100)}'i`, oneri: f1Status === "alarm" ? "Bekleyen ödemeleri gözden geçirin, harcamaları kısın" : f1Status === "dikkat" ? "Yeni harcama yapmadan önce bloke ödemeleri kontrol edin" : null },
-          { id: "f2", label: "Değişken Gider Karşılama", status: f2Status, desc: f2Status === "alarm" ? `X (${C(c.remainingX)}) değişken kalan tahminin (${C(variableBlokeKalan)}) altında` : `Değişken gider tahmini karşılanabilir`, oneri: f2Status === "alarm" ? "Bu ay yeni değişken harcama yapmayın, zorunluları önceliklendirin" : null },
-          { id: "f3", label: "12 Aylık Sürdürülebilirlik", status: f3Status, desc: mudm > 12 ? "Önümüzdeki 12 ayda bütçe aşımı öngörülmüyor" : `${mudm} ay sonra bütçe aşımı oluşabilir`, oneri: f3Status !== "guvenli" ? "Taksit simülatöründe gelecek ayları kontrol edin" : null },
-          { id: "f4", label: "Kategori Bütçe Aşımları", status: f4Status, desc: overCategories.length === 0 ? "Hiçbir kategori tahminini aşmadı" : `${overCategories.map(ve => ve.name).join(", ")} — ${C(overBudgetTotal)} aşım`, oneri: overCategories.length > 0 ? "Aşan kategorilerin tahminini güncellemeyi düşünün" : null },
-          { id: "f5", label: "Beklenmeyen Gider Fonu", status: f5Status, desc: unexpectedFund === 0 ? "Fon tanımlanmamış" : `%${fundUsedPct} kullanıldı — ${C(fundRemaining)} kaldı`, oneri: f5Status === "alarm" ? "Fon dolmak üzere — kategorisiz harcamaları minimumda tutun" : f5Status === "dikkat" ? "Fon hızlı tükeniyor — beklenmedik harcamalar için dikkatli olun" : null },
-          { id: "f6", label: "Yaklaşan Gider Artışları", status: f6Status, desc: incCount === 0 ? "Önümüzdeki 6 ayda bilinen artış yok" : `${incCount} kalem artış — tahmini ek yük ${C(incTotal)}/ay`, oneri: incCount > 0 ? "Taksit simülatöründe artış senaryolarını test edin" : null },
-          { id: "f7", label: "Bekleyen Ödemelerin Ağırlığı", status: f7Status, desc: `B grubu, bankadaki paranın %${Math.round(bRatio*100)}'i — ${C(c.groupB)} bekliyor`, oneri: f7Status !== "guvenli" ? "Aktarım tarihleri yaklaşan ödemeleri önceliklendirin" : null },
+          { id: "f1", label: "Bloke Sonrası Kalan (X)", status: f1Status, desc: f1Desc, oneri: f1Oneri },
+          { id: "f2", label: "Değişken Gider Karşılama", status: f2Status, desc: f2Desc, oneri: f2Oneri },
+          { id: "f3", label: "12 Aylık Sürdürülebilirlik", status: f3Status, desc: f3Desc, oneri: f3Oneri },
+          { id: "f4", label: "Kategori Bütçe Aşımları", status: f4Status, desc: f4Desc, oneri: f4Oneri },
+          { id: "f5", label: "Beklenmeyen Gider Fonu", status: f5Status, desc: f5Desc, oneri: f5Oneri },
+          { id: "f6", label: "Yaklaşan Gider Artışları", status: f6Status, desc: f6Desc, oneri: f6Oneri },
+          { id: "f7", label: "Bekleyen Ödemelerin Ağırlığı", status: f7Status, desc: f7Desc, oneri: f7Oneri },
         ];
 
         const alarmCount = factors.filter(f => f.status === "alarm").length;
@@ -3690,7 +3774,12 @@ Sayıları tekrarlama, yorum yap. Madde madde değil paragraf yaz.`;
 
             const res = await fetch("https://api.anthropic.com/v1/messages", {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers: {
+                "Content-Type": "application/json",
+                "x-api-key": import.meta.env.VITE_ANTHROPIC_API_KEY,
+                "anthropic-version": "2023-06-01",
+                "anthropic-dangerous-direct-browser-access": "true"
+              },
               body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 2000, messages: [{ role: "user", content: prompt }] })
             });
             const d = await res.json();
