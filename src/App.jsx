@@ -975,7 +975,7 @@ function RiskBar({ score, onInfo, warnings }) {
 
 /* ═══ TABS ═══ */
 const TABS = [{ id: "home", label: "Güncel Durum", icon: "◉" }, { id: "report", label: "Analiz", icon: "▤" }, { id: "plan", label: "Planlama", icon: "◈" }, { id: "settings", label: "Ayarlar", icon: "⚙" }];
-function TabBar({ tab, setTab }) { return (<div style={{ flexShrink: 0, ...glassSolid, borderRadius: "16px 16px 0 0", display: "flex", justifyContent: "space-around", alignItems: "center", padding: "6px 0 env(safe-area-inset-bottom, 8px)", zIndex: 100, boxShadow: "0 -4px 16px rgba(0,0,0,0.06)" }}>{TABS.map((t, i) => (<React.Fragment key={t.id}>{i > 0 && <div style={{ width: 1, height: 22, background: "rgba(0,0,0,0.1)" }} />}<button onClick={() => setTab(t.id)} style={{ background: "none", border: "none", display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "6px 10px", cursor: "pointer", color: tab === t.id ? X.g : X.td, fontFamily: ff }}><span style={{ fontSize: 18, lineHeight: 1 }}>{t.icon}</span><span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "-0.2px" }}>{t.label}</span></button></React.Fragment>))}</div>); }
+function TabBar({ tab, setTab }) { return (<div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 480, ...glassSolid, borderRadius: "16px 16px 0 0", display: "flex", justifyContent: "space-around", alignItems: "center", padding: "6px 0 env(safe-area-inset-bottom, 8px)", zIndex: 120, boxShadow: "0 -4px 16px rgba(0,0,0,0.06)" }}>{TABS.map((t, i) => (<React.Fragment key={t.id}>{i > 0 && <div style={{ width: 1, height: 22, background: "rgba(0,0,0,0.1)" }} />}<button onClick={() => setTab(t.id)} style={{ background: "none", border: "none", display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "6px 10px", cursor: "pointer", color: tab === t.id ? X.g : X.td, fontFamily: ff }}><span style={{ fontSize: 18, lineHeight: 1 }}>{t.icon}</span><span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "-0.2px" }}>{t.label}</span></button></React.Fragment>))}</div>); }
 
 /* ═══ MODALS ═══ */
 function CCSingleModal({ cards, variableExpenses, onClose, onSave }) {
@@ -6909,7 +6909,7 @@ export default function App() {
   };
 
   return (
-    <div style={{ background: _theme.gradient, height: "100vh", display: "flex", flexDirection: "column", color: X.t, fontFamily: ff, maxWidth: 480, margin: "0 auto", position: "relative", overflow: "hidden" }}>
+    <div style={{ background: _theme.gradient, height: "100dvh", display: "flex", flexDirection: "column", color: X.t, fontFamily: ff, maxWidth: 480, margin: "0 auto", position: "relative", overflow: "hidden" }}>
       <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
       {/* Renk lekeleri */}
       <div style={{ position: "fixed", top: 60, left: -50, width: 200, height: 200, borderRadius: "50%", background: "rgba(22,163,74,0.07)", filter: "blur(60px)", pointerEvents: "none" }} />
