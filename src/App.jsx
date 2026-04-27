@@ -6518,10 +6518,10 @@ export default function App() {
           <div onClick={() => setTab("report")} style={{ position: "relative", width: 44, height: 44, cursor: "pointer", flexShrink: 0 }}>
             <svg width="44" height="44" viewBox="0 0 44 44" style={{ transform: "rotate(-90deg)" }}>
               <circle cx="22" cy="22" r="18" fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="3.5" />
-              <circle cx="22" cy="22" r="18" fill="none" stroke="#6EE7B7" strokeWidth="3.5" strokeDasharray="113.1" strokeDashoffset={113.1 * (1 - (risk?.score || 0) / 100)} strokeLinecap="round" />
+              <circle cx="22" cy="22" r="18" fill="none" stroke="#6EE7B7" strokeWidth="3.5" strokeDasharray="113.1" strokeDashoffset={113.1 * (1 - headerRisk.score / 100)} strokeLinecap="round" />
             </svg>
             <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", textAlign: "center" }}>
-              <div style={{ fontSize: 12, fontWeight: 900, color: "white", lineHeight: 1 }}>{risk?.score || 0}</div>
+              <div style={{ fontSize: 12, fontWeight: 900, color: "white", lineHeight: 1 }}>{headerRisk.score}</div>
               <div style={{ fontSize: 6, color: "rgba(255,255,255,0.55)", fontWeight: 600, letterSpacing: 0.5 }}>RİSK</div>
             </div>
           </div>
