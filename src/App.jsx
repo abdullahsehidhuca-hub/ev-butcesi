@@ -1198,7 +1198,7 @@ function BackupSettings({ data, setData, onBack }) {
   const [msg, setMsg] = useState(null);
   const [importData, setImportData] = useState("");
 
-  const exportData = () => {
+  const exportData = (markBackup = false) => {
     try {
       const json = JSON.stringify(data, null, 2);
       const blob = new Blob([json], { type: "application/json" });
@@ -1211,6 +1211,9 @@ function BackupSettings({ data, setData, onBack }) {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
+      if (markBackup) {
+        setData(d => ({ ...d, lastBackup: new Date().toISOString().slice(0, 10) }));
+      }
       setMsg({ type: "success", text: "✓ Yedek dosyası indirildi" });
       setTimeout(() => setMsg(null), 3000);
     } catch (err) {
@@ -1278,6 +1281,14 @@ function BackupSettings({ data, setData, onBack }) {
         </Card>
       )}
 
+      <Card s={{ marginBottom: 12, background: X.gd, border: `1px solid ${X.g}` }}>
+        <div style={{ color: X.g, fontSize: 13, fontWeight: 800, marginBottom: 4 }}>💾 Anlık Yedek Al</div>
+        <div style={{ color: X.tm, fontSize: 11, marginBottom: 10, lineHeight: 1.5 }}>
+          Son yedek: {data.lastBackup || "Henüz alınmadı"}
+        </div>
+        <Btn onClick={() => exportData(true)} c={X.g}>📥 Şimdi Yedek Al</Btn>
+      </Card>
+
       <Card s={{ marginBottom: 12 }}>
         <div style={{ color: X.tm, fontSize: 12, fontWeight: 700, marginBottom: 4 }}>MEVCUT VERİ</div>
         <div style={{ color: X.t, fontSize: 14, fontFamily: fm }}>{sizeKB} KB</div>
@@ -1288,7 +1299,7 @@ function BackupSettings({ data, setData, onBack }) {
 
       <Card s={{ marginBottom: 12 }}>
         <div style={{ color: X.tm, fontSize: 12, fontWeight: 700, marginBottom: 10 }}>DIŞA AKTAR</div>
-        <Btn onClick={exportData} s={{ marginBottom: 8 }}>📥 JSON Dosyası Olarak İndir</Btn>
+        <Btn onClick={() => exportData(true)} s={{ marginBottom: 8 }}>📥 JSON Dosyası Olarak İndir</Btn>
         <Btn onClick={copyToClipboard} v="outline" c={X.b}>📋 Panoya Kopyala</Btn>
       </Card>
 
