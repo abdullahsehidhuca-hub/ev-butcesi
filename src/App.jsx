@@ -4004,7 +4004,25 @@ GÖREV: Yukarıdaki tüm veriyi analiz et ve 4-5 paragraflık kişisel finans de
 
         return (
           <>
-            {/* BÖLÜM 1: DURUM ÖZETİ */}
+            {/* AI TAVSİYE — üstte */}
+            <Card s={{ marginBottom: 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                <div style={{ color: X.t, fontSize: 14, fontWeight: 800 }}>🤖 AI Finans Danışmanı</div>
+                <button onClick={callAI} disabled={aiLoading} style={{ background: X.gd, border: `1px solid ${X.g}`, borderRadius: 8, padding: "6px 12px", color: X.g, fontSize: 12, fontWeight: 700, cursor: aiLoading ? "default" : "pointer", fontFamily: ff, opacity: aiLoading ? 0.6 : 1 }}>
+                  {aiLoading ? "⏳ Analiz ediliyor..." : aiText ? "🔄 Yenile" : "✨ Analiz Et"}
+                </button>
+              </div>
+              {!aiText && !aiLoading && (
+                <div style={{ color: X.td, fontSize: 13, textAlign: "center", padding: "16px 0" }}>
+                  <div style={{ fontSize: 28, marginBottom: 6 }}>🤖</div>
+                  <div>Tüm bütçe verileriniz analiz edilip kişisel tavsiye üretilecek</div>
+                </div>
+              )}
+              {aiLoading && <div style={{ color: X.td, fontSize: 13, textAlign: "center", padding: "16px 0" }}><div style={{ fontSize: 28, marginBottom: 6 }}>⏳</div><div>Veriler işleniyor...</div></div>}
+              {aiText && <div style={{ color: X.t, fontSize: 13, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{aiText}</div>}
+            </Card>
+
+            {/* DURUM ÖZETİ */}
             <Card s={{ marginBottom: 12, background: sc.bg, border: `1px solid ${sc.border}` }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
                 <div>
@@ -4028,44 +4046,6 @@ GÖREV: Yukarıdaki tüm veriyi analiz et ve 4-5 paragraflık kişisel finans de
                 );
               })}
             </Card>
-
-            {/* BÖLÜM 2: AI TAVSİYE */}
-            <Card s={{ marginBottom: 12 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                <div style={{ color: X.t, fontSize: 14, fontWeight: 800 }}>🤖 AI Finans Danışmanı</div>
-                <button onClick={callAI} disabled={aiLoading} style={{ background: X.gd, border: `1px solid ${X.g}`, borderRadius: 8, padding: "6px 12px", color: X.g, fontSize: 12, fontWeight: 700, cursor: aiLoading ? "default" : "pointer", fontFamily: ff, opacity: aiLoading ? 0.6 : 1 }}>
-                  {aiLoading ? "⏳ Analiz ediliyor..." : aiText ? "🔄 Yenile" : "✨ Analiz Et"}
-                </button>
-              </div>
-              {!aiText && !aiLoading && (
-                <div style={{ color: X.td, fontSize: 13, textAlign: "center", padding: "16px 0" }}>
-                  <div style={{ fontSize: 28, marginBottom: 6 }}>🤖</div>
-                  <div>Tüm bütçe verileriniz analiz edilip kişisel tavsiye üretilecek</div>
-                </div>
-              )}
-              {aiLoading && <div style={{ color: X.td, fontSize: 13, textAlign: "center", padding: "16px 0" }}><div style={{ fontSize: 28, marginBottom: 6 }}>⏳</div><div>Veriler işleniyor...</div></div>}
-              {aiText && <div style={{ color: X.t, fontSize: 13, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{aiText}</div>}
-            </Card>
-
-            {/* BÖLÜM 3: PROJEKSİYON */}
-            <div style={{ color: X.tm, fontSize: 12, fontWeight: 700, marginBottom: 8 }}>GELECEĞİN 12 AYI</div>
-            {proj.map((p, i) => (
-              <Card key={i} s={{ marginBottom: 8, borderLeft: p.mc.remainingX < 0 ? `3px solid ${X.r}` : p.events.length > 0 ? `3px solid ${X.w}` : `3px solid ${X.g}` }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: p.events.length > 0 ? 6 : 0 }}>
-                  <span style={{ color: X.t, fontSize: 13, fontWeight: 700 }}>{ml(p.mk)}</span>
-                  <div style={{ textAlign: "right" }}>
-                    <div style={{ color: p.mc.remainingX < 0 ? X.r : X.g, fontSize: 13, fontWeight: 800, fontFamily: fm }}>{C(p.mc.remainingX)}</div>
-                    <div style={{ color: X.td, fontSize: 10 }}>bloke sonrası kalan</div>
-                  </div>
-                </div>
-                {p.events.map((ev, j) => (
-                  <div key={j} style={{ display: "flex", alignItems: "center", gap: 6, padding: "3px 0" }}>
-                    <span style={{ fontSize: 12 }}>{ev.icon}</span>
-                    <span style={{ color: ev.color, fontSize: 11, fontWeight: 600 }}>{ev.text}</span>
-                  </div>
-                ))}
-              </Card>
-            ))}
           </>
         );
       })()}
