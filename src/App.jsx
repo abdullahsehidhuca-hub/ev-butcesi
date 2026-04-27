@@ -3992,48 +3992,28 @@ GÖREV: Yukarıdaki tüm veriyi analiz et ve 4-5 paragraflık kişisel finans de
 
         return (
           <>
-            {/* BÖLÜM 1: GENEL DURUM */}
+            {/* BÖLÜM 1: DURUM ÖZETİ */}
             <Card s={{ marginBottom: 12, background: sc.bg, border: `1px solid ${sc.border}` }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
                 <div>
                   <div style={{ color: sc.color, fontSize: 20, fontWeight: 900 }}>{sc.label}</div>
                   <div style={{ color: X.tm, fontSize: 12, marginTop: 2 }}>{sc.sub}</div>
                 </div>
-                <div style={{ textAlign: "right" }}>
-                  <div style={{ fontSize: 11, color: X.td }}>{alarmCount} alarm · {dikkatCount} dikkat · {factors.length - alarmCount - dikkatCount} iyi</div>
-                </div>
+                <div style={{ fontSize: 11, color: X.td }}>{alarmCount} alarm · {dikkatCount} dikkat · {factors.length - alarmCount - dikkatCount} iyi</div>
               </div>
-
-              {/* Yeşil faktörler — kompakt */}
-              {factors.filter(f => f.status === "guvenli").length > 0 && (
-                <div style={{ background: "rgba(15,118,110,0.06)", borderRadius: 10, padding: "8px 12px", marginBottom: 10 }}>
-                  <div style={{ color: X.g, fontSize: 11, fontWeight: 700, marginBottom: 6 }}>✅ İYİ DURUMDA</div>
-                  {factors.filter(f => f.status === "guvenli").map(f => (
-                    <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "3px 0" }}>
-                      <span style={{ fontSize: 10, flexShrink: 0 }}>🟢</span>
-                      <span style={{ color: X.t, fontSize: 13, fontWeight: 600 }}>{f.label}</span>
-                      <span style={{ color: X.td, fontSize: 11, flex: 1, textAlign: "right" }}>{f.desc.split("—")[1]?.trim() || f.desc.split(".")[0]}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Sarı/kırmızı faktörler — detaylı */}
-              {factors.filter(f => f.status !== "guvenli").map(f => {
-                const fc = { alarm: { icon: "🔴", color: X.r, bg: "rgba(220,38,38,0.06)", border: "rgba(220,38,38,0.2)" }, dikkat: { icon: "🟡", color: X.w, bg: "rgba(180,83,9,0.06)", border: "rgba(180,83,9,0.2)" } }[f.status];
+              {factors.map(f => {
+                const icon = { alarm: "🔴", dikkat: "🟡", guvenli: "🟢" }[f.status];
+                const color = { alarm: X.r, dikkat: X.w, guvenli: X.g }[f.status];
                 return (
-                  <div key={f.id} style={{ background: fc.bg, border: `1px solid ${fc.border}`, borderRadius: 10, padding: "12px 14px", marginBottom: 8 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                      <span style={{ fontSize: 14 }}>{fc.icon}</span>
-                      <span style={{ color: X.t, fontSize: 14, fontWeight: 800 }}>{f.label}</span>
-                    </div>
-                    <div style={{ color: X.tm, fontSize: 13, lineHeight: 1.6, marginBottom: f.oneri ? 8 : 0 }}>{f.desc}</div>
-                    {f.oneri && (
-                      <div style={{ borderTop: `1px solid ${fc.border}`, paddingTop: 8, marginTop: 4 }}>
-                        <div style={{ color: fc.color, fontSize: 12, fontWeight: 700, marginBottom: 2 }}>Ne yapmalısın?</div>
-                        <div style={{ color: X.t, fontSize: 13, lineHeight: 1.6 }}>{f.oneri}</div>
+                  <div key={f.id} style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "7px 0", borderBottom: `1px solid ${X.border}` }}>
+                    <span style={{ fontSize: 11, flexShrink: 0, marginTop: 2 }}>{icon}</span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 6 }}>
+                        <span style={{ color: X.t, fontSize: 13, fontWeight: 700 }}>{f.label}</span>
+                        {f.oneri && <span style={{ color, fontSize: 11, fontWeight: 600, textAlign: "right", flexShrink: 0 }}>→ {f.oneri}</span>}
                       </div>
-                    )}
+                      <div style={{ color: X.td, fontSize: 11, marginTop: 1 }}>{f.desc}</div>
+                    </div>
                   </div>
                 );
               })}
@@ -4050,11 +4030,10 @@ GÖREV: Yukarıdaki tüm veriyi analiz et ve 4-5 paragraflık kişisel finans de
               {!aiText && !aiLoading && (
                 <div style={{ color: X.td, fontSize: 13, textAlign: "center", padding: "16px 0" }}>
                   <div style={{ fontSize: 28, marginBottom: 6 }}>🤖</div>
-                  <div>Tüm bütçe verileriniz analiz edilip</div>
-                  <div>kişisel tavsiye üretilecek</div>
+                  <div>Tüm bütçe verileriniz analiz edilip kişisel tavsiye üretilecek</div>
                 </div>
               )}
-              {aiLoading && (<div style={{ color: X.td, fontSize: 13, textAlign: "center", padding: "16px 0" }}><div style={{ fontSize: 28, marginBottom: 6 }}>⏳</div><div>Veriler işleniyor...</div></div>)}
+              {aiLoading && <div style={{ color: X.td, fontSize: 13, textAlign: "center", padding: "16px 0" }}><div style={{ fontSize: 28, marginBottom: 6 }}>⏳</div><div>Veriler işleniyor...</div></div>}
               {aiText && <div style={{ color: X.t, fontSize: 13, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{aiText}</div>}
             </Card>
 
@@ -6926,38 +6905,52 @@ export default function App() {
       <div style={{ position: "fixed", top: 60, left: -50, width: 200, height: 200, borderRadius: "50%", background: "rgba(22,163,74,0.07)", filter: "blur(60px)", pointerEvents: "none" }} />
       <div style={{ position: "fixed", top: 280, right: -40, width: 170, height: 170, borderRadius: "50%", background: "rgba(37,99,235,0.06)", filter: "blur(50px)", pointerEvents: "none" }} />
       <div style={{ position: "fixed", bottom: 250, left: 10, width: 140, height: 140, borderRadius: "50%", background: "rgba(124,58,237,0.05)", filter: "blur(45px)", pointerEvents: "none" }} />
-      <div style={{ background: "linear-gradient(160deg,#0d2e2e 0%,#0F766E 60%,#16a34a 100%)", padding: "12px 14px 14px", position: "relative", overflow: "hidden" }}>
-        <div style={{ position: "absolute", top: -40, right: -20, width: 130, height: 130, borderRadius: "50%", background: "rgba(255,255,255,0.04)" }} />
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, position: "relative", zIndex: 1 }}>
-          <div>
-            <div style={{ fontSize: 15, fontWeight: 900, letterSpacing: 1, color: "white" }}>EV BÜTÇESİ</div>
-            <div style={{ fontSize: 10, color: "rgba(255,255,255,0.6)", marginTop: 1 }}>{ml(mk)}</div>
+      {tab === "home" && (
+        <div style={{ background: "linear-gradient(160deg,#0d2e2e 0%,#0F766E 60%,#16a34a 100%)", padding: "12px 14px 14px", position: "relative", overflow: "hidden", flexShrink: 0 }}>
+          <div style={{ position: "absolute", top: -40, right: -20, width: 130, height: 130, borderRadius: "50%", background: "rgba(255,255,255,0.04)" }} />
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, position: "relative", zIndex: 1 }}>
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 900, letterSpacing: 1, color: "white" }}>EV BÜTÇESİ</div>
+              <div style={{ fontSize: 10, color: "rgba(255,255,255,0.6)", marginTop: 1 }}>{ml(mk)}</div>
+            </div>
+            <div onClick={() => setTab("report")} style={{ position: "relative", width: 44, height: 44, cursor: "pointer", flexShrink: 0 }}>
+              <svg width="44" height="44" viewBox="0 0 44 44" style={{ transform: "rotate(-90deg)" }}>
+                <circle cx="22" cy="22" r="18" fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="3.5" />
+                <circle cx="22" cy="22" r="18" fill="none" stroke="#6EE7B7" strokeWidth="3.5" strokeDasharray="113.1" strokeDashoffset={113.1 * (1 - headerRisk.score / 100)} strokeLinecap="round" />
+              </svg>
+              <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", textAlign: "center" }}>
+                <div style={{ fontSize: 12, fontWeight: 900, color: "white", lineHeight: 1 }}>{headerRisk.score}</div>
+                <div style={{ fontSize: 6, color: "rgba(255,255,255,0.55)", fontWeight: 600, letterSpacing: 0.5 }}>RİSK</div>
+              </div>
+            </div>
           </div>
-          <div onClick={() => setTab("report")} style={{ position: "relative", width: 44, height: 44, cursor: "pointer", flexShrink: 0 }}>
-            <svg width="44" height="44" viewBox="0 0 44 44" style={{ transform: "rotate(-90deg)" }}>
-              <circle cx="22" cy="22" r="18" fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="3.5" />
-              <circle cx="22" cy="22" r="18" fill="none" stroke="#6EE7B7" strokeWidth="3.5" strokeDasharray="113.1" strokeDashoffset={113.1 * (1 - headerRisk.score / 100)} strokeLinecap="round" />
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, position: "relative", zIndex: 1 }}>
+            {[
+              { label: "Aylık Bütçe", val: C(c.effectiveBudget), color: "white", onClick: null },
+              { label: "Bankadaki Tutar", val: C(c.remainingY || 0), color: "white", onClick: showKalanDetail },
+              { label: "Blokeli Tutar", val: C(c.groupB || 0), color: "#FCA5A5", onClick: showBlokeDetail },
+              { label: "Blokeden Kalan", val: C(c.remainingX || 0), color: "#6EE7B7", onClick: showKalanDetail },
+            ].map((box, i) => (
+              <div key={i} onClick={box.onClick} style={{ background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 11, padding: "8px 10px", cursor: box.onClick ? "pointer" : "default" }}>
+                <div style={{ fontSize: 8, fontWeight: 800, letterSpacing: "0.07em", color: "rgba(255,255,255,0.75)", textTransform: "uppercase", marginBottom: 3 }}>{box.label}</div>
+                <div style={{ fontSize: 15, fontWeight: 900, color: box.color, fontFamily: fm, lineHeight: 1 }}>{box.val}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {tab !== "home" && (
+        <div style={{ ...glassSolid, borderBottom: "none", borderRadius: "0 0 18px 18px", padding: "calc(12px + env(safe-area-inset-top)) 16px 12px", display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0, boxShadow: "0 4px 16px rgba(0,0,0,0.06)" }}>
+          <div><div style={{ fontSize: 15, fontWeight: 800, letterSpacing: "-0.3px", color: X.t }}>EV BÜTÇESİ</div><div style={{ fontSize: 11, color: X.td }}>{ml(mk)}</div></div>
+          <div onClick={() => setTab("report")} style={{ position: "relative", width: 36, height: 36, cursor: "pointer", flexShrink: 0 }}>
+            <svg width="36" height="36" viewBox="0 0 36 36">
+              <circle cx="18" cy="18" r="15" fill="none" stroke="rgba(0,0,0,0.08)" strokeWidth="3" />
+              <circle cx="18" cy="18" r="15" fill="none" stroke={headerRiskColor} strokeWidth="3" strokeDasharray="94.2" strokeDashoffset={94.2 * (1 - headerRisk.score / 100)} strokeLinecap="round" transform="rotate(-90 18 18)" />
             </svg>
-            <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", textAlign: "center" }}>
-              <div style={{ fontSize: 12, fontWeight: 900, color: "white", lineHeight: 1 }}>{headerRisk.score}</div>
-              <div style={{ fontSize: 6, color: "rgba(255,255,255,0.55)", fontWeight: 600, letterSpacing: 0.5 }}>RİSK</div>
-            </div>
+            <span style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", fontSize: 11, fontWeight: 800, color: headerRiskColor, fontFamily: fm }}>{headerRisk.score}</span>
           </div>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, position: "relative", zIndex: 1 }}>
-          {[
-            { label: "Aylık Bütçe", val: C(c.effectiveBudget), color: "white", onClick: null },
-            { label: "Bankadaki Tutar", val: C(c.remainingY || 0), color: "white", onClick: showKalanDetail },
-            { label: "Blokeli Tutar", val: C(c.groupB || 0), color: "#FCA5A5", onClick: showBlokeDetail },
-            { label: "Blokeden Kalan", val: C(c.remainingX || 0), color: "#6EE7B7", onClick: showKalanDetail },
-          ].map((box, i) => (
-            <div key={i} onClick={box.onClick} style={{ background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 11, padding: "8px 10px", cursor: box.onClick ? "pointer" : "default" }}>
-              <div style={{ fontSize: 8, fontWeight: 800, letterSpacing: "0.07em", color: "rgba(255,255,255,0.75)", textTransform: "uppercase", marginBottom: 3 }}>{box.label}</div>
-              <div style={{ fontSize: 15, fontWeight: 900, color: box.color, fontFamily: fm, lineHeight: 1 }}>{box.val}</div>
-            </div>
-          ))}
-        </div>
-      </div>
+      )}
       {/* Üye yedekleme kilidi */}
       {memberLocked && (
         <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
