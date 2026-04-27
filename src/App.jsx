@@ -3715,14 +3715,37 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
           : null;
 
         const factors = [
-          { id: "f1", label: "Bloke Sonrası Kalan (X)", status: f1Status, desc: f1Desc, oneri: f1Oneri },
-          { id: "f2", label: "Değişken Gider Karşılama", status: f2Status, desc: f2Desc, oneri: f2Oneri },
-          { id: "f3", label: "12 Aylık Sürdürülebilirlik", status: f3Status, desc: f3Desc, oneri: f3Oneri },
-          { id: "f4", label: "Kategori Bütçe Aşımları", status: f4Status, desc: f4Desc, oneri: f4Oneri },
+          { id: "f1", label: "Bu Ay Kullanılabilir Bütçe", status: f1Status, desc: f1Desc, oneri: f1Oneri },
+          { id: "f2", label: "Kalan Harcama Gücü", status: f2Status, desc: f2Desc, oneri: f2Oneri },
+          { id: "f3", label: "Bütçe Sürdürülebilirliği", status: f3Status, desc: f3Desc, oneri: f3Oneri },
+          { id: "f4", label: "Harcama Kategori Kontrolü", status: f4Status, desc: f4Desc, oneri: f4Oneri },
           { id: "f5", label: "Beklenmeyen Gider Fonu", status: f5Status, desc: f5Desc, oneri: f5Oneri },
           { id: "f6", label: "Yaklaşan Gider Artışları", status: f6Status, desc: f6Desc, oneri: f6Oneri },
-          { id: "f7", label: "Bekleyen Ödemelerin Ağırlığı", status: f7Status, desc: f7Desc, oneri: f7Oneri },
+          { id: "f7", label: "Nakit Akışı Durumu", status: f7Status, desc: f7Desc, oneri: f7Oneri },
         ];
+
+        const past3Months = [pmk(pmk(mk)), pmk(mk)].map(pm => {
+          const pmc2 = calcMonth(data, pm, null);
+          return { mk: pm, remainingX: pmc2.remainingX, totalSpent: pmc2.totalSpent };
+        });
+
+        const callAI = async () => {
+          const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
+          if (!apiKey) { setAiText("API anahtarı tanımlanmamış. Vercel'de VITE_ANTHROPIC_API_KEY ekleyin."); return; }
+          setAiLoading(true); setAiText("");
+          try {
+            const prompt = `Sen bir kişisel finans danışmanısın. Türkçe konuş, samimi ve pratik ol.\n\nMEVCUT AY (${ml(mk)}) VERİLERİ:\n- Aylık bütçe: ${C(c.effectiveBudget)}\n- Bankadaki tutar: ${C(c.remainingY)}\n- Kullanılabilir bütçe: ${C(c.remainingX)}\n- Bekleyen ödemeler: ${C(c.groupB)}\n- Sabit giderler: ${C(c.fixedTotal)}\n- Değişken tahmin: ${C(variableEstimate)}, gerçekleşen: ${C(categorizedTotal)}\n- Beklenmedik giderler: ${C(uncategorized)}\n- Beklenmeyen Gider Fonu: ${C(unexpectedFund)} (%${fundUsedPct} kullanıldı)\n- Kategori aşımları: ${overCategories.length === 0 ? "Yok" : overCategories.map(ve => `${ve.name}: ${C(cats[ve.id]||0)}/${C(ve.expectedAmount)}`).join(", ")}\n- 12 ay sürdürülebilirlik: ${mudm > 12 ? "Sorun yok" : `${mudm}. ayda açık`}\n- Yaklaşan artışlar: ${incCount === 0 ? "Yok" : `${incCount} kalem, +${C(incTotal)}/ay`}\n${past3Months.filter(p => p).map(p => `- ${ml(p.mk)}: ${C(p.remainingX)} kullanılabilir`).join("\n")}\n\nGÖREV: 3-4 paragraflık kişisel finans tavsiyesi ver. Bu ayın durumu, kritik aksiyonlar, sürpriz harcama senaryosu, ay sonu birikim tahmini. Sayıları tekrarlama, yorum yap. Paragraf yaz, madde madde değil.`;
+            const res = await fetch("https://api.anthropic.com/v1/messages", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
+              body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 2000, messages: [{ role: "user", content: prompt }] })
+            });
+            const d = await res.json();
+            if (d.error) throw new Error(d.error.message);
+            setAiText((d.content || []).map(b => b.text || "").join(""));
+          } catch(e) { setAiText("Analiz yüklenemedi: " + e.message); }
+          setAiLoading(false);
+        };
 
         const alarmCount = factors.filter(f => f.status === "alarm").length;
         const dikkatCount = factors.filter(f => f.status === "dikkat").length;
@@ -3730,70 +3753,12 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
         const statusConfig = { alarm: { label: "🚨 Alarm", sub: "Acil önlem alınmalı", color: X.r, bg: "rgba(220,38,38,0.08)", border: "rgba(220,38,38,0.3)" }, dikkat: { label: "⚠️ Dikkat", sub: "Bazı kalemler izlenmeli", color: X.w, bg: "rgba(180,83,9,0.08)", border: "rgba(180,83,9,0.3)" }, guvenli: { label: "✅ Güvende", sub: "Bütçeniz sağlıklı görünüyor", color: X.g, bg: "rgba(15,118,110,0.08)", border: "rgba(15,118,110,0.3)" } };
         const sc = statusConfig[overallStatus];
 
-        // AI için veri özeti
-        const past3Months = [pmk(pmk(mk)), pmk(mk)].map(pm => {
-          const pmc = calcMonth(data, pm, null);
-          const { categories: pcats } = categorizeMonthSpending(data, pm);
-          return { mk: pm, remainingX: pmc.remainingX, totalSpent: pmc.totalSpent, cats: pcats };
-        });
-
-        const callAI = async () => {
-          setAiLoading(true); setAiText("");
-          try {
-            const prompt = `Sen bir kişisel finans danışmanısın. Türkçe konuş, samimi ve pratik ol.
-
-MEVCUT AY (${ml(mk)}) VERİLERİ:
-- Aylık bütçe: ${C(c.effectiveBudget)}
-- Bankadaki reel tutar (Y): ${C(c.remainingY)}
-- Bloke sonrası kalan (X): ${C(c.remainingX)}
-- Bekleyen ödemeler (B grubu): ${C(c.groupB)}
-  - Ödenmemiş sabit giderler: ${C(c.unpaidFixedAcc || 0)}
-  - Aktarılmamış Kredi Kartı: ${C((c.untransferredCC || 0) + (c.untransferredFixedCC || 0))}
-  - Aktarılmamış hesaptan ödemeler: ${C(c.untransferredAcc || 0)}
-  - Borç ödemeleri: ${C(c.debtTotal || 0)}
-- Sabit giderler toplamı: ${C(c.fixedTotal)}
-- Değişken gider tahmini: ${C(variableEstimate)}
-- Değişken gider gerçekleşen: ${C(categorizedTotal)}
-- Beklenmedik giderler (kategorisiz): ${C(uncategorized)}
-- Beklenmeyen Gider Fonu: ${C(unexpectedFund)} (${fundUsedPct}% kullanıldı, ${C(fundRemaining)} kaldı)
-- Genel kart yükleme: ${C(c.cardLoaded)} / ${C(c.generalCardBudget)} limit
-- Kategori aşımları: ${overCategories.length === 0 ? "Yok" : overCategories.map(ve => `${ve.name}: ${C(cats[ve.id]||0)} / ${C(ve.expectedAmount)}`).join(", ")}
-- 12 ay sürdürülebilirlik: ${mudm > 12 ? "12 ay boyunca sorun yok" : `${mudm}. ayda açık oluşabilir`}
-- Yaklaşan artışlar (6 ay): ${incCount === 0 ? "Yok" : `${incCount} kalem, tahmini +${C(incTotal)}/ay`}
-
-${past3Months[0] ? `GEÇMİŞ AYLAR:
-- ${ml(past3Months[0].mk)}: X=${C(past3Months[0].remainingX)}, toplam harcama=${C(past3Months[0].totalSpent)}
-- ${ml(past3Months[1].mk)}: X=${C(past3Months[1].remainingX)}, toplam harcama=${C(past3Months[1].totalSpent)}` : ""}
-
-GÖREV: Bu verilere dayanarak 3-4 paragraflık kişisel finans tavsiyesi ver. Şunları kapsasın:
-1. Bu ayın genel durumu (iyi mi, endişe verici mi, neden)
-2. En kritik 1-2 aksiyon (somut, uygulanabilir)
-3. Eğer bir sürpriz harcama veya tatil planı olursa ne yapmalı
-4. Ay sonu için birikim tahmini ve öneri
-Sayıları tekrarlama, yorum yap. Madde madde değil paragraf yaz.`;
-
-            const res = await fetch("https://api.anthropic.com/v1/messages", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "x-api-key": import.meta.env.VITE_ANTHROPIC_API_KEY,
-                "anthropic-version": "2023-06-01",
-                "anthropic-dangerous-direct-browser-access": "true"
-              },
-              body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 2000, messages: [{ role: "user", content: prompt }] })
-            });
-            const d = await res.json();
-            setAiText((d.content || []).map(b => b.text || "").join(""));
-          } catch(e) { setAiText("Analiz yüklenemedi. Lütfen tekrar deneyin."); }
-          setAiLoading(false);
-        };
-
         // Projeksiyon
         const proj = [];
         let pm6 = mk;
-        for (let i = 0; i < 6; i++) {
+        for (let i2 = 0; i2 < 6; i2++) {
           pm6 = nmk(pm6);
-          const pmc = calcMonth(data, pm6, null);
+          const pmc3 = calcMonth(data, pm6, null);
           const events = [];
           data.debts.filter(d2 => d2.remainingMonths > 0).forEach(d2 => {
             let em = mk; for (let j = 0; j < d2.remainingMonths; j++) em = nmk(em);
@@ -3802,12 +3767,78 @@ Sayıları tekrarlama, yorum yap. Madde madde değil paragraf yaz.`;
           data.settings.fixedExpenses.forEach(exp => {
             if (exp.increaseDate && exp.increaseDate.startsWith(pm6)) events.push({ icon: "📈", text: `${exp.name} artışı`, color: X.w });
           });
-          proj.push({ mk: pm6, mc: pmc, events });
+          proj.push({ mk: pm6, mc: pmc3, events });
         }
 
         return (
           <>
             {/* BÖLÜM 1: GENEL DURUM */}
+            <Card s={{ marginBottom: 12, background: sc.bg, border: `1px solid ${sc.border}` }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                <div>
+                  <div style={{ color: sc.color, fontSize: 20, fontWeight: 900 }}>{sc.label}</div>
+                  <div style={{ color: X.tm, fontSize: 12, marginTop: 2 }}>{sc.sub}</div>
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <div style={{ fontSize: 11, color: X.td }}>{alarmCount} alarm · {dikkatCount} dikkat · {factors.length - alarmCount - dikkatCount} iyi</div>
+                </div>
+              </div>
+
+              {/* Yeşil faktörler — kompakt */}
+              {factors.filter(f => f.status === "guvenli").length > 0 && (
+                <div style={{ background: "rgba(15,118,110,0.06)", borderRadius: 10, padding: "8px 12px", marginBottom: 10 }}>
+                  <div style={{ color: X.g, fontSize: 11, fontWeight: 700, marginBottom: 6 }}>✅ İYİ DURUMDA</div>
+                  {factors.filter(f => f.status === "guvenli").map(f => (
+                    <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "3px 0" }}>
+                      <span style={{ fontSize: 10, flexShrink: 0 }}>🟢</span>
+                      <span style={{ color: X.t, fontSize: 13, fontWeight: 600 }}>{f.label}</span>
+                      <span style={{ color: X.td, fontSize: 11, flex: 1, textAlign: "right" }}>{f.desc.split("—")[1]?.trim() || f.desc.split(".")[0]}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Sarı/kırmızı faktörler — detaylı */}
+              {factors.filter(f => f.status !== "guvenli").map(f => {
+                const fc = { alarm: { icon: "🔴", color: X.r, bg: "rgba(220,38,38,0.06)", border: "rgba(220,38,38,0.2)" }, dikkat: { icon: "🟡", color: X.w, bg: "rgba(180,83,9,0.06)", border: "rgba(180,83,9,0.2)" } }[f.status];
+                return (
+                  <div key={f.id} style={{ background: fc.bg, border: `1px solid ${fc.border}`, borderRadius: 10, padding: "12px 14px", marginBottom: 8 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                      <span style={{ fontSize: 14 }}>{fc.icon}</span>
+                      <span style={{ color: X.t, fontSize: 14, fontWeight: 800 }}>{f.label}</span>
+                    </div>
+                    <div style={{ color: X.tm, fontSize: 13, lineHeight: 1.6, marginBottom: f.oneri ? 8 : 0 }}>{f.desc}</div>
+                    {f.oneri && (
+                      <div style={{ borderTop: `1px solid ${fc.border}`, paddingTop: 8, marginTop: 4 }}>
+                        <div style={{ color: fc.color, fontSize: 12, fontWeight: 700, marginBottom: 2 }}>Ne yapmalısın?</div>
+                        <div style={{ color: X.t, fontSize: 13, lineHeight: 1.6 }}>{f.oneri}</div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </Card>
+
+            {/* BÖLÜM 2: AI TAVSİYE */}
+            <Card s={{ marginBottom: 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                <div style={{ color: X.t, fontSize: 14, fontWeight: 800 }}>🤖 AI Finans Danışmanı</div>
+                <button onClick={callAI} disabled={aiLoading} style={{ background: X.gd, border: `1px solid ${X.g}`, borderRadius: 8, padding: "6px 12px", color: X.g, fontSize: 12, fontWeight: 700, cursor: aiLoading ? "default" : "pointer", fontFamily: ff, opacity: aiLoading ? 0.6 : 1 }}>
+                  {aiLoading ? "⏳ Analiz ediliyor..." : aiText ? "🔄 Yenile" : "✨ Analiz Et"}
+                </button>
+              </div>
+              {!aiText && !aiLoading && (
+                <div style={{ color: X.td, fontSize: 13, textAlign: "center", padding: "16px 0" }}>
+                  <div style={{ fontSize: 28, marginBottom: 6 }}>🤖</div>
+                  <div>Tüm bütçe verileriniz analiz edilip</div>
+                  <div>kişisel tavsiye üretilecek</div>
+                </div>
+              )}
+              {aiLoading && <div style={{ color: X.td, fontSize: 13, textAlign: "center", padding: "16px 0" }}><div style={{ fontSize: 28, marginBottom: 6 }}>⏳</div><div>Veriler işleniyor...</div></div>}
+              {aiText && <div style={{ color: X.t, fontSize: 13, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{aiText}</div>}
+            </Card>
+
+            {/* BÖLÜM 3: PROJEKSİYON */}
             <Card s={{ marginBottom: 12, background: sc.bg, border: `1px solid ${sc.border}` }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
                 <div>
