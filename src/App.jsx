@@ -2652,8 +2652,8 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
   const savingsProgress = c.effectiveBudget > 0 ? Math.min((c.remaining / c.effectiveBudget) * 100, 100) : 0;
 
   return (
-    <div style={{ flex: 1, overflow: "auto", padding: "12px 16px 90px" }}>
-      {msg && <div style={{ background: X.gd, border: `1px solid ${X.g}`, borderRadius: 10, padding: 10, marginBottom: 10, color: X.g, fontSize: 14, fontWeight: 600, textAlign: "center" }}>{msg}</div>}
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", padding: "0 16px" }}>
+      {msg && <div style={{ background: X.gd, border: `1px solid ${X.g}`, borderRadius: 10, padding: 10, marginBottom: 0, color: X.g, fontSize: 14, fontWeight: 600, textAlign: "center", flexShrink: 0 }}>{msg}</div>}
 
       {/* ÖDEME HATIRLATICI */}
       {(() => {
@@ -2685,7 +2685,7 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
         const hasTodayOrOverdue = ccOverdue.length > 0 || filteredUpcoming.some(u => u.diff === 0);
         const subText = allItems.length === 0 ? "Yaklaşan ödeme yok" : ccOverdue.length > 0 ? `${ccOverdue.length} gecikmiş` : filteredUpcoming[0]?.diff === 0 ? "Bugün ödeme var" : `${filteredUpcoming[0]?.diff} gün içinde`;
         return (
-          <div style={{ margin: "0 0 10px" }}>
+          <div style={{ margin: "6px 0 0", flexShrink: 0 }}>
             <div onClick={() => toggle("payments")} style={{ background: allItems.length === 0 ? "rgba(0,0,0,0.04)" : hasTodayOrOverdue ? X.rd : X.wd, border: `1px solid ${topColor}40`, borderRadius: expanded === "payments" ? "14px 14px 0 0" : 14, padding: "10px 14px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <span style={{ fontSize: 20 }}>📅</span>
@@ -2700,7 +2700,7 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
               </div>
             </div>
             {expanded === "payments" && (
-              <div style={{ background: allItems.length === 0 ? "rgba(0,0,0,0.04)" : hasTodayOrOverdue ? X.rd : X.wd, border: `1px solid ${topColor}40`, borderTop: `1px solid ${topColor}20`, borderRadius: "0 0 14px 14px", padding: "6px 16px 12px" }}>
+              <div style={{ background: allItems.length === 0 ? "rgba(0,0,0,0.04)" : hasTodayOrOverdue ? X.rd : X.wd, border: `1px solid ${topColor}40`, borderTop: `1px solid ${topColor}20`, borderRadius: "0 0 14px 14px", padding: "6px 16px 12px", maxHeight: 100, overflowY: "auto" }}>
                 {allItems.length === 0 && <div style={{ color: X.td, fontSize: 12, padding: "6px 0" }}>Önümüzdeki günlerde yaklaşan ödeme bulunmuyor.</div>}
                 {ccOverdue.map(u => (
                   <div key={u.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px solid rgba(220,38,38,0.12)" }}>
@@ -2732,6 +2732,9 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
         );
       })()}
 
+      {/* WRAPPER: 6 kart + 4 sekme */}
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6, padding: "6px 0 58px", minHeight: 0 }}>
+
       {/* QUICK ACTIONS */}
       {(() => {
         // Taksit özet bilgileri
@@ -2749,27 +2752,27 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
         }, 0);
 
         return (
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gridTemplateRows: "repeat(3, 1fr)", gap: 6, margin: "6px 0", flex: "none" }}>
-        <div onClick={() => setModal("ccCombined")} style={{ background: "rgba(29,78,216,0.22)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(29,78,216,0.28)", borderRadius: 16, padding: "16px 8px", cursor: "pointer", textAlign: "center", position: "relative", boxShadow: neu}}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gridTemplateRows: "repeat(3, minmax(0, 1fr))", gap: 6, flex: 5, minHeight: 0 }}>
+        <div onClick={() => setModal("ccCombined")} style={{ background: "rgba(29,78,216,0.22)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(29,78,216,0.28)", borderRadius: 16, padding: "16px 8px", cursor: "pointer", textAlign: "center", position: "relative", boxShadow: neu, overflow: "hidden", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
           <InfoBtn onClick={() => setInfo("ccSingle")} />
           <div style={{ fontSize: 18, marginBottom: 3 }}>💳</div>
-          <div style={{ color: X.b, fontSize: 13, fontWeight: 800 }}>Kredi Kartı</div>
+          <div style={{ color: X.b, fontSize: 13, fontWeight: 800 }}>Kredi Kartı ile Ödeme</div>
           <div style={{ color: X.t, fontSize: 15, fontWeight: 800, fontFamily: fm, marginTop: 2 }}>{C(c.ccSingleTotal + c.installmentTotal)}</div>
           {activePlans.length > 0 && <div style={{ color: X.td, fontSize: 11, marginTop: 3 }}>{activePlans.length} taksit planı aktif</div>}
         </div>
-        <div onClick={() => setModal("accountPay")} style={{ background: "rgba(15,118,110,0.22)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(15,118,110,0.28)", borderRadius: 16, padding: "16px 8px", cursor: "pointer", textAlign: "center", position: "relative", boxShadow: neu}}>
+        <div onClick={() => setModal("accountPay")} style={{ background: "rgba(15,118,110,0.22)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(15,118,110,0.28)", borderRadius: 16, padding: "16px 8px", cursor: "pointer", textAlign: "center", position: "relative", boxShadow: neu, overflow: "hidden", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
           <div style={{ fontSize: 18, marginBottom: 3 }}>🏦</div>
           <div style={{ color: X.g, fontSize: 13, fontWeight: 800 }}>Hesaptan Ödeme</div>
           <div style={{ color: X.t, fontSize: 15, fontWeight: 800, fontFamily: fm, marginTop: 2 }}>{C(c.accountTotal)}</div>
           {(md.accountEntries || []).length > 0 && <div style={{ color: X.td, fontSize: 11, marginTop: 3 }}>{(md.accountEntries || []).length} işlem</div>}
         </div>
-        <div onClick={() => setModal("cardLoad")} style={{ background: "rgba(15,118,110,0.32)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(15,118,110,0.30)", borderRadius: 16, padding: "16px 8px", cursor: "pointer", textAlign: "center", position: "relative", boxShadow: neu}}>
+        <div onClick={() => setModal("cardLoad")} style={{ background: "rgba(15,118,110,0.32)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(15,118,110,0.30)", borderRadius: 16, padding: "16px 8px", cursor: "pointer", textAlign: "center", position: "relative", boxShadow: neu, overflow: "hidden", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
           <InfoBtn onClick={() => setInfo("cardLoad")} />
           <div style={{ fontSize: 18, marginBottom: 3 }}>🛒</div>
           <div style={{ color: X.g, fontSize: 13, fontWeight: 800 }}>Genel Harcama Kartı</div>
           <div style={{ color: X.t, fontSize: 15, fontWeight: 800, fontFamily: fm, marginTop: 2 }}>{C(md.cardLoaded || 0)}{c.generalCardBudget > 0 && <span style={{ color: X.td, fontSize: 11 }}> / {C(c.generalCardBudget)}</span>}</div>
         </div>
-        <div onClick={() => setModal("debtPay")} style={{ background: "rgba(180,83,9,0.28)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(180,83,9,0.28)", borderRadius: 16, padding: "16px 8px", cursor: "pointer", textAlign: "center", position: "relative", boxShadow: neu}}>
+        <div onClick={() => setModal("debtPay")} style={{ background: "rgba(180,83,9,0.28)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(180,83,9,0.28)", borderRadius: 16, padding: "16px 8px", cursor: "pointer", textAlign: "center", position: "relative", boxShadow: neu, overflow: "hidden", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
           <InfoBtn onClick={() => setInfo("debt")} />
           <div style={{ fontSize: 18, marginBottom: 3 }}>📌</div>
           <div style={{ color: X.w, fontSize: 13, fontWeight: 800 }}>Borç Ödemeleri</div>
@@ -2822,9 +2825,10 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
           border: `1px solid ${menuTab === id ? "rgba(15,118,110,0.3)" : "rgba(0,0,0,0.07)"}`,
           overflow: "hidden",
           cursor: "pointer",
-          minHeight: 58,
+          display: "flex",
+          alignItems: "center",
         });
-        const menuHeadStyle = { padding: "14px 12px", display: "flex", alignItems: "center", gap: 8 };
+        const menuHeadStyle = { padding: "10px 10px", display: "flex", alignItems: "center", gap: 8, width: "100%" };
 
         // Panel içerikleri
         const renderPanelContent = () => {
@@ -2997,9 +3001,9 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
         };
 
         return (
-          <>
+          <div style={{ flex: 3, display: "flex", flexDirection: "column", minHeight: 0 }}>
             {/* 2x2 sekme kutuları */}
-            <div style={{ marginTop: 8, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gridTemplateRows: "1fr 1fr", gap: 6, flex: 1, minHeight: 0 }}>
               {menus.map(m => (
                 <div key={m.id} style={menuBoxStyle(m.id)} onClick={() => setMenuTab(m.id)}>
                   <div style={menuHeadStyle}>
@@ -3041,9 +3045,11 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
                 </div>
               </div>
             )}
-          </>
+          </div>
         );
       })()}
+
+      </div>{/* WRAPPER KAPANIŞ */}
 
       {modal === "ccCombined" && <CCCombinedModal data={data} mk={mk} cards={data.settings.cards || []} variableExpenses={data.settings.variableExpenses || []} ccSingleEntries={md.ccSingle || []} onClose={() => setModal(null)} onSaveSingle={handleCCSingle} onDeleteSingle={deleteCCSingle} onSaveInstall={handleInstSave} onDeletePlan={deleteInstallment} onEditPlan={editInstallment} />}
       {modal === "accountPay" && <AccountPayModal variableExpenses={data.settings.variableExpenses || []} entries={md.accountEntries || []} transferred={md.accountTransferred || {}} onClose={() => setModal(null)} onSave={handleAccountPay} onDelete={deleteAccountEntry} onEdit={editAccountEntry} onTransfer={handleAccountTransfer} onUndoTransfer={undoAccountTransfer} />}
@@ -6987,8 +6993,8 @@ export default function App() {
             {[
               { label: "Aylık Bütçe", val: C(c.effectiveBudget), color: "white", onClick: null },
               { label: "Bankadaki Tutar", val: C(c.remainingY || 0), color: "white", onClick: showKalanDetail },
-              { label: "Blokeli Tutar", val: C(c.groupB || 0), color: "#FCA5A5", onClick: showBlokeDetail },
-              { label: "Blokeden Kalan", val: C(c.remainingX || 0), color: "#6EE7B7", onClick: showKalanDetail },
+              { label: "Bloke Edilen Tutar", val: C(c.groupB || 0), color: "#FCA5A5", onClick: showBlokeDetail },
+              { label: "Bloke Sonrası Kalan Bütçe", val: C(c.remainingX || 0), color: "#6EE7B7", onClick: showKalanDetail },
             ].map((box, i) => (
               <div key={i} onClick={box.onClick} style={{ background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 11, padding: "8px 10px", cursor: box.onClick ? "pointer" : "default" }}>
                 <div style={{ fontSize: 8, fontWeight: 800, letterSpacing: "0.07em", color: "rgba(255,255,255,0.75)", textTransform: "uppercase", marginBottom: 3 }}>{box.label}</div>
