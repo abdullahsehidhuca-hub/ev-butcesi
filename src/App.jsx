@@ -2156,7 +2156,7 @@ function ReceiptModal({ receipts, onClose, onSave, onDelete }) {
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const [editIdx, setEditIdx] = useState(null);
-  const [paymentMethod, setPaymentMethod] = useState("cc"); // cc, setcard, multinet
+  const [paymentMethod, setPaymentMethod] = useState(null); // cc, setcard, multinet
 
   const handleFile = e => {
     const file = e.target.files?.[0];
@@ -2321,7 +2321,7 @@ function ReceiptModal({ receipts, onClose, onSave, onDelete }) {
           {error && <div style={{ color: X.r, fontSize: 13, fontWeight: 600, marginBottom: 12, padding: "8px 12px", background: X.rd, borderRadius: 8 }}>⚠️ {error}</div>}
           <div style={{ display: "flex", gap: 10 }}>
             <Btn v="outline" c={X.tm} onClick={() => { setImgSrc(null); setStep("list"); setError(null); }}>İptal</Btn>
-            <Btn onClick={doAnalyze}>🔍 Analiz Et</Btn>
+            <Btn onClick={doAnalyze} disabled={!paymentMethod}>🔍 Analiz Et</Btn>
           </div>
         </div>
       )}
