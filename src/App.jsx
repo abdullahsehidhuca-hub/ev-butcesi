@@ -30,7 +30,7 @@ const PM = [{ id: "account", label: "Hesaptan", icon: "🏦" }, { id: "cc", labe
 
 const MIN_TL_SAVINGS_PCT = 0.15;   // toplam birikimin en az %15'i TL olmalı
 
-const DD = { settings: { monthlyBudget: 450000, fixedExpenses: [], variableExpenses: [], cards: [], emergencyFundTarget: null, billTypes: [], generalCardBudget: 0, emergencyTampon: 20000 }, months: {}, installmentPlans: [], debts: [], savingsGoals: [], completedGoals: [], merchantMap: {}, goldRates: {}, usdRates: {}, eurRates: {}, liveRates: { USD: null, EUR: null, XAU: null, fetchedAt: null }, savings: { TRY: [], USD: [], EUR: [], XAU: [] }, lastClosedMonth: null, lastBackup: null };
+const DD = { settings: { monthlyBudget: 450000, fixedExpenses: [], variableExpenses: [], cards: [], emergencyFundTarget: null, billTypes: [], generalCardBudget: 0, emergencyTampon: 20000 }, months: {}, installmentPlans: [], debts: [], savingsGoals: [], completedGoals: [], plannedEvents: [], completedEvents: [], merchantMap: {}, goldRates: {}, usdRates: {}, eurRates: {}, liveRates: { USD: null, EUR: null, XAU: null, fetchedAt: null }, savings: { TRY: [], USD: [], EUR: [], XAU: [] }, lastClosedMonth: null, lastBackup: null };
 const DM = () => ({ budget: null, fixedPaid: {}, variableEntries: {}, ccSingle: [], accountEntries: [], accountTransferred: {}, cardLoaded: 0, cardEntries: [], debtPayments: {}, ccTransferred: {}, csvByCard: {}, finalSavings: null, receipts: [] });
 
 const STORAGE_KEY = "ev-butce-v11";
@@ -551,10 +551,20 @@ function calcMonth(data, m, extraInst) {
   const untransferredAcc = (md.accountEntries || []).filter(e => !md.accountTransferred?.[e.id]?.transferred).reduce((s, e) => s + e.amount, 0);
   const groupB = unpaidFixedAcc + untransferredCC + untransferredFixedCC + untransferredAcc + debtTotal + installmentTotal;
 
+  // Planlı etkinlik kumbara aylık bloke
+  const eventKumbaraBloke = (data.plannedEvents || []).reduce((s, ev) => {
+    if (!ev.kumbara || !ev.date || ev.date <= m) return s;
+    const remaining = ev.kumbara - (ev.kumbaraAccumulated || 0);
+    if (remaining <= 0) return s;
+    let cur = m, count = 0;
+    for (let i = 0; i < 60; i++) { if (cur === ev.date) break; cur = nmk(cur); count++; }
+    return s + (count > 0 ? Math.ceil(remaining / count) : remaining);
+  }, 0);
+
   // === C GRUBU: Tahmin (bloke) ===
   const variableBlokeKalan = Math.max(0, variableEstimate - categorizedTotal);
   const cardBlokeKalan = Math.max(0, generalCardBudget - cardLoaded);
-  const groupC = variableBlokeKalan + cardBlokeKalan + emergencyBuffer;
+  const groupC = variableBlokeKalan + cardBlokeKalan + emergencyBuffer + eventKumbaraBloke;
 
   // Y = banka bakiyesiyle eşit (sadece A düşülmüş)
   const remainingY = effectiveBudget - groupA;
@@ -579,7 +589,7 @@ function calcMonth(data, m, extraInst) {
   const envelopeOverflow = Math.max(0, categorizedTotal - variableEstimate);
   const unpaidFixed = data.settings.fixedExpenses.filter(e => !md.fixedPaid?.[e.id]).reduce((s, e) => s + e.amount, 0);
 
-  return { effectiveBudget, baseBudget, carryoverDeficit, fixedTotal, variableTotal, ccSingleTotal, accountTotal, installmentTotal, debtTotal, cardLoaded, cardLoadMaxPerTx, cardLoadMaxTotal, cardLoadRemaining, availableForCard, totalSpent, remaining, remainingX, remainingY, savingsTarget, expectedCCSingle, ccTransferNeeded, expectedVariable, pendingVariable, variableEstimate, categorizedCC, uncategorizedCC, envelopeRemaining, envelopeOverflow, emergencyBuffer, cardUsable, generalCardBudget, bloke, groupA, groupB, groupC, unpaidFixed, unpaidFixedAcc, untransferredCC, untransferredFixedCC, untransferredAcc, cardBlokeKalan, variableBlokeKalan, transferredAcc, paidFixedAcc, transferredCC, transferredFixedCC };
+  return { effectiveBudget, baseBudget, carryoverDeficit, fixedTotal, variableTotal, ccSingleTotal, accountTotal, installmentTotal, debtTotal, cardLoaded, cardLoadMaxPerTx, cardLoadMaxTotal, cardLoadRemaining, availableForCard, totalSpent, remaining, remainingX, remainingY, savingsTarget, expectedCCSingle, ccTransferNeeded, expectedVariable, pendingVariable, variableEstimate, categorizedCC, uncategorizedCC, envelopeRemaining, envelopeOverflow, emergencyBuffer, cardUsable, generalCardBudget, bloke, groupA, groupB, groupC, unpaidFixed, unpaidFixedAcc, untransferredCC, untransferredFixedCC, untransferredAcc, cardBlokeKalan, variableBlokeKalan, transferredAcc, paidFixedAcc, transferredCC, transferredFixedCC, eventKumbaraBloke };
 }
 function calcFlat(data, m, extraInst) {
   const md = data.months[m] || DM();
@@ -1473,11 +1483,12 @@ function WeeklyBackupRitual({ data, setData }) {
 
 function BudgetModal({ mk: m, cur, def, onSave, onClose }) { const [v, setV] = useState(String(cur || def)); return (<Modal title={`💰 ${ml(m)} Bütçesi`} onClose={onClose}><Inp label="Bu Ayın Bütçesi" type="number" value={v} onChange={setV} suffix="₺" /><Btn onClick={() => { onSave(parseFloat(v) || def); onClose(); }}>Kaydet</Btn></Modal>); }
 
-function CCInstallModal({ data, mk, cards, variableExpenses, onClose, onSave, onDeletePlan, onEditPlan, startInSim }) {
+function CCInstallModal({ data, mk, cards, variableExpenses, onClose, onSave, onDeletePlan, onEditPlan, startInSim, onEventTaksit }) {
   const [a, sa] = useState(""); const [mo, smo] = useState("3"); const [n, sn] = useState("");
   const [cardId, setCardId] = useState(cards[0]?.id || "");
   const [categoryId, setCategoryId] = useState("");
   const [userChanged, setUserChanged] = useState(false);
+  const [selectedEventId, setSelectedEventId] = useState("");
   const [sim, setSim] = useState(null);
   const [startMk, setStartMk] = useState(nmk(mk));
   const [editingId, setEditingId] = useState(null);
@@ -1501,6 +1512,23 @@ function CCInstallModal({ data, mk, cards, variableExpenses, onClose, onSave, on
 
   const handleCategoryChange = v => { setCategoryId(v); setUserChanged(true); };
 
+  // %12 taksit güvenlik kilidi
+  const budget12 = data.settings.monthlyBudget || 0;
+  const currentInstTotal = data.installmentPlans.reduce((s, p) => {
+    let c = p.startMonth; for (let i = 0; i < p.months; i++) { if (c === mk) return s + p.monthlyPayment; c = nmk(c); } return s;
+  }, 0);
+  const maxInstLimit = Math.round(budget12 * 0.12);
+  const remainingInstHak = Math.max(0, maxInstLimit - currentInstTotal);
+  const wouldExceed = mp > 0 && (currentInstTotal + mp) > maxInstLimit;
+
+  // Seçilen etkinliğin taksit limiti kontrolü
+  const selectedEvent = selectedEventId ? (data.plannedEvents || []).find(e => e.id === selectedEventId) : null;
+  const eventTaksitKalan = selectedEvent ? Math.max(0, (selectedEvent.maxTaksit || 0) - (selectedEvent.taksitUsed || 0)) : null;
+  const eventWouldExceed = selectedEvent && t > 0 && t > eventTaksitKalan;
+
+  // Etkinlik için minimum taksit sayısı önerisi
+  const suggestedMinMonths = selectedEvent && remainingInstHak > 0 && t > 0 ? Math.max(1, Math.ceil(t / remainingInstHak)) : null;
+
   const doSim = () => {
     if (!t || !m2) return;
     const plan = { startMonth: startMk, months: m2, monthlyPayment: mp, totalAmount: t };
@@ -1510,7 +1538,14 @@ function CCInstallModal({ data, mk, cards, variableExpenses, onClose, onSave, on
     setSim({ plan, without, withS, deficit });
   };
 
-  const save = () => { if (!t || !cardId) return; onSave({ id: uid(), totalAmount: t, monthlyPayment: mp, months: m2, rate: 0, startMonth: startMk, remainingMonths: m2, note: n, merchantName: "", cardId, categoryId: categoryId || null, createdDate: td() }); onClose(); };
+  const save = () => {
+    if (!t || !cardId) return;
+    if (wouldExceed) { alert(`Aylık taksit yükü bütçenizin %12'sini aşıyor (max ${C(maxInstLimit)}). Bu harcamayı daha fazla taksitle yapın.`); return; }
+    if (eventWouldExceed) { alert(`Bu harcama, "${selectedEvent.name}" etkinliğinin taksit limitini aşıyor (kalan: ${C(eventTaksitKalan)})`); return; }
+    onSave({ id: uid(), totalAmount: t, monthlyPayment: mp, months: m2, rate: 0, startMonth: startMk, remainingMonths: m2, note: n, merchantName: "", cardId, categoryId: categoryId || null, eventId: selectedEventId || null, createdDate: td() });
+    if (selectedEventId && onEventTaksit) onEventTaksit(selectedEventId, t);
+    onClose();
+  };
 
   // Aktif taksit planları
   const activePlans = data.installmentPlans.filter(p => {
@@ -1646,9 +1681,29 @@ function CCInstallModal({ data, mk, cards, variableExpenses, onClose, onSave, on
         <Sel label="Kategori" value={categoryId} onChange={handleCategoryChange} options={[{ v: "", l: "— Otomatik / Kategorisiz —" }, ...(variableExpenses || []).map(ve => ({ v: ve.id, l: (ve.icon || "📋") + " " + ve.name }))]} />
       )}
       {categoryId && !userChanged && <div style={{ color: X.g, fontSize: 11, marginTop: -8, marginBottom: 12 }}>✓ Anahtar kelime eşleşmesi bulundu</div>}
+      {/* Planlı etkinlik seçimi */}
+      {(data.plannedEvents || []).length > 0 && (
+        <Sel label="Planlı Etkinlik (opsiyonel)" value={selectedEventId} onChange={setSelectedEventId} options={[{ v: "", l: "— Etkinlik seçilmedi —" }, ...(data.plannedEvents || []).map(ev => ({ v: ev.id, l: `📅 ${ev.name} (taksit hakkı: ${C(Math.max(0, (ev.maxTaksit || 0) - (ev.taksitUsed || 0)))})` }))]} />
+      )}
+      {selectedEvent && suggestedMinMonths && t > 0 && (
+        <div style={{ background: "rgba(99,102,241,0.08)", borderRadius: 8, padding: "8px 10px", marginBottom: 12, fontSize: 11, color: X.p, lineHeight: 1.4 }}>
+          💡 Aylık taksit hakkınızı aşmamak için bu harcamayı <span style={{ fontWeight: 800 }}>en az {suggestedMinMonths} taksit</span> yapmanız önerilir.
+          {eventWouldExceed && <div style={{ color: X.r, fontWeight: 700, marginTop: 4 }}>⚠️ Bu tutar etkinliğin taksit limitini aşıyor (kalan: {C(eventTaksitKalan)})</div>}
+        </div>
+      )}
+      {/* Kalan taksit hakkı bilgisi */}
+      <div style={{ background: wouldExceed ? "rgba(239,68,68,0.08)" : "rgba(99,102,241,0.06)", borderRadius: 8, padding: "8px 10px", marginBottom: 12, fontSize: 11, lineHeight: 1.4 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span style={{ color: X.td }}>Kalan aylık taksit hakkı (bütçenin %12'si)</span>
+          <span style={{ color: wouldExceed ? X.r : X.p, fontWeight: 800, fontFamily: fm }}>{C(remainingInstHak)}</span>
+        </div>
+        {mp > 0 && <div style={{ color: X.td, marginTop: 4 }}>Bu harcamanın aylık taksiti: <span style={{ fontWeight: 700, color: wouldExceed ? X.r : X.t }}>{C(mp)}</span></div>}
+        {wouldExceed && <div style={{ color: X.r, fontWeight: 700, marginTop: 4 }}>⚠️ Taksit yükü bütçenizin %12'sini aşıyor. Daha fazla taksitle deneyin.</div>}
+        <div style={{ color: X.tm, marginTop: 4, fontSize: 10 }}>Sonraki harcamanızı buna göre planlayın.</div>
+      </div>
       {!sim && (
         <div style={{ display: "flex", gap: 8 }}>
-          {!startInSim && <Btn onClick={save} c={X.p} s={{ flex: 1 }} disabled={!cardId}>📅 Direkt Kaydet</Btn>}
+          {!startInSim && <Btn onClick={save} c={X.p} s={{ flex: 1 }} disabled={!cardId || wouldExceed || eventWouldExceed}>📅 Direkt Kaydet</Btn>}
           <Btn onClick={doSim} v={startInSim ? "filled" : "outline"} c={X.p} s={{ flex: 1 }}>🔮 Hesapla</Btn>
         </div>
       )}
@@ -1682,7 +1737,7 @@ function CCInstallModal({ data, mk, cards, variableExpenses, onClose, onSave, on
             return <div style={{ color: X.g, fontSize: 13, fontWeight: 600, marginBottom: 10, lineHeight: 1.5 }}>✅ Bu taksitli işlemi yapabilirsiniz. Taksit sonrası en düşük aylık kalan: {C(minMonth.remaining)} ({ml(minMonth.mk)}). Hiçbir ayda bütçe açığı oluşmuyor.</div>;
           })()}
           <div style={{ display: "flex", gap: 8 }}>
-            <Btn onClick={save} c={X.g} s={{ flex: 1 }} disabled={!cardId}>✓ Taksiti Onayla ve Kaydet</Btn>
+            <Btn onClick={save} c={X.g} s={{ flex: 1 }} disabled={!cardId || wouldExceed || eventWouldExceed}>✓ Taksiti Onayla ve Kaydet</Btn>
             <Btn onClick={() => setSim(null)} v="outline" c={X.td} s={{ flex: 1 }}>Geri</Btn>
           </div>
         </>
@@ -1766,7 +1821,7 @@ function AccountPayModal({ variableExpenses, entries, transferred, onClose, onSa
   );
 }
 
-function CCCombinedModal({ data, mk, cards, variableExpenses, ccSingleEntries, onClose, onSaveSingle, onDeleteSingle, onSaveInstall, onDeletePlan, onEditPlan }) {
+function CCCombinedModal({ data, mk, cards, variableExpenses, ccSingleEntries, onClose, onSaveSingle, onDeleteSingle, onSaveInstall, onDeletePlan, onEditPlan, onEventTaksit }) {
   const [tab, setTab] = useState("single");
   const [a, sa] = useState(""); const [n, sn] = useState(""); const [d, sd] = useState(td());
   const [cardId, setCardId] = useState(cards[0]?.id || "");
@@ -1775,6 +1830,7 @@ function CCCombinedModal({ data, mk, cards, variableExpenses, ccSingleEntries, o
   const [iCardId, setICardId] = useState(cards[0]?.id || "");
   const [iCategoryId, setICategoryId] = useState(""); const [iUserChanged, setIUserChanged] = useState(false);
   const [iNote, setINote] = useState("");
+  const [iSelectedEventId, setISelectedEventId] = useState("");
   const [startMk, setStartMk] = useState(nmk(mk));
   const [sim, setSim] = useState(null);
   const [editingId, setEditingId] = useState(null);
@@ -1811,9 +1867,25 @@ function CCCombinedModal({ data, mk, cards, variableExpenses, ccSingleEntries, o
     setSim({ plan, without, withS, deficit });
   };
 
+  // %12 taksit güvenlik kilidi (CCCombined)
+  const iBudget12 = data.settings.monthlyBudget || 0;
+  const iCurrentInstTotal = data.installmentPlans.reduce((s, p) => {
+    let c = p.startMonth; for (let i2 = 0; i2 < p.months; i2++) { if (c === mk) return s + p.monthlyPayment; c = nmk(c); } return s;
+  }, 0);
+  const iMaxInstLimit = Math.round(iBudget12 * 0.12);
+  const iRemainingInstHak = Math.max(0, iMaxInstLimit - iCurrentInstTotal);
+  const iWouldExceed = mp > 0 && (iCurrentInstTotal + mp) > iMaxInstLimit;
+  const iSelectedEvent = iSelectedEventId ? (data.plannedEvents || []).find(e => e.id === iSelectedEventId) : null;
+  const iEventTaksitKalan = iSelectedEvent ? Math.max(0, (iSelectedEvent.maxTaksit || 0) - (iSelectedEvent.taksitUsed || 0)) : null;
+  const iEventWouldExceed = iSelectedEvent && t > 0 && t > iEventTaksitKalan;
+  const iSuggestedMinMonths = iSelectedEvent && iRemainingInstHak > 0 && t > 0 ? Math.max(1, Math.ceil(t / iRemainingInstHak)) : null;
+
   const saveInstall = () => {
     if (!t || !iCardId) return;
-    onSaveInstall({ id: uid(), totalAmount: t, monthlyPayment: mp, months: m2, rate: 0, startMonth: startMk, remainingMonths: m2, note: iNote, merchantName: "", cardId: iCardId, categoryId: iCategoryId || null, createdDate: td() });
+    if (iWouldExceed) { alert(`Aylık taksit yükü bütçenizin %12'sini aşıyor (max ${C(iMaxInstLimit)}). Bu harcamayı daha fazla taksitle yapın.`); return; }
+    if (iEventWouldExceed) { alert(`Bu harcama, "${iSelectedEvent.name}" etkinliğinin taksit limitini aşıyor (kalan: ${C(iEventTaksitKalan)})`); return; }
+    onSaveInstall({ id: uid(), totalAmount: t, monthlyPayment: mp, months: m2, rate: 0, startMonth: startMk, remainingMonths: m2, note: iNote, merchantName: "", cardId: iCardId, categoryId: iCategoryId || null, eventId: iSelectedEventId || null, createdDate: td() });
+    if (iSelectedEventId && onEventTaksit) onEventTaksit(iSelectedEventId, t);
     onClose();
   };
 
@@ -1908,9 +1980,29 @@ function CCCombinedModal({ data, mk, cards, variableExpenses, ccSingleEntries, o
             <Sel label="Kategori" value={iCategoryId} onChange={v => { setICategoryId(v); setIUserChanged(true); }} options={[{ v: "", l: "— Otomatik / Kategorisiz —" }, ...(variableExpenses || []).map(ve => ({ v: ve.id, l: (ve.icon || "📋") + " " + ve.name }))]} />
           )}
           {iCategoryId && !iUserChanged && <div style={{ color: X.g, fontSize: 11, marginTop: -8, marginBottom: 12 }}>✓ Anahtar kelime eşleşmesi bulundu</div>}
+          {/* Planlı etkinlik seçimi */}
+          {(data.plannedEvents || []).length > 0 && (
+            <Sel label="Planlı Etkinlik (opsiyonel)" value={iSelectedEventId} onChange={setISelectedEventId} options={[{ v: "", l: "— Etkinlik seçilmedi —" }, ...(data.plannedEvents || []).map(ev => ({ v: ev.id, l: `📅 ${ev.name} (taksit hakkı: ${C(Math.max(0, (ev.maxTaksit || 0) - (ev.taksitUsed || 0)))})` }))]} />
+          )}
+          {iSelectedEvent && iSuggestedMinMonths && t > 0 && (
+            <div style={{ background: "rgba(99,102,241,0.08)", borderRadius: 8, padding: "8px 10px", marginBottom: 12, fontSize: 11, color: X.p, lineHeight: 1.4 }}>
+              💡 Aylık taksit hakkınızı aşmamak için bu harcamayı <span style={{ fontWeight: 800 }}>en az {iSuggestedMinMonths} taksit</span> yapmanız önerilir.
+              {iEventWouldExceed && <div style={{ color: X.r, fontWeight: 700, marginTop: 4 }}>⚠️ Bu tutar etkinliğin taksit limitini aşıyor (kalan: {C(iEventTaksitKalan)})</div>}
+            </div>
+          )}
+          {/* Kalan taksit hakkı bilgisi */}
+          <div style={{ background: iWouldExceed ? "rgba(239,68,68,0.08)" : "rgba(99,102,241,0.06)", borderRadius: 8, padding: "8px 10px", marginBottom: 12, fontSize: 11, lineHeight: 1.4 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ color: X.td }}>Kalan aylık taksit hakkı (bütçenin %12'si)</span>
+              <span style={{ color: iWouldExceed ? X.r : X.p, fontWeight: 800, fontFamily: fm }}>{C(iRemainingInstHak)}</span>
+            </div>
+            {mp > 0 && <div style={{ color: X.td, marginTop: 4 }}>Bu harcamanın aylık taksiti: <span style={{ fontWeight: 700, color: iWouldExceed ? X.r : X.t }}>{C(mp)}</span></div>}
+            {iWouldExceed && <div style={{ color: X.r, fontWeight: 700, marginTop: 4 }}>⚠️ Taksit yükü bütçenizin %12'sini aşıyor. Daha fazla taksitle deneyin.</div>}
+            <div style={{ color: X.tm, marginTop: 4, fontSize: 10 }}>Sonraki harcamanızı buna göre planlayın.</div>
+          </div>
           {!sim && (
             <div style={{ display: "flex", gap: 8 }}>
-              <Btn onClick={saveInstall} c={X.p} s={{ flex: 1 }} disabled={!iCardId}>📅 Direkt Kaydet</Btn>
+              <Btn onClick={saveInstall} c={X.p} s={{ flex: 1 }} disabled={!iCardId || iWouldExceed || iEventWouldExceed}>📅 Direkt Kaydet</Btn>
               <Btn onClick={doSim} v="outline" c={X.p} s={{ flex: 1 }}>🔮 Hesapla</Btn>
             </div>
           )}
@@ -1999,7 +2091,7 @@ function CCCombinedModal({ data, mk, cards, variableExpenses, ccSingleEntries, o
                 return <div style={{ color: X.g, fontSize: 13, fontWeight: 600, marginBottom: 10, lineHeight: 1.5 }}>✅ Bu taksitli işlemi yapabilirsiniz. En düşük aylık kalan: {C(minMonth.remaining)} ({ml(minMonth.mk)}).</div>;
               })()}
               <div style={{ display: "flex", gap: 8 }}>
-                <Btn onClick={saveInstall} c={X.g} s={{ flex: 1 }} disabled={!iCardId}>✓ Taksiti Onayla ve Kaydet</Btn>
+                <Btn onClick={saveInstall} c={X.g} s={{ flex: 1 }} disabled={!iCardId || iWouldExceed || iEventWouldExceed}>✓ Taksiti Onayla ve Kaydet</Btn>
                 <Btn onClick={() => setSim(null)} v="outline" c={X.td} s={{ flex: 1 }}>Geri</Btn>
               </div>
             </>
@@ -2578,6 +2670,12 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
   const handleDebtPay = debtId => { setMonthField(mk, "debtPayments", { ...md.debtPayments, [debtId]: { paid: true, date: td() } }); setData(d => ({ ...d, debts: d.debts.map(db => db.id === debtId ? { ...db, remainingMonths: Math.max(0, db.remainingMonths - 1) } : db) })); flash("✓"); };
   const undoDebtPay = debtId => { const dp = { ...md.debtPayments }; delete dp[debtId]; setMonthField(mk, "debtPayments", dp); setData(d => ({ ...d, debts: d.debts.map(db => db.id === debtId ? { ...db, remainingMonths: db.remainingMonths + 1 } : db) })); };
   const handleInstSave = plan => { setData(d => ({ ...d, installmentPlans: [...d.installmentPlans, plan] })); flash("✓ Taksit kaydedildi"); };
+  const handleEventTaksit = (eventId, totalAmount) => {
+    setData(d => ({
+      ...d,
+      plannedEvents: (d.plannedEvents || []).map(ev => ev.id === eventId ? { ...ev, taksitUsed: (ev.taksitUsed || 0) + totalAmount } : ev)
+    }));
+  };
   const handleAccountPay = entry => { setMonthField(mk, "accountEntries", [...(md.accountEntries || []), entry]); flash("✓ Ödeme kaydedildi"); };
   const deleteAccountEntry = id => { setMonthField(mk, "accountEntries", (md.accountEntries || []).filter(e => e.id !== id)); };
   const editAccountEntry = (id, updates) => { setMonthField(mk, "accountEntries", (md.accountEntries || []).map(e => e.id === id ? { ...e, ...updates } : e)); };
@@ -2611,13 +2709,13 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
     data.settings.fixedExpenses.filter(e => e.paymentMethod === "cc").forEach(e => {
       const cid = e.cardId || cards[0]?.id;
       const cardName = cards.find(c2 => c2.id === cid)?.name;
-      items.push({ key: `fixed-${e.id}`, label: e.name, sub: `Sabit zorunlu${cardName ? " • " + cardName : ""}`, amount: e.amount, cardId: cid });
+      items.push({ key: `fixed-${e.id}`, label: e.name, sub: `Sabit zorunlu${cardName ? " • " + cardName : ""}`, amount: e.amount, cardId: cid, sortDate: mk + "-01" });
     });
     // 2. CC tek çekim harcamaları
     (md.ccSingle || []).forEach(e => {
       const cid = e.cardId || cards[0]?.id;
       const cardName = cards.find(c2 => c2.id === cid)?.name;
-      items.push({ key: `single-${e.id}`, label: e.note || e.merchantName || "Tek çekim", sub: `${e.date || ""}${cardName ? " • " + cardName : ""}`, amount: e.amount, cardId: cid });
+      items.push({ key: `single-${e.id}`, label: e.note || e.merchantName || "Tek çekim", sub: `${e.date || ""}${cardName ? " • " + cardName : ""}`, amount: e.amount, cardId: cid, sortDate: e.date || mk + "-01" });
     });
     // 3. Bu ay aktif taksitler
     data.installmentPlans.forEach(p => {
@@ -2626,13 +2724,13 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
         if (cur === mk) {
           const cid = p.cardId || cards[0]?.id;
           const cardName = cards.find(c2 => c2.id === cid)?.name;
-          items.push({ key: `inst-${p.id}`, label: p.note || "Taksit", sub: `${p.monthlyPayment > 0 ? `Taksit ${i + 1}/${p.months}` : ""}${cardName ? " • " + cardName : ""}`, amount: p.monthlyPayment, cardId: cid });
+          items.push({ key: `inst-${p.id}`, label: p.note || "Taksit", sub: `${p.monthlyPayment > 0 ? `Taksit ${i + 1}/${p.months}` : ""}${cardName ? " • " + cardName : ""}`, amount: p.monthlyPayment, cardId: cid, sortDate: p.createdDate || mk + "-01" });
           break;
         }
         cur = nmk(cur);
       }
     });
-    return items;
+    return items.sort((a, b) => (b.sortDate || "").localeCompare(a.sortDate || ""));
   }, [data, md, mk]);
   const ccTransferTotal = ccTransferItems.reduce((s, i) => s + i.amount, 0);
   const ccTransferredCount = ccTransferItems.filter(i => md.ccTransferred?.[i.key]?.transferred).length;
@@ -2847,7 +2945,7 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
           );
 
           if (menuTab === "cc") return (
-            <div style={{ padding: "14px" }}>
+            <div style={{ padding: "14px 14px 90px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
                 <div style={{ color: X.tm, fontSize: 10, fontWeight: 800, letterSpacing: "0.07em", textTransform: "uppercase" }}>KK Aktarımları</div>
                 <span style={{ color: X.b, fontSize: 14, fontWeight: 800, fontFamily: fm }}>{C(ccTransferTotal)}</span>
@@ -3051,9 +3149,9 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
 
       </div>{/* WRAPPER KAPANIŞ */}
 
-      {modal === "ccCombined" && <CCCombinedModal data={data} mk={mk} cards={data.settings.cards || []} variableExpenses={data.settings.variableExpenses || []} ccSingleEntries={md.ccSingle || []} onClose={() => setModal(null)} onSaveSingle={handleCCSingle} onDeleteSingle={deleteCCSingle} onSaveInstall={handleInstSave} onDeletePlan={deleteInstallment} onEditPlan={editInstallment} />}
+      {modal === "ccCombined" && <CCCombinedModal data={data} mk={mk} cards={data.settings.cards || []} variableExpenses={data.settings.variableExpenses || []} ccSingleEntries={md.ccSingle || []} onClose={() => setModal(null)} onSaveSingle={handleCCSingle} onDeleteSingle={deleteCCSingle} onSaveInstall={handleInstSave} onDeletePlan={deleteInstallment} onEditPlan={editInstallment} onEventTaksit={handleEventTaksit} />}
       {modal === "accountPay" && <AccountPayModal variableExpenses={data.settings.variableExpenses || []} entries={md.accountEntries || []} transferred={md.accountTransferred || {}} onClose={() => setModal(null)} onSave={handleAccountPay} onDelete={deleteAccountEntry} onEdit={editAccountEntry} onTransfer={handleAccountTransfer} onUndoTransfer={undoAccountTransfer} />}
-      {modal === "simulate" && <CCCombinedModal data={data} mk={mk} cards={data.settings.cards || []} variableExpenses={data.settings.variableExpenses || []} ccSingleEntries={md.ccSingle || []} onClose={() => setModal(null)} onSaveSingle={handleCCSingle} onDeleteSingle={deleteCCSingle} onSaveInstall={handleInstSave} onDeletePlan={deleteInstallment} onEditPlan={editInstallment} />}
+      {modal === "simulate" && <CCCombinedModal data={data} mk={mk} cards={data.settings.cards || []} variableExpenses={data.settings.variableExpenses || []} ccSingleEntries={md.ccSingle || []} onClose={() => setModal(null)} onSaveSingle={handleCCSingle} onDeleteSingle={deleteCCSingle} onSaveInstall={handleInstSave} onDeletePlan={deleteInstallment} onEditPlan={editInstallment} onEventTaksit={handleEventTaksit} />}
       {modal === "cardLoad" && <CardLoadModal currentLoaded={md.cardLoaded || 0} maxTotal={c.generalCardBudget} entries={md.cardEntries || []} onClose={() => setModal(null)} onSave={handleCardLoad} onDelete={deleteCardEntry} onEdit={editCardEntry} />}
       {modal === "debtPay" && <DebtPayModal debts={data.debts} debtPayments={md.debtPayments} data={data} mk={mk} onClose={() => setModal(null)} onPay={handleDebtPay} onUndo={undoDebtPay} />}
       {modal === "budget" && <BudgetModal mk={mk} cur={md.budget || data.settings.monthlyBudget} def={data.settings.monthlyBudget} onSave={v => setMonthField(mk, "budget", v)} onClose={() => setModal(null)} />}
@@ -4687,6 +4785,7 @@ function PlanningScreen({ data, setData, mk }) {
   const [view, setView] = useState("map");
   const [expandedAsset, setExpandedAsset] = useState(null);
   const [savingsModal, setSavingsModal] = useState(null);
+  const [savSub, setSavSub] = useState("assets");
   const [incSim, setIncSim] = useState({});
   const [detail, setDetail] = useState(null);
 
@@ -4703,6 +4802,14 @@ function PlanningScreen({ data, setData, mk }) {
   const [gTransferModal, setGTransferModal] = useState(null);
   const [gTransferAmt, setGTransferAmt] = useState("");
   const [gTransferFrom, setGTransferFrom] = useState("savings");
+
+  // Planlı Etkinlik form state
+  const [evEditing, setEvEditing] = useState(null);
+  const [evName, setEvName] = useState("");
+  const [evDate, setEvDate] = useState("");
+  const [evBudget, setEvBudget] = useState("");
+  const [evKumbara, setEvKumbara] = useState("");
+  const [evNote, setEvNote] = useState("");
 
   // Borç form state
   const [debtEditing, setDebtEditing] = useState(null);
@@ -4945,7 +5052,7 @@ function PlanningScreen({ data, setData, mk }) {
     { id: "map", l: "12 Ay Haritası", i: "🗺️" },
     { id: "debts", l: "Borçlar", i: "📌" },
     { id: "savings", l: "Birikim", i: "💰" },
-    { id: "goals", l: "Hedefler", i: "🎯" },
+    { id: "events", l: "Planlı Etkinlikler", i: "📅" },
   ];
 
   return (
@@ -5160,6 +5267,17 @@ function PlanningScreen({ data, setData, mk }) {
       {view === "savings" && (() => {
         return (
           <>
+            {/* Alt sekme seçici */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 12 }}>
+              {[{ id: "assets", l: "Varlıklarım", i: "🏦" }, { id: "goals", l: "Hedeflerim", i: "🎯" }].map(s => (
+                <button key={s.id} onClick={() => setSavSub(s.id)} style={{ background: savSub === s.id ? X.gd : "transparent", border: `1px solid ${savSub === s.id ? X.g : X.border}`, borderRadius: 8, padding: "7px 4px", color: savSub === s.id ? X.g : X.tm, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: ff, display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
+                  <span style={{ fontSize: 14 }}>{s.i}</span>{s.l}
+                </button>
+              ))}
+            </div>
+
+            {/* VARLIKLARIM alt sekmesi */}
+            {savSub === "assets" && <>
             <Card s={{ marginBottom: 12, background: "rgba(15,118,110,0.35)", border: "1px solid rgba(15,118,110,0.30)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div><div style={{ color: X.g, fontSize: 14, fontWeight: 800 }}>💰 Birikim Havuzu</div><div style={{ color: X.tm, fontSize: 11, marginTop: 2 }}>Tüm varlıklarınızın güncel TL karşılığı</div></div>
@@ -5232,12 +5350,10 @@ function PlanningScreen({ data, setData, mk }) {
                 </Card>
               );
             })}
-          </>
-        );
-      })()}
+            </>}
 
-      {/* BİRİKİM HEDEFLERİ */}
-      {view === "goals" && (() => {
+            {/* HEDEFLERİM alt sekmesi */}
+            {savSub === "goals" && (() => {
         const goals = data.savingsGoals || [];
         const completedGoals = data.completedGoals || [];
         const activeGoals = goals.filter(g => !g.completed);
@@ -5444,6 +5560,296 @@ function PlanningScreen({ data, setData, mk }) {
                   </div>
                 </div>
               </div>
+            )}
+          </>
+        );
+      })()}
+            </>
+        );
+      })()}
+
+      {/* PLANLI ETKİNLİKLER */}
+      {view === "events" && (() => {
+        const events = data.plannedEvents || [];
+        const completedEvs = data.completedEvents || [];
+        const budget = data.settings.monthlyBudget || 0;
+
+        // Taksit yükü hesabı: tüm aktif taksitlerin bu ayki aylık toplamı
+        const currentInstTotal = data.installmentPlans.reduce((s, p) => {
+          let c = p.startMonth;
+          for (let i = 0; i < p.months; i++) { if (c === mk) return s + p.monthlyPayment; c = nmk(c); }
+          return s;
+        }, 0);
+        const maxInstLimit = Math.round(budget * 0.12);
+        const remainingInstHak = Math.max(0, maxInstLimit - currentInstTotal);
+
+        // Etkinliğe kalan ay hesabı
+        const monthsUntil = (targetMk) => {
+          let cur = mk, count = 0;
+          for (let i = 0; i < 60; i++) { if (cur === targetMk) return count; cur = nmk(cur); count++; }
+          return count;
+        };
+
+        const evStartNew = () => {
+          setEvName(""); setEvDate(""); setEvBudget(""); setEvKumbara(""); setEvNote("");
+          setEvEditing("new");
+        };
+        const evStartEdit = (ev) => {
+          setEvName(ev.name); setEvDate(ev.date); setEvBudget(ev.budget ? String(ev.budget) : "");
+          setEvKumbara(ev.kumbara ? String(ev.kumbara) : ""); setEvNote(ev.note || "");
+          setEvEditing(ev.id);
+        };
+        const evCancel = () => setEvEditing(null);
+        const evSave = () => {
+          if (!evName || !evDate) return;
+          const budgetNum = parseFloat(evBudget) || 0;
+          const kumbaraNum = parseFloat(evKumbara) || 0;
+          // Bütçe varsa kumbara min %30 kontrolü
+          if (budgetNum > 0 && kumbaraNum > 0 && kumbaraNum < budgetNum * 0.3) {
+            alert(`Kumbara tutarı, etkinlik bütçesinin en az %30'u olmalıdır (min ${C(Math.ceil(budgetNum * 0.3))})`);
+            return;
+          }
+          const maxTaksit70 = budgetNum > 0 ? budgetNum * 0.7 : (kumbaraNum > 0 ? kumbaraNum * 7 / 3 : 0);
+          const maxTaksitKalan = budgetNum > 0 && kumbaraNum > 0 ? budgetNum - kumbaraNum : maxTaksit70;
+          const maxTaksit = Math.min(maxTaksit70, maxTaksitKalan);
+          setData(d => {
+            const list = [...(d.plannedEvents || [])];
+            const prev = list.find(x => x.id === evEditing);
+            const entry = {
+              id: evEditing === "new" ? uid() : evEditing,
+              name: evName, date: evDate, budget: budgetNum, kumbara: kumbaraNum,
+              kumbaraAccumulated: evEditing === "new" ? 0 : (prev?.kumbaraAccumulated || 0),
+              maxTaksit: Math.round(Math.max(0, maxTaksit)), taksitUsed: evEditing === "new" ? 0 : (prev?.taksitUsed || 0),
+              note: evNote, createdDate: td()
+            };
+            if (evEditing === "new") list.push(entry);
+            else { const idx = list.findIndex(x => x.id === evEditing); if (idx >= 0) list[idx] = { ...list[idx], ...entry }; }
+            return { ...d, plannedEvents: list };
+          });
+          evCancel();
+        };
+        const evDelete = id => {
+          if (confirm("Bu etkinliği silmek istediğinize emin misiniz?")) setData(d => ({ ...d, plannedEvents: (d.plannedEvents || []).filter(x => x.id !== id) }));
+        };
+        const evComplete = (id, success) => {
+          const ev = (data.plannedEvents || []).find(e => e.id === id);
+          if (!ev) return;
+          const accumulated = ev.kumbaraAccumulated || 0;
+          if (!success && accumulated > 0) {
+            // Gerçekleşmedi: sadece biriken gerçek tutarı birikim havuzuna gönder
+            setData(d => ({
+              ...d,
+              plannedEvents: (d.plannedEvents || []).filter(x => x.id !== id),
+              completedEvents: [...(d.completedEvents || []), { ...ev, completedDate: td(), success: false }],
+              savings: { ...d.savings, TRY: [...(d.savings.TRY || []), { type: "buy", amount: accumulated, unitPrice: 1, date: td(), note: `${ev.name} iptal — kumbara iadesi` }] }
+            }));
+          } else {
+            setData(d => ({
+              ...d,
+              plannedEvents: (d.plannedEvents || []).filter(x => x.id !== id),
+              completedEvents: [...(d.completedEvents || []), { ...ev, completedDate: td(), success }]
+            }));
+          }
+        };
+        const evTransferKumbara = (id) => {
+          const ev = (data.plannedEvents || []).find(e => e.id === id);
+          if (!ev || !ev.kumbara) return;
+          const kAy = monthsUntil(ev.date);
+          const remaining = ev.kumbara - (ev.kumbaraAccumulated || 0);
+          const aylik = kAy > 0 ? Math.ceil(ev.kumbara / (kAy + 1)) : remaining;
+          const transferAmt = Math.min(aylik, remaining);
+          if (transferAmt <= 0) return;
+          if (!confirm(`"${ev.name}" kumbarasına bu ay ${C(transferAmt)} aktarılsın mı?`)) return;
+          setData(d => ({
+            ...d,
+            plannedEvents: (d.plannedEvents || []).map(x => x.id === id ? { ...x, kumbaraAccumulated: (x.kumbaraAccumulated || 0) + transferAmt } : x)
+          }));
+        };
+
+        const inpS = { width: "100%", background: "white", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 10, padding: "10px 12px", fontSize: 14, color: X.t, boxSizing: "border-box" };
+        const lblS = { color: X.td, fontSize: 12, marginBottom: 4, fontWeight: 600, display: "block" };
+
+        const budgetNum = parseFloat(evBudget) || 0;
+        const kumbaraNum = parseFloat(evKumbara) || 0;
+        const maxTaksit70 = budgetNum > 0 ? budgetNum * 0.7 : (kumbaraNum > 0 ? kumbaraNum * 7 / 3 : 0);
+        const taksitKalanCalc = budgetNum > 0 && kumbaraNum > 0 ? budgetNum - kumbaraNum : maxTaksit70;
+        const maxTaksitCalc = Math.max(0, Math.min(maxTaksit70, taksitKalanCalc));
+
+        const evForm = evEditing ? (
+          <div style={{ background: "rgba(99,102,241,0.05)", border: "1px solid rgba(99,102,241,0.2)", borderRadius: 14, padding: 12, marginBottom: 12 }}>
+            <div style={{ color: X.p, fontSize: 14, fontWeight: 800, marginBottom: 10 }}>{evEditing === "new" ? "📅 Yeni Etkinlik" : "✎ Düzenle"}</div>
+            <label style={lblS}>Etkinlik Adı *</label>
+            <input value={evName} onChange={e => setEvName(e.target.value)} placeholder="Örn: Kurban Bayramı, Antalya Tatili" style={{ ...inpS, marginBottom: 10 }} />
+            <label style={lblS}>Etkinlik Tarihi *</label>
+            <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+              <select value={evDate ? parseInt(evDate.split("-")[1]) || "" : ""} onChange={e => { const m = String(e.target.value).padStart(2, "0"); const y = evDate ? evDate.split("-")[0] : String(new Date().getFullYear()); setEvDate(`${y}-${m}`); }} style={{ ...inpS, flex: 1, appearance: "none", WebkitAppearance: "none", backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23999'/%3E%3C/svg%3E\")", backgroundRepeat: "no-repeat", backgroundPosition: "right 12px center" }}>
+                <option value="">Ay</option>
+                {MTR.map((name, i) => <option key={i} value={i + 1}>{name}</option>)}
+              </select>
+              <select value={evDate ? parseInt(evDate.split("-")[0]) || "" : ""} onChange={e => { const y = e.target.value; const m = evDate ? evDate.split("-")[1] : "01"; setEvDate(`${y}-${m}`); }} style={{ ...inpS, flex: 0.7, appearance: "none", WebkitAppearance: "none", backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23999'/%3E%3C/svg%3E\")", backgroundRepeat: "no-repeat", backgroundPosition: "right 12px center" }}>
+                <option value="">Yıl</option>
+                {[0, 1, 2, 3, 4].map(i => { const y = new Date().getFullYear() + i; return <option key={y} value={y}>{y}</option>; })}
+              </select>
+            </div>
+            <label style={lblS}>Tahmini Bütçe (opsiyonel)</label>
+            <input type="number" value={evBudget} onChange={e => setEvBudget(e.target.value)} placeholder="Örn: 50000" style={{ ...inpS, marginBottom: 4 }} />
+            {budgetNum > 0 && <div style={{ color: X.td, fontSize: 10, marginBottom: 10 }}>Kumbara min: {C(Math.ceil(budgetNum * 0.3))} (%30) · Taksit max harcanabilir: {C(Math.round(budgetNum * 0.7))} (%70)</div>}
+            <label style={lblS}>Kumbara Tutarı (nakit ayıracağınız tutar)</label>
+            <input type="number" value={evKumbara} onChange={e => setEvKumbara(e.target.value)} placeholder="Örn: 20000" style={{ ...inpS, marginBottom: 4 }} />
+            {kumbaraNum > 0 && evDate && (() => {
+              const kAy = monthsUntil(evDate);
+              const aylik = kAy > 0 ? Math.ceil(kumbaraNum / kAy) : kumbaraNum;
+              return <div style={{ color: X.g, fontSize: 10, marginBottom: 4 }}>Aylık bloke: {C(aylik)} ({kAy} ay × {C(aylik)})</div>;
+            })()}
+            {budgetNum > 0 && kumbaraNum > 0 && <div style={{ color: X.p, fontSize: 10, marginBottom: 10 }}>Taksitli harcama için kalan: {C(Math.max(0, budgetNum - kumbaraNum))} · Max harcanabilir: {C(Math.round(budgetNum * 0.7))}</div>}
+            {!budgetNum && kumbaraNum > 0 && <div style={{ color: X.td, fontSize: 10, marginBottom: 10 }}>Dinamik taksit limiti: {C(Math.round(kumbaraNum * 7 / 3))}</div>}
+            <label style={lblS}>Not (opsiyonel)</label>
+            <input value={evNote} onChange={e => setEvNote(e.target.value)} placeholder="Ek detaylar..." style={{ ...inpS, marginBottom: 10 }} />
+            <div style={{ display: "flex", gap: 8 }}>
+              <Btn onClick={evSave} c={X.p} s={{ flex: 1 }} disabled={!evName || !evDate}>💾 Kaydet</Btn>
+              <Btn onClick={evCancel} v="outline" c={X.td} s={{ flex: 1 }}>İptal</Btn>
+            </div>
+          </div>
+        ) : null;
+
+        return (
+          <>
+            {/* Genel taksit hakkı bilgisi */}
+            <Card s={{ marginBottom: 12, background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.2)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div>
+                  <div style={{ color: X.p, fontSize: 13, fontWeight: 700 }}>📊 Aylık Taksit Kapasitesi</div>
+                  <div style={{ color: X.td, fontSize: 10, marginTop: 2 }}>Bütçenizin %12'si · max {C(maxInstLimit)}</div>
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <div style={{ color: remainingInstHak > 0 ? X.g : X.r, fontSize: 18, fontWeight: 800, fontFamily: fm }}>{C(remainingInstHak)}</div>
+                  <div style={{ color: X.td, fontSize: 10 }}>kalan hak</div>
+                </div>
+              </div>
+              <div style={{ height: 5, borderRadius: 3, background: "rgba(0,0,0,0.06)", marginTop: 8, overflow: "hidden" }}>
+                <div style={{ height: "100%", borderRadius: 3, background: currentInstTotal <= maxInstLimit ? X.p : X.r, width: `${Math.min(100, (currentInstTotal / maxInstLimit) * 100)}%`, transition: "width 0.4s" }} />
+              </div>
+            </Card>
+
+            {/* Yeni etkinlik butonu */}
+            {!evEditing && (
+              <button onClick={evStartNew} style={{ width: "100%", background: "rgba(99,102,241,0.06)", border: "2px dashed rgba(99,102,241,0.3)", borderRadius: 14, padding: "16px", color: X.p, fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: ff, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 10 }}>
+                <span style={{ fontSize: 20 }}>＋</span> Yeni Etkinlik Ekle
+              </button>
+            )}
+
+            {evEditing === "new" && evForm}
+
+            {events.length === 0 && !evEditing && (
+              <Card s={{ textAlign: "center", padding: 24 }}>
+                <div style={{ fontSize: 36, marginBottom: 8 }}>📅</div>
+                <div style={{ color: X.td, fontSize: 13 }}>Henüz planlı etkinlik yok</div>
+                <div style={{ color: X.tm, fontSize: 11, marginTop: 4 }}>Tatil, bayram, düğün gibi etkinliklerinizi planlayın</div>
+              </Card>
+            )}
+
+            {/* Etkinlik kartları */}
+            {events.map(ev => {
+              const kAy = monthsUntil(ev.date);
+              const aylikBloke = ev.kumbara > 0 && kAy > 0 ? Math.ceil(ev.kumbara / kAy) : ev.kumbara || 0;
+              const taksitUsed = ev.taksitUsed || 0;
+              const maxTaksit = ev.maxTaksit || 0;
+              const taksitKalan = Math.max(0, maxTaksit - taksitUsed);
+              const isEditing = evEditing === ev.id;
+              const isPast = ev.date < mk;
+
+              return (
+                <div key={ev.id}>
+                  <Card s={{ marginBottom: isEditing ? 0 : 8, borderRadius: isEditing ? "14px 14px 0 0" : 14, borderLeft: `3px solid ${X.p}` }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <span style={{ fontSize: 14 }}>📅</span>
+                          <span style={{ color: X.t, fontSize: 14, fontWeight: 800 }}>{ev.name}</span>
+                        </div>
+                        <div style={{ color: X.td, fontSize: 11, marginTop: 2 }}>
+                          {ml(ev.date)} · {isPast ? <span style={{ color: X.w }}>Tarihi geçti</span> : <span style={{ color: X.g }}>{kAy} ay kaldı</span>}
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", gap: 5, flexShrink: 0, marginLeft: 8 }}>
+                        <button onClick={() => isEditing ? evCancel() : evStartEdit(ev)} style={{ background: X.bd, border: `1px solid ${X.b}`, borderRadius: 6, padding: "3px 8px", color: X.b, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>{isEditing ? "▲" : "✎"}</button>
+                        <button onClick={() => evDelete(ev.id)} style={{ background: X.rd, border: `1px solid ${X.r}`, borderRadius: 6, padding: "3px 8px", color: X.r, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>✕</button>
+                      </div>
+                    </div>
+
+                    {/* Bütçe bilgisi */}
+                    {ev.budget > 0 && (
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, fontSize: 12 }}>
+                        <span style={{ color: X.td }}>Tahmini bütçe</span>
+                        <span style={{ color: X.t, fontWeight: 700, fontFamily: fm }}>{C(ev.budget)}</span>
+                      </div>
+                    )}
+
+                    {/* Kumbara */}
+                    {ev.kumbara > 0 && (() => {
+                      const accumulated = ev.kumbaraAccumulated || 0;
+                      const remaining = ev.kumbara - accumulated;
+                      const pct = ev.kumbara > 0 ? Math.min(100, Math.round((accumulated / ev.kumbara) * 100)) : 0;
+                      return (
+                      <div style={{ background: "rgba(34,197,94,0.06)", borderRadius: 8, padding: "6px 10px", marginBottom: 6 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11 }}>
+                          <span style={{ color: X.g, fontWeight: 700 }}>🏦 Kumbara</span>
+                          <span style={{ color: X.g, fontWeight: 700, fontFamily: fm }}>{C(accumulated)} / {C(ev.kumbara)}</span>
+                        </div>
+                        <div style={{ height: 4, borderRadius: 2, background: "rgba(0,0,0,0.06)", marginTop: 4 }}>
+                          <div style={{ height: "100%", borderRadius: 2, background: X.g, width: `${pct}%`, transition: "width 0.4s" }} />
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
+                          <div style={{ color: X.td, fontSize: 10 }}>
+                            {kAy > 0 ? `Aylık bloke: ${C(aylikBloke)} · ${kAy} ay kaldı` : "Tarih geldi"}
+                            {remaining <= 0 && " · ✓ Tamamlandı"}
+                          </div>
+                          {remaining > 0 && (
+                            <button onClick={() => evTransferKumbara(ev.id)} style={{ background: X.gd, border: `1px solid ${X.g}`, borderRadius: 6, padding: "2px 8px", color: X.g, fontSize: 10, fontWeight: 700, cursor: "pointer", fontFamily: ff }}>+ Aktar</button>
+                          )}
+                        </div>
+                      </div>
+                      );
+                    })()}
+
+                    {/* Taksit durumu */}
+                    {maxTaksit > 0 && (
+                      <div style={{ background: "rgba(99,102,241,0.06)", borderRadius: 8, padding: "6px 10px", marginBottom: 6 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11 }}>
+                          <span style={{ color: X.p, fontWeight: 700 }}>💳 Taksit hakkı</span>
+                          <span style={{ color: X.p, fontWeight: 700, fontFamily: fm }}>{C(taksitKalan)} / {C(maxTaksit)}</span>
+                        </div>
+                        {taksitUsed > 0 && <div style={{ color: X.td, fontSize: 10, marginTop: 2 }}>Kullanılan: {C(taksitUsed)}</div>}
+                      </div>
+                    )}
+
+                    {ev.note && <div style={{ color: X.td, fontSize: 11, marginTop: 4 }}>📝 {ev.note}</div>}
+
+                    {/* Tamamla butonları */}
+                    <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
+                      <button onClick={() => { if (confirm(`"${ev.name}" gerçekleşti mi?`)) evComplete(ev.id, true); }} style={{ flex: 1, background: X.gd, border: `1px solid ${X.g}`, borderRadius: 8, padding: "7px", color: X.g, fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: ff }}>✓ Gerçekleşti</button>
+                      <button onClick={() => { const acc = ev.kumbaraAccumulated || 0; if (confirm(`"${ev.name}" gerçekleşmedi mi?${acc > 0 ? ` Biriken ${C(acc)} birikim havuzuna aktarılacak.` : ""}`)) evComplete(ev.id, false); }} style={{ flex: 1, background: X.rd, border: `1px solid ${X.r}`, borderRadius: 8, padding: "7px", color: X.r, fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: ff }}>✕ Gerçekleşmedi</button>
+                    </div>
+                  </Card>
+                  {isEditing && <div style={{ marginBottom: 8 }}>{evForm}</div>}
+                </div>
+              );
+            })}
+
+            {/* Tamamlanan etkinlikler */}
+            {completedEvs.length > 0 && (
+              <Card s={{ background: "rgba(99,102,241,0.06)", border: "1px solid rgba(99,102,241,0.15)", marginTop: 8 }}>
+                <div style={{ color: X.p, fontSize: 13, fontWeight: 700, marginBottom: 10 }}>📋 Geçmiş Etkinlikler</div>
+                {completedEvs.map(ev => (
+                  <div key={ev.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: `1px solid ${X.border}` }}>
+                    <div>
+                      <div style={{ color: X.t, fontSize: 13, fontWeight: 700 }}>{ev.name}</div>
+                      <div style={{ color: X.td, fontSize: 10, marginTop: 1 }}>{ml(ev.date)} · {ev.budget > 0 ? C(ev.budget) : "Bütçesiz"}</div>
+                    </div>
+                    <div style={{ background: ev.success ? X.g : X.r, color: "white", borderRadius: 6, padding: "2px 8px", fontSize: 10, fontWeight: 700 }}>{ev.success ? "✓ Yapıldı" : "✕ İptal"}</div>
+                  </div>
+                ))}
+              </Card>
             )}
           </>
         );
@@ -6947,7 +7353,8 @@ export default function App() {
       { label: "Taksit ödemeleri", value: c.installmentTotal || 0, sign: "" },
       { label: "Değişken gider kalan tahmini", value: c.variableBlokeKalan || 0, sign: "" },
       { label: "Genel kart kalan hakkı", value: c.cardBlokeKalan || 0, sign: "" },
-      { label: "Beklenmeyen Gider Fonu", value: c.emergencyBuffer || 0, sign: "", label: "Beklenmeyen Gider Fonu" },
+      { label: "Beklenmeyen Gider Fonu", value: c.emergencyBuffer || 0, sign: "" },
+      { label: "Etkinlik kumbara bloke", value: c.eventKumbaraBloke || 0, sign: "" },
     ].filter(r => r.value > 0);
     setHeaderDetail({ title: "Bloke Detayı", rows, total: c.groupB || 0, totalLabel: "Toplam bloke (kesin çıkacak ödemeler)", totalColor: X.w });
   };
