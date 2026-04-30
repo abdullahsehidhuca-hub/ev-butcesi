@@ -4142,8 +4142,76 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
               // Ortalama fiş tutarı
               const avgReceipt = allReceipts.length > 0 ? Math.round(allReceipts.reduce((s, r) => s + (r.totalAmount || 0), 0) / allReceipts.length) : 0;
 
+              // Fiyat değişim takibi: aynı ürün+marka farklı fişlerde
+              const priceTrack = {};
+              allReceipts.forEach(r => (r.items || []).forEach(item => {
+                const key = (item.name || "").toLowerCase().trim();
+                if (!key) return;
+                if (!priceTrack[key]) priceTrack[key] = [];
+                priceTrack[key].push({ price: item.price || 0, brand: item.brand || "", store: (r.store || "").trim(), date: r.date || "", monthKey: r.monthKey, qty: item.qty || 1 });
+              }));
+              // Aynı marka+ürün fiyat değişimi
+              const priceChanges = [];
+              // Farklı mağazada aynı ürün fiyat farkı
+              const priceCompare = [];
+              Object.entries(priceTrack).forEach(([name, entries]) => {
+                if (entries.length < 2) return;
+                // Aynı marka, farklı tarih → fiyat artışı
+                const byBrand = {};
+                entries.forEach(e => {
+                  const bk = e.brand.toLowerCase().trim() || "_nobrand";
+                  if (!byBrand[bk]) byBrand[bk] = [];
+                  byBrand[bk].push(e);
+                });
+                Object.entries(byBrand).forEach(([brand, bEntries]) => {
+                  if (bEntries.length < 2) return;
+                  const sorted = bEntries.sort((a, b) => (a.date || a.monthKey).localeCompare(b.date || b.monthKey));
+                  const first = sorted[0], last = sorted[sorted.length - 1];
+                  if (first.price > 0 && last.price > 0 && first.price !== last.price) {
+                    const pct = Math.round(((last.price - first.price) / first.price) * 100);
+                    if (Math.abs(pct) >= 5) {
+                      priceChanges.push(`  ${name}${brand !== "_nobrand" ? " ("+first.brand+")" : ""}: ${C(first.price)} → ${C(last.price)} (${pct >= 0 ? "+" : ""}${pct}%)`);
+                    }
+                  }
+                });
+                // Farklı mağaza, aynı ürün → ucuz yönlendirme
+                const byStore2 = {};
+                entries.forEach(e => {
+                  const sk = e.store.toLowerCase().trim();
+                  if (!sk) return;
+                  if (!byStore2[sk]) byStore2[sk] = { prices: [], store: e.store };
+                  byStore2[sk].prices.push(e.price);
+                });
+                const stores2 = Object.values(byStore2).filter(s => s.prices.length > 0);
+                if (stores2.length >= 2) {
+                  const withAvg = stores2.map(s => ({ store: s.store, avg: Math.round(s.prices.reduce((a,b) => a+b,0) / s.prices.length) })).sort((a, b) => a.avg - b.avg);
+                  if (withAvg[0].avg < withAvg[withAvg.length - 1].avg * 0.85) {
+                    priceCompare.push(`  ${name}: en ucuz ${withAvg[0].store} (${C(withAvg[0].avg)}), en pahalı ${withAvg[withAvg.length - 1].store} (${C(withAvg[withAvg.length - 1].avg)})`);
+                  }
+                }
+              });
+              const priceChangeLines = priceChanges.length > 0 ? priceChanges.slice(0, 10).join("\n") : "  Yeterli veri yok";
+              const priceCompareLines = priceCompare.length > 0 ? priceCompare.slice(0, 10).join("\n") : "  Yeterli veri yok";
+
+              // Sık alınan ürünler (3+ kez)
+              const freqItems = Object.entries(priceTrack)
+                .map(([name, entries]) => ({ name, count: entries.length, totalSpent: entries.reduce((s, e) => s + e.price * e.qty, 0), brand: entries[0]?.brand || "" }))
+                .filter(f => f.count >= 3)
+                .sort((a, b) => b.count - a.count)
+                .slice(0, 10)
+                .map(f => `  ${f.name}${f.brand ? " ("+f.brand+")" : ""}: ${f.count} kez alınmış, toplam ${C(Math.round(f.totalSpent))}`)
+                .join("\n");
+
+              // Harcama profili verileri
+              const allTxDates3 = allReceipts.map(r => r.date).filter(Boolean).sort();
+              const weekdayDist = [0,0,0,0,0,0,0]; // Pzt-Paz
+              allReceipts.forEach(r => { if (r.date) { const d = new Date(r.date).getDay(); weekdayDist[d === 0 ? 6 : d - 1]++; } });
+              const dayNames = ["Pzt","Sal","Çar","Per","Cum","Cmt","Paz"];
+              const peakDay = dayNames[weekdayDist.indexOf(Math.max(...weekdayDist))];
+              const avgDaysBetween = allTxDates3.length >= 2 ? Math.round((new Date(allTxDates3[allTxDates3.length-1]) - new Date(allTxDates3[0])) / (86400000 * (allTxDates3.length - 1))) : 0;
+
               return `\nMARKET ALIŞVERİŞ ANALİTİĞİ (son 3 dönem, ${allReceipts.length} fiş):
-Ortalama fiş tutarı: ${C(avgReceipt)}
+Ortalama fiş tutarı: ${C(avgReceipt)} | Alışveriş sıklığı: ortalama ${avgDaysBetween} günde bir | En yoğun gün: ${peakDay}
 
 Mağaza bazlı:
 ${storeLines}
@@ -4152,7 +4220,21 @@ ${storeLines}
 ${catLines}
 
 En yüksek tutarlı 5 ürün:
-${topItems}`;
+${topItems}
+
+FİYAT DEĞİŞİM TAKİBİ (aynı marka+ürün, farklı tarih):
+${priceChangeLines}
+
+MAĞAZA FİYAT KARŞILAŞTIRMASI (aynı ürün, farklı mağaza):
+${priceCompareLines}
+
+SIK ALINAN ÜRÜNLER (3+ kez):
+${freqItems || "  Yeterli veri yok"}
+
+HARCAMA PROFİLİ VERİLERİ:
+  Alışveriş sıklığı: ${avgDaysBetween} günde bir, toplam ${allReceipts.length} fiş
+  En yoğun alışveriş günü: ${peakDay}
+  Gün dağılımı: ${dayNames.map((d,i) => `${d}:${weekdayDist[i]}`).join(", ")}`;
             })();
 
             // CSV ekstresi verisi
@@ -4378,11 +4460,18 @@ ${goldRiskLine ? "- Altın borcu kur hareketinden nasıl etkilenir?" : ""}
 - Somut bir tasarruf fırsatı var mı? (bir kategoride bütçe altı kalma, erken ödeme avantajı vb.)
 
 ## Alışveriş Yönlendirmesi
-- Market fiş verisi varsa: alışveriş alışkanlıklarını analiz et
-- Sık gidilen mağazalar arasında fiyat karşılaştırması var mı?
-- En çok harcanan ürün kategorisinde tasarruf fırsatı var mı?
-- Alışveriş sıklığı (çok sık küçük alışveriş mi, nadir büyük alışveriş mi?) ve bu tercihin bütçeye etkisi
-- Market fişi yoksa bu bölümü atla
+- Market fiş verisi yoksa bu bölümü atla
+- FİYAT DEĞİŞİM: Aynı marka+ürün fiyat artışı varsa uyar. Kişisel sepet enflasyonunu yorumla.
+- MAĞAZA KARŞILAŞTIRMASI: Aynı ürün farklı mağazalarda farklı fiyattaysa ucuz olana yönlendir.
+- SIK ALINAN ÜRÜNLER: 3+ kez alınan ürünler için somut tavsiye ver:
+  • Daha büyük ambalaj/toplu alım tasarruf sağlar mı?
+  • İnternet siparişi (Getir, Trendyol, Migros Sanal) daha ucuz olabilir mi?
+  • Mağaza markası (market kendi markası) alternatifi var mı?
+- HARCAMA PROFİLİ: Alışveriş sıklığı ve zamanlama alışkanlığından davranışsal çıkarım yap. Örn: "Sık küçük alışveriş yapılıyor, haftalık toplu alışverişe geçilse fiş başına tasarruf mümkün" veya "Hafta sonu yığılması var, hafta içi fırsatları kaçırılıyor"
+
+## Harcama Kişilik Profili
+- Tüm verilere bakarak tek cümlelik bir harcama profili çıkar. Örn: "Planlı harcamacı ama dönem ortasında impulsif alışveriş eğilimi var" veya "Tutumlu profil, sabit gider ağırlıklı bütçe, değişkenlerde kontrollü"
+- Bu profil üzerinden bir güçlü yön ve bir gelişim alanı belirt
 
 ## 3 Aksiyon
 - Bu döneme özel 3 somut, uygulanabilir aksiyon. Her birinde RAKAM ver (örn: "X kategorisinde günlük Y TL ile sınırla"). "Tasarruf edin" gibi boş tavsiye VERME.
