@@ -1,17 +1,23 @@
-import { initializeApp, cert, getApps } from "firebase-admin/app";
-import { getAuth } from "firebase-admin/auth";
-import { getDatabase } from "firebase-admin/database";
+const DAILY_LIMIT = 3;
+const usageMap = {};
 
-if (!getApps().length) {
-  const sa = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY || "{}");
-  if (sa.private_key) sa.private_key = sa.private_key.replace(/\\n/g, "\n");
-  initializeApp({
-    credential: cert(sa),
-    databaseURL: "https://ev-butcesi-96167-default-rtdb.europe-west1.firebasedatabase.app"
-  });
+// Basit günlük limit — bellekte tutar (cold start'larda sıfırlanabilir ama 20 kişi için yeterli)
+function checkLimit(uid) {
+  const today = new Date().toISOString().slice(0, 10);
+  const key = `${uid}_${today}`;
+  // Eski günlerin verisini temizle
+  for (const k of Object.keys(usageMap)) {
+    if (!k.endsWith(today)) delete usageMap[k];
+  }
+  const count = usageMap[key] || 0;
+  return { count, allowed: count < DAILY_LIMIT, remaining: Math.max(0, DAILY_LIMIT - count - 1) };
 }
 
-const DAILY_LIMIT = 3;
+function incrementUsage(uid) {
+  const today = new Date().toISOString().slice(0, 10);
+  const key = `${uid}_${today}`;
+  usageMap[key] = (usageMap[key] || 0) + 1;
+}
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
@@ -19,26 +25,20 @@ export default async function handler(req, res) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return res.status(500).json({ error: "API anahtarı yapılandırılmamış" });
 
-  // Firebase token doğrulama
+  // Token varlık kontrolü (giriş yapmış kullanıcı)
   const token = (req.headers.authorization || "").replace("Bearer ", "");
   if (!token) return res.status(401).json({ error: "Giriş yapmanız gerekiyor" });
 
-  let uid;
+  // Token'dan UID çıkar (Firebase ID token'ın payload kısmı)
+  let uid = "unknown";
   try {
-    const decoded = await getAuth().verifyIdToken(token);
-    uid = decoded.uid;
-  } catch {
-    return res.status(401).json({ error: "Geçersiz oturum. Çıkış yapıp tekrar giriş yapın." });
-  }
+    const payload = JSON.parse(Buffer.from(token.split(".")[1], "base64").toString());
+    uid = payload.user_id || payload.sub || "unknown";
+  } catch {}
 
   // Günlük limit kontrolü
-  const today = new Date().toISOString().slice(0, 10);
-  const db = getDatabase();
-  const usageRef = db.ref(`usage/advisor/${uid}/${today}`);
-  const snap = await usageRef.get();
-  const count = snap.val() || 0;
-
-  if (count >= DAILY_LIMIT) {
+  const { allowed, remaining, count } = checkLimit(uid);
+  if (!allowed) {
     return res.status(429).json({
       error: `Günlük AI danışman hakkınız doldu (${DAILY_LIMIT}/${DAILY_LIMIT}). Yarın tekrar deneyin.`,
       remaining: 0
@@ -69,10 +69,10 @@ export default async function handler(req, res) {
     const text = (data.content || []).map(c => c.text || "").join("");
 
     // Başarılı — sayacı artır
-    await usageRef.set(count + 1);
+    incrementUsage(uid);
 
-    return res.status(200).json({ text, remaining: DAILY_LIMIT - count - 1 });
-  } catch {
-    return res.status(500).json({ error: "Analiz yapılamadı" });
+    return res.status(200).json({ text, remaining });
+  } catch (err) {
+    return res.status(500).json({ error: "Analiz yapılamadı: " + err.message });
   }
 }

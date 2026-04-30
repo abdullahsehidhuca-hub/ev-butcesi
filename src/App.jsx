@@ -4298,7 +4298,9 @@ ${goldRiskLine ? "- Altın borcu kur değişiminin etkisini değerlendir." : ""}
               headers: { "Content-Type": "application/json", "Authorization": `Bearer ${idToken}` },
               body: JSON.stringify({ prompt })
             });
-            const d = await res.json();
+            const txt = await res.text();
+            let d;
+            try { d = JSON.parse(txt); } catch { throw new Error("Sunucu geçersiz yanıt döndü (HTTP " + res.status + ")"); }
             if (!res.ok) throw new Error(d.error || "Analiz yapılamadı");
             setAiText(d.text || "");
             if (typeof d.remaining === "number") setAiText(prev => prev + `\n\n---\n_Bugün ${d.remaining} AI danışman hakkınız kaldı._`);

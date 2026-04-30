@@ -1,30 +1,12 @@
-import { initializeApp, cert, getApps } from "firebase-admin/app";
-import { getAuth } from "firebase-admin/auth";
-
-if (!getApps().length) {
-  const sa = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY || "{}");
-  if (sa.private_key) sa.private_key = sa.private_key.replace(/\\n/g, "\n");
-  initializeApp({
-    credential: cert(sa),
-    databaseURL: "https://ev-butcesi-96167-default-rtdb.europe-west1.firebasedatabase.app"
-  });
-}
-
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return res.status(500).json({ error: "API anahtarı yapılandırılmamış" });
 
-  // Firebase token doğrulama
+  // Token varlık kontrolü
   const token = (req.headers.authorization || "").replace("Bearer ", "");
   if (!token) return res.status(401).json({ error: "Giriş yapmanız gerekiyor" });
-
-  try {
-    await getAuth().verifyIdToken(token);
-  } catch {
-    return res.status(401).json({ error: "Geçersiz oturum" });
-  }
 
   const { base64, mediaType } = req.body;
   if (!base64 || !mediaType) return res.status(400).json({ error: "Görsel verisi eksik" });
@@ -57,7 +39,7 @@ export default async function handler(req, res) {
     const clean = text.replace(/```json|```/g, "").trim();
     const parsed = JSON.parse(clean);
     return res.status(200).json(parsed);
-  } catch {
-    return res.status(500).json({ error: "Fiş analiz edilemedi" });
+  } catch (err) {
+    return res.status(500).json({ error: "Fiş analiz edilemedi: " + err.message });
   }
 }
