@@ -30,7 +30,7 @@ const PM = [{ id: "account", label: "Hesaptan", icon: "🏦" }, { id: "cc", labe
 
 const MIN_TL_SAVINGS_PCT = 0.15;   // toplam birikimin en az %15'i TL olmalı
 
-const DD = { settings: { monthlyBudget: 0, fixedExpenses: [], variableExpenses: [], cards: [], emergencyFundTarget: null, billTypes: [], generalCardBudget: 0, emergencyTampon: 0, onboardingCompleted: null }, months: {}, installmentPlans: [], debts: [], savingsGoals: [], completedGoals: [], plannedEvents: [], completedEvents: [], merchantMap: {}, goldRates: {}, usdRates: {}, eurRates: {}, liveRates: { USD: null, EUR: null, XAU: null, fetchedAt: null }, savings: { TRY: [], USD: [], EUR: [], XAU: [] }, lastClosedMonth: null, lastBackup: null };
+const DD = { settings: { monthlyBudget: 0, fixedExpenses: [], variableExpenses: [], cards: [], emergencyFundTarget: null, billTypes: [], generalCardBudget: 0, emergencyTampon: 0, ccPaymentMode: "instant", onboardingCompleted: null }, months: {}, installmentPlans: [], debts: [], savingsGoals: [], completedGoals: [], plannedEvents: [], completedEvents: [], merchantMap: {}, goldRates: {}, usdRates: {}, eurRates: {}, liveRates: { USD: null, EUR: null, XAU: null, fetchedAt: null }, savings: { TRY: [], USD: [], EUR: [], XAU: [] }, lastClosedMonth: null, lastBackup: null };
 const DM = () => ({ budget: null, fixedPaid: {}, variableEntries: {}, ccSingle: [], accountEntries: [], accountTransferred: {}, cardLoaded: 0, cardEntries: [], debtPayments: {}, ccTransferred: {}, csvByCard: {}, finalSavings: null, receipts: [] });
 
 const STORAGE_KEY = "ev-butce-v11";
@@ -580,17 +580,33 @@ function calcMonth(data, m, extraInst) {
   const uncategorizedCC = cats._uncategorized || 0;
   const variableTotal = categorizedTotal;
 
+  // Ekstre modu: KK harcamaları sonraki ayın bütçesinden düşülür
+  const isEkstre = data.settings.ccPaymentMode === "ekstre";
+  const prevMd = isEkstre ? (data.months[pmk(m)] || DM()) : null;
+
+  // Ekstre modunda önceki ayın KK tek çekim toplamı (bu ay ödenmesi gereken)
+  const ekstreCCSingleTotal = isEkstre ? (prevMd.ccSingle || []).reduce((s, e) => s + e.amount, 0) : 0;
+  // Ekstre modunda önceki ayın taksit toplamı
+  const ekstreInstTotal = isEkstre ? data.installmentPlans.reduce((s, p) => { let c = p.startMonth; for (let i = 0; i < p.months; i++) { if (c === pmk(m)) return s + p.monthlyPayment; c = nmk(c); } return s; }, 0) : 0;
+
   // === A GRUBU: Bankadan gerçekten çıkmış ===
   const paidFixedAcc = data.settings.fixedExpenses.filter(e => e.paymentMethod === "account" && md.fixedPaid?.[e.id]).reduce((s, e) => s + e.amount, 0);
-  const transferredCC = (md.ccSingle || []).filter(e => md.ccTransferred?.[`single-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
-  const transferredFixedCC = data.settings.fixedExpenses.filter(e => e.paymentMethod === "cc" && md.ccTransferred?.[`fixed-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
+
+  // Ekstre modunda: aktarımlar önceki ayın harcamalarına karşı yapılır
+  const transferredCC = isEkstre
+    ? (prevMd.ccSingle || []).filter(e => md.ccTransferred?.[`prev-single-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0)
+    : (md.ccSingle || []).filter(e => md.ccTransferred?.[`single-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
+  const transferredFixedCC = isEkstre
+    ? data.settings.fixedExpenses.filter(e => e.paymentMethod === "cc" && md.ccTransferred?.[`prev-fixed-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0)
+    : data.settings.fixedExpenses.filter(e => e.paymentMethod === "cc" && md.ccTransferred?.[`fixed-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
+
   const transferredInst = installmentTotal > 0 && md.ccTransferred?.["inst-all"]?.transferred ? installmentTotal : 0;
-  // Taksitleri tek tek kontrol et (her taksit planı ayrı key ile aktarılabilir)
   const transferredInstByPlan = data.installmentPlans.reduce((s, p) => {
     let cur = p.startMonth;
+    const targetMonth = isEkstre ? pmk(m) : m;
     for (let i = 0; i < p.months; i++) {
-      if (cur === m) {
-        const key = `inst-${p.id}`;
+      if (cur === targetMonth) {
+        const key = isEkstre ? `prev-inst-${p.id}` : `inst-${p.id}`;
         if (md.ccTransferred?.[key]?.transferred) return s + p.monthlyPayment;
         break;
       }
@@ -599,16 +615,24 @@ function calcMonth(data, m, extraInst) {
     return s;
   }, 0);
   const totalTransferredInst = Math.max(transferredInst, transferredInstByPlan);
-  // A: sadece aktarıldı işaretli hesaptan ödemeler (bankadan çıktı)
   const transferredAcc = (md.accountEntries || []).filter(e => md.accountTransferred?.[e.id]?.transferred).reduce((s, e) => s + e.amount, 0);
   const groupA = paidFixedAcc + transferredCC + transferredFixedCC + cardLoaded + transferredAcc + totalTransferredInst;
 
   // === B GRUBU: Kesin çıkacak ama henüz çıkmamış ===
   const unpaidFixedAcc = data.settings.fixedExpenses.filter(e => e.paymentMethod === "account" && !md.fixedPaid?.[e.id]).reduce((s, e) => s + e.amount, 0);
-  const untransferredCC = (md.ccSingle || []).filter(e => !md.ccTransferred?.[`single-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
-  const untransferredFixedCC = data.settings.fixedExpenses.filter(e => e.paymentMethod === "cc" && !md.ccTransferred?.[`fixed-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
+
+  // Ekstre modunda: bu ayki KK harcamaları bütçeyi etkilemez, önceki ayınkiler etkilir
+  const untransferredCC = isEkstre
+    ? (prevMd.ccSingle || []).filter(e => !md.ccTransferred?.[`prev-single-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0)
+    : (md.ccSingle || []).filter(e => !md.ccTransferred?.[`single-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
+  const untransferredFixedCC = isEkstre
+    ? data.settings.fixedExpenses.filter(e => e.paymentMethod === "cc" && !md.ccTransferred?.[`prev-fixed-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0)
+    : data.settings.fixedExpenses.filter(e => e.paymentMethod === "cc" && !md.ccTransferred?.[`fixed-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
+
   const untransferredAcc = (md.accountEntries || []).filter(e => !md.accountTransferred?.[e.id]?.transferred).reduce((s, e) => s + e.amount, 0);
-  const untransferredInst = installmentTotal - totalTransferredInst;
+  // Ekstre modunda taksitler de önceki aydan gelir
+  const effectiveInstTotal = isEkstre ? ekstreInstTotal : installmentTotal;
+  const untransferredInst = effectiveInstTotal - totalTransferredInst;
   const groupB = unpaidFixedAcc + untransferredCC + untransferredFixedCC + untransferredAcc + debtTotal + untransferredInst;
 
   // Planlı etkinlik kumbara aylık bloke
@@ -677,26 +701,33 @@ function calcFlat(data, m, extraInst) {
     const avg = past3.length >= 2 ? Math.round(past3.reduce((a, b2) => a + b2, 0) / past3.length) : (ve.expectedAmount || 0);
     return s + avg;
   }, 0);
+  // Ekstre modu (calcFlat)
+  const isEkstreF = data.settings.ccPaymentMode === "ekstre";
+  const prevMdF = isEkstreF ? (data.months[pmk(m)] || DM()) : null;
+  const effectiveInstF = isEkstreF ? data.installmentPlans.reduce((s, p) => { let c2 = p.startMonth; for (let i2 = 0; i2 < p.months; i2++) { if (c2 === pmk(m)) return s + p.monthlyPayment; c2 = nmk(c2); } return s; }, 0) : inst;
+
   // A grubu: gerçek çıkışlar
   const paidFixedAccF = (data.settings.fixedExpenses || []).filter(e => e.paymentMethod === "account" && md.fixedPaid?.[e.id]).reduce((s, e) => s + e.amount, 0);
-  const transferredCCF = (md.ccSingle || []).filter(e => md.ccTransferred?.[`single-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
-  const transferredFixedCCF = (data.settings.fixedExpenses || []).filter(e => e.paymentMethod === "cc" && md.ccTransferred?.[`fixed-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
+  const ccSourceF = isEkstreF ? prevMdF : md;
+  const ccKeyPrefixF = isEkstreF ? "prev-" : "";
+  const transferredCCF = (ccSourceF.ccSingle || []).filter(e => md.ccTransferred?.[`${ccKeyPrefixF}single-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
+  const transferredFixedCCF = (data.settings.fixedExpenses || []).filter(e => e.paymentMethod === "cc" && md.ccTransferred?.[`${ccKeyPrefixF}fixed-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
   const transferredAccF = (md.accountEntries || []).filter(e => md.accountTransferred?.[e.id]?.transferred).reduce((s, e) => s + e.amount, 0);
-  // Taksit aktarım kontrolü (calcFlat)
   const transferredInstF = data.installmentPlans.reduce((s, p) => {
     let cur = p.startMonth;
+    const targetMonthF = isEkstreF ? pmk(m) : m;
     for (let i2 = 0; i2 < p.months; i2++) {
-      if (cur === m) { if (md.ccTransferred?.[`inst-${p.id}`]?.transferred || md.ccTransferred?.["inst-all"]?.transferred) return s + p.monthlyPayment; break; }
+      if (cur === targetMonthF) { const key = `${ccKeyPrefixF}inst-${p.id}`; if (md.ccTransferred?.[key]?.transferred || md.ccTransferred?.["inst-all"]?.transferred) return s + p.monthlyPayment; break; }
       cur = nmk(cur);
     }
     return s;
   }, 0);
   const groupAF = paidFixedAccF + transferredCCF + transferredFixedCCF + cl + transferredAccF + transferredInstF;
   const unpaidFixedAccF = (data.settings.fixedExpenses || []).filter(e => e.paymentMethod === "account" && !md.fixedPaid?.[e.id]).reduce((s, e) => s + e.amount, 0);
-  const untransferredCCF = (md.ccSingle || []).filter(e => !md.ccTransferred?.[`single-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
-  const untransferredFixedCCF = (data.settings.fixedExpenses || []).filter(e => e.paymentMethod === "cc" && !md.ccTransferred?.[`fixed-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
+  const untransferredCCF = (ccSourceF.ccSingle || []).filter(e => !md.ccTransferred?.[`${ccKeyPrefixF}single-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
+  const untransferredFixedCCF = (data.settings.fixedExpenses || []).filter(e => e.paymentMethod === "cc" && !md.ccTransferred?.[`${ccKeyPrefixF}fixed-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
   const untransferredAccF = (md.accountEntries || []).filter(e => !md.accountTransferred?.[e.id]?.transferred).reduce((s, e) => s + e.amount, 0);
-  const untransferredInstF = inst - transferredInstF;
+  const untransferredInstF = effectiveInstF - transferredInstF;
   const groupBF = unpaidFixedAccF + untransferredCCF + untransferredFixedCCF + untransferredAccF + dt + untransferredInstF;
   const remainingX = b - groupAF - groupBF;
   const remaining = remainingX;
@@ -2806,37 +2837,43 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
   const handleReceiptSave = receipt => { setMonthField(mk, "receipts", [...(md.receipts || []), receipt]); flash("✓ Fiş kaydedildi"); };
   const handleReceiptDelete = id => { setMonthField(mk, "receipts", (md.receipts || []).filter(r => r.id !== id)); };
 
-  // CC Hesabına Aktarılacak Kalemlerin Listesi
+  // Kredi kartı aktarım kalemleri
+  const isEkstreMode = data.settings.ccPaymentMode === "ekstre";
+  const prevMdDash = isEkstreMode ? (data.months[pmk(mk)] || DM()) : null;
   const ccTransferItems = useMemo(() => {
     const items = [];
     const cards = data.settings.cards || [];
-    // 1. Sabit zorunlu giderler (CC ile ödenenler)
+    const keyPrefix = isEkstreMode ? "prev-" : "";
+    const sourceMonth = isEkstreMode ? pmk(mk) : mk;
+    const sourceMd = isEkstreMode ? prevMdDash : md;
+    // 1. Sabit zorunlu giderler (kredi kartı ile ödenenler)
     data.settings.fixedExpenses.filter(e => e.paymentMethod === "cc").forEach(e => {
       const cid = e.cardId || cards[0]?.id;
       const cardName = cards.find(c2 => c2.id === cid)?.name;
-      items.push({ key: `fixed-${e.id}`, label: e.name, sub: `Sabit zorunlu${cardName ? " • " + cardName : ""}`, amount: e.amount, cardId: cid, sortDate: mk + "-01" });
+      items.push({ key: `${keyPrefix}fixed-${e.id}`, label: e.name, sub: `Sabit zorunlu${cardName ? " • " + cardName : ""}${isEkstreMode ? " • " + ml(sourceMonth) : ""}`, amount: e.amount, cardId: cid, sortDate: sourceMonth + "-01" });
     });
-    // 2. CC tek çekim harcamaları
-    (md.ccSingle || []).forEach(e => {
+    // 2. Tek çekim kredi kartı harcamaları
+    (sourceMd?.ccSingle || []).forEach(e => {
       const cid = e.cardId || cards[0]?.id;
       const cardName = cards.find(c2 => c2.id === cid)?.name;
-      items.push({ key: `single-${e.id}`, label: e.note || e.merchantName || "Tek çekim", sub: `${e.date || ""}${cardName ? " • " + cardName : ""}`, amount: e.amount, cardId: cid, sortDate: e.date || mk + "-01" });
+      items.push({ key: `${keyPrefix}single-${e.id}`, label: e.note || e.merchantName || "Tek çekim", sub: `${e.date || ""}${cardName ? " • " + cardName : ""}${isEkstreMode ? " • " + ml(sourceMonth) : ""}`, amount: e.amount, cardId: cid, sortDate: e.date || sourceMonth + "-01" });
     });
-    // 3. Bu ay aktif taksitler
+    // 3. Taksitler
+    const targetMonth = isEkstreMode ? pmk(mk) : mk;
     data.installmentPlans.forEach(p => {
       let cur = p.startMonth;
       for (let i = 0; i < p.months; i++) {
-        if (cur === mk) {
+        if (cur === targetMonth) {
           const cid = p.cardId || cards[0]?.id;
           const cardName = cards.find(c2 => c2.id === cid)?.name;
-          items.push({ key: `inst-${p.id}`, label: p.note || "Taksit", sub: `${p.monthlyPayment > 0 ? `Taksit ${i + 1}/${p.months}` : ""}${cardName ? " • " + cardName : ""}`, amount: p.monthlyPayment, cardId: cid, sortDate: p.createdDate || mk + "-01" });
+          items.push({ key: `${keyPrefix}inst-${p.id}`, label: p.note || "Taksit", sub: `${p.monthlyPayment > 0 ? `Taksit ${i + 1}/${p.months}` : ""}${cardName ? " • " + cardName : ""}${isEkstreMode ? " • " + ml(sourceMonth) : ""}`, amount: p.monthlyPayment, cardId: cid, sortDate: p.createdDate || sourceMonth + "-01" });
           break;
         }
         cur = nmk(cur);
       }
     });
     return items.sort((a, b) => (b.sortDate || "").localeCompare(a.sortDate || ""));
-  }, [data, md, mk]);
+  }, [data, md, mk, isEkstreMode, prevMdDash]);
   const ccTransferTotal = ccTransferItems.reduce((s, i) => s + i.amount, 0);
   const ccTransferredCount = ccTransferItems.filter(i => md.ccTransferred?.[i.key]?.transferred).length;
   // Kart bazlı toplam
@@ -3017,7 +3054,7 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
 
         const menus = [
           { id: "fixed", icon: "🔒", title: "Sabit Gider Onayları", sub: `${paidFixed}/${totalFixed} ödendi` },
-          { id: "cc", icon: "💳", title: "KK Aktarımları", sub: pendingCC > 0 ? `${pendingCC} bekliyor` : "Tümü aktarıldı" },
+          { id: "cc", icon: "💳", title: "Kredi Kartı Aktarımları", sub: pendingCC > 0 ? `${pendingCC} bekliyor` : "Tümü aktarıldı" },
           { id: "variable", icon: "📈", title: "Değişken Gider Takibi", sub: `${C(totalSpentEnv)} / ${C(totalBudget)}` },
           { id: "history", icon: "📋", title: "Aylık İşlem Geçmişi", sub: `${totalTxs} işlem` },
         ];
@@ -3052,7 +3089,7 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
           if (menuTab === "cc") return (
             <div style={{ padding: "14px 14px 90px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                <div style={{ color: X.tm, fontSize: 10, fontWeight: 800, letterSpacing: "0.07em", textTransform: "uppercase" }}>KK Aktarımları</div>
+                <div style={{ color: X.tm, fontSize: 10, fontWeight: 800, letterSpacing: "0.07em", textTransform: "uppercase" }}>Kredi Kartı Aktarımları</div>
                 <span style={{ color: X.b, fontSize: 14, fontWeight: 800, fontFamily: fm }}>{C(ccTransferTotal)}</span>
               </div>
               {ccTransferByCard.length > 0 && (
@@ -5978,8 +6015,9 @@ function OnboardingWizard({ data, setData, familyName }) {
   const [fixedMethod, setFixedMethod] = useState("account");
   const [cards, setCards] = useState([]);
   const [cardName, setCardName] = useState("");
+  const [ccMode, setCcMode] = useState("instant");
 
-  const totalSteps = 6;
+  const totalSteps = 7;
   const inpS = { width: "100%", background: "white", border: "1px solid rgba(0,0,0,0.10)", borderRadius: 10, padding: "10px 12px", fontSize: 14, color: "#141008", boxSizing: "border-box", fontFamily: ff };
   const lblS = { color: "#5A5045", fontSize: 12, marginBottom: 4, fontWeight: 600, display: "block" };
   const hintS = { color: "#8B7E74", fontSize: 10, marginTop: 6, lineHeight: 1.4 };
@@ -6005,6 +6043,7 @@ function OnboardingWizard({ data, setData, familyName }) {
         ...d.settings,
         monthlyBudget: parseFloat(budget) || 0,
         payDay: parseInt(payDay) || 15,
+        ccPaymentMode: ccMode,
         fixedExpenses: [...(d.settings.fixedExpenses || []), ...fixedList],
         cards: [...(d.settings.cards || []), ...cards],
         onboardingCompleted: true
@@ -6013,7 +6052,7 @@ function OnboardingWizard({ data, setData, familyName }) {
   };
 
   const canNext = () => {
-    if (step === 2) return parseFloat(budget) > 0;
+    if (step === 3) return parseFloat(budget) > 0;
     return true;
   };
 
@@ -6073,8 +6112,29 @@ function OnboardingWizard({ data, setData, familyName }) {
           </div>
         )}
 
-        {/* ADIM 2: Aylık bütçe */}
+        {/* ADIM 2: KK ödeme modu */}
         {step === 2 && (
+          <div>
+            <div style={{ fontSize: 28, marginBottom: 8 }}>💳</div>
+            <div style={{ color: "#141008", fontSize: 16, fontWeight: 800, marginBottom: 4 }}>Kredi kartı ödemeleriniz</div>
+            <div style={{ color: "#5A5045", fontSize: 12, marginBottom: 12 }}>Kredi kartı harcamalarınızın karşılığını ne zaman ödüyorsunuz?</div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 10 }}>
+              <button onClick={() => setCcMode("instant")} style={{ background: ccMode === "instant" ? X.gd : "white", border: `2px solid ${ccMode === "instant" ? X.g : "rgba(0,0,0,0.08)"}`, borderRadius: 12, padding: "12px 14px", textAlign: "left", cursor: "pointer" }}>
+                <div style={{ color: ccMode === "instant" ? X.g : "#141008", fontSize: 13, fontWeight: 700, marginBottom: 2 }}>Bu ayın bütçesinden karşılıyorum</div>
+                <div style={{ color: "#8B7E74", fontSize: 11, lineHeight: 1.4 }}>Kredi kartı harcamamın karşılığını aynı ay bütçemden ayırıp kredi kartı hesabına aktarıyorum</div>
+              </button>
+              <button onClick={() => setCcMode("ekstre")} style={{ background: ccMode === "ekstre" ? X.gd : "white", border: `2px solid ${ccMode === "ekstre" ? X.g : "rgba(0,0,0,0.08)"}`, borderRadius: 12, padding: "12px 14px", textAlign: "left", cursor: "pointer" }}>
+                <div style={{ color: ccMode === "ekstre" ? X.g : "#141008", fontSize: 13, fontWeight: 700, marginBottom: 2 }}>Gelecek ay maaşımdan ödüyorum</div>
+                <div style={{ color: "#8B7E74", fontSize: 11, lineHeight: 1.4 }}>Bu ay kredi kartıyla yaptığım harcamalar gelecek ay maaşımdan kesilir (ekstre döngüsü)</div>
+              </button>
+            </div>
+            <div style={hintS}>💡 Bunu daha sonra Ayarlar → Aylık Bütçe'den değiştirebilirsiniz.</div>
+          </div>
+        )}
+
+        {/* ADIM 3: Aylık bütçe */}
+        {step === 3 && (
           <div>
             <div style={{ fontSize: 28, marginBottom: 8 }}>💰</div>
             <div style={{ color: "#141008", fontSize: 16, fontWeight: 800, marginBottom: 4 }}>Aylık bütçeniz</div>
@@ -6086,7 +6146,7 @@ function OnboardingWizard({ data, setData, familyName }) {
         )}
 
         {/* ADIM 3: Sabit giderler */}
-        {step === 3 && (
+        {step === 4 && (
           <div>
             <div style={{ fontSize: 28, marginBottom: 8 }}>🔒</div>
             <div style={{ color: "#141008", fontSize: 16, fontWeight: 800, marginBottom: 4 }}>Sabit giderleriniz</div>
@@ -6133,7 +6193,7 @@ function OnboardingWizard({ data, setData, familyName }) {
         )}
 
         {/* ADIM 4: Kredi kartları */}
-        {step === 4 && (
+        {step === 5 && (
           <div>
             <div style={{ fontSize: 28, marginBottom: 8 }}>💳</div>
             <div style={{ color: "#141008", fontSize: 16, fontWeight: 800, marginBottom: 4 }}>Kredi kartlarınız</div>
@@ -6154,7 +6214,7 @@ function OnboardingWizard({ data, setData, familyName }) {
         )}
 
         {/* ADIM 5: Özet */}
-        {step === 5 && (
+        {step === 6 && (
           <div>
             <div style={{ fontSize: 28, marginBottom: 8 }}>✅</div>
             <div style={{ color: "#141008", fontSize: 16, fontWeight: 800, marginBottom: 4 }}>Hazırsınız!</div>
@@ -6164,6 +6224,10 @@ function OnboardingWizard({ data, setData, familyName }) {
               <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 16px", borderBottom: "1px solid rgba(0,0,0,0.06)" }}>
                 <span style={{ color: "#5A5045", fontSize: 13 }}>Maaş günü</span>
                 <span style={{ color: "#141008", fontSize: 13, fontWeight: 700 }}>Ayın {payDay}'i</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 16px", borderBottom: "1px solid rgba(0,0,0,0.06)" }}>
+                <span style={{ color: "#5A5045", fontSize: 13 }}>KK ödeme</span>
+                <span style={{ color: "#141008", fontSize: 13, fontWeight: 700 }}>{ccMode === "instant" ? "Bu aydan" : "Gelecek aydan"}</span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 16px", borderBottom: "1px solid rgba(0,0,0,0.06)" }}>
                 <span style={{ color: "#5A5045", fontSize: 13 }}>Aylık bütçe</span>
@@ -6193,10 +6257,10 @@ function OnboardingWizard({ data, setData, familyName }) {
         )}
 
         {/* İleri / Geri butonları */}
-        {step > 0 && step < 5 && (
+        {step > 0 && step < 6 && (
           <div style={{ display: "flex", gap: 8, marginTop: 16, paddingBottom: 16 }}>
             <button onClick={() => setStep(s => s - 1)} style={{ flex: 0.4, background: "rgba(0,0,0,0.04)", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 10, padding: "12px", color: "#5A5045", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: ff }}>← Geri</button>
-            <button onClick={() => setStep(s => s + 1)} disabled={!canNext()} style={{ flex: 0.6, background: canNext() ? X.g : "rgba(0,0,0,0.06)", border: "none", borderRadius: 10, padding: "12px", color: canNext() ? "white" : "#8B7E74", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: ff }}>{step === 4 ? "Özete Git →" : "İleri →"}</button>
+            <button onClick={() => setStep(s => s + 1)} disabled={!canNext()} style={{ flex: 0.6, background: canNext() ? X.g : "rgba(0,0,0,0.06)", border: "none", borderRadius: 10, padding: "12px", color: canNext() ? "white" : "#8B7E74", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: ff }}>{step === 5 ? "Özete Git →" : "İleri →"}</button>
           </div>
         )}
       </div>
@@ -6521,7 +6585,13 @@ function Settings({ data, setData, isAdmin, family }) {
         <div style={{ color: X.td, fontSize: 12, marginTop: -8, marginBottom: 12, lineHeight: 1.5 }}>Ay başında genel harcama kartına yüklenecek sabit limit. Kalan bütçe hesabında bu tutar bloke edilir.</div>
         <Inp label="Beklenmeyen Gider Fonu (₺)" type="number" value={form.et ?? data.settings.emergencyTampon ?? 0} onChange={v => setForm(f => ({ ...f, et: v }))} suffix="₺" />
         <div style={{ color: X.td, fontSize: 12, marginTop: -8, marginBottom: 12, lineHeight: 1.5 }}>Kategorisiz ve tahmini aşan harcamalar buradan karşılanır. Ay sonunda kullanılmayan kısım birikime eklenir.</div>
-        <Btn onClick={() => { setData(d => ({ ...d, settings: { ...d.settings, monthlyBudget: form.b !== undefined ? (parseFloat(form.b) || d.settings.monthlyBudget) : d.settings.monthlyBudget, generalCardBudget: form.gcb !== undefined ? (parseFloat(form.gcb) || 0) : (d.settings.generalCardBudget || 0), emergencyTampon: form.et !== undefined ? (parseFloat(form.et) || 0) : (d.settings.emergencyTampon || 0) } })); setSec(null); }}>Kaydet</Btn>
+        <div style={{ color: X.tm, fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Kredi Kartı Ödeme Yöntemi</div>
+        <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+          <button onClick={() => setForm(f => ({ ...f, ccm: "instant" }))} style={{ flex: 1, background: (form.ccm ?? data.settings.ccPaymentMode ?? "instant") === "instant" ? X.gd : "white", border: `1px solid ${(form.ccm ?? data.settings.ccPaymentMode ?? "instant") === "instant" ? X.g : "rgba(0,0,0,0.08)"}`, borderRadius: 8, padding: "8px 6px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: ff, color: (form.ccm ?? data.settings.ccPaymentMode ?? "instant") === "instant" ? X.g : X.td }}>Bu aydan</button>
+          <button onClick={() => setForm(f => ({ ...f, ccm: "ekstre" }))} style={{ flex: 1, background: (form.ccm ?? data.settings.ccPaymentMode ?? "instant") === "ekstre" ? X.gd : "white", border: `1px solid ${(form.ccm ?? data.settings.ccPaymentMode ?? "instant") === "ekstre" ? X.g : "rgba(0,0,0,0.08)"}`, borderRadius: 8, padding: "8px 6px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: ff, color: (form.ccm ?? data.settings.ccPaymentMode ?? "instant") === "ekstre" ? X.g : X.td }}>Gelecek aydan</button>
+        </div>
+        <div style={{ color: X.td, fontSize: 11, marginBottom: 12, lineHeight: 1.5 }}>{(form.ccm ?? data.settings.ccPaymentMode ?? "instant") === "instant" ? "Kredi kartı harcamalarının karşılığı aynı ay bütçenizden düşülür." : "Kredi kartı harcamaları gelecek ayın bütçesinden düşülür (ekstre döngüsü)."}</div>
+        <Btn onClick={() => { setData(d => ({ ...d, settings: { ...d.settings, monthlyBudget: form.b !== undefined ? (parseFloat(form.b) || d.settings.monthlyBudget) : d.settings.monthlyBudget, generalCardBudget: form.gcb !== undefined ? (parseFloat(form.gcb) || 0) : (d.settings.generalCardBudget || 0), emergencyTampon: form.et !== undefined ? (parseFloat(form.et) || 0) : (d.settings.emergencyTampon || 0), ccPaymentMode: form.ccm || d.settings.ccPaymentMode || "instant" } })); setSec(null); }}>Kaydet</Btn>
       </div>
     );
   }
