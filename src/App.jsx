@@ -139,6 +139,48 @@ async function saveDB(d, familyId) {
   if (clean.settings) delete clean.settings.claudeApiKey;
   try { if (familyId) await set(ref(rtdb, `families/${familyId}/data`), clean); } catch (e) { console.warn("Firebase kayıt hatası:", e); }
   try { localStorage.setItem(lsKey, JSON.stringify(d)); } catch {}
+  // Günlük otomatik snapshot
+  if (familyId) {
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const snapKey = `_autoBackup_${familyId}`;
+      const lastSnap = localStorage.getItem(snapKey);
+      if (lastSnap !== today) {
+        await set(ref(rtdb, `backups/${familyId}/${today}`), clean);
+        localStorage.setItem(snapKey, today);
+        // Son 7 günden eski yedekleri temizle
+        const snapsRef = ref(rtdb, `backups/${familyId}`);
+        const snaps = await get(snapsRef);
+        if (snaps.exists()) {
+          const keys = Object.keys(snaps.val()).sort();
+          if (keys.length > 7) {
+            const toDelete = keys.slice(0, keys.length - 7);
+            for (const k of toDelete) await set(ref(rtdb, `backups/${familyId}/${k}`), null);
+          }
+        }
+      }
+    } catch (e) { console.warn("Otomatik yedek hatası:", e); }
+  }
+}
+
+async function listBackups(familyId) {
+  try {
+    const snap = await get(ref(rtdb, `backups/${familyId}`));
+    if (snap.exists()) return Object.keys(snap.val()).sort().reverse();
+  } catch {}
+  return [];
+}
+
+async function restoreBackup(familyId, date) {
+  try {
+    const snap = await get(ref(rtdb, `backups/${familyId}/${date}`));
+    if (snap.exists()) {
+      const data = snap.val();
+      await set(ref(rtdb, `families/${familyId}/data`), data);
+      return data;
+    }
+  } catch (e) { console.warn("Yedek geri yükleme hatası:", e); }
+  return null;
 }
 
 async function deleteDB(familyId) {
@@ -1233,9 +1275,30 @@ function EmergencyFundSettings({ data, setData, onBack }) {
   );
 }
 
-function BackupSettings({ data, setData, onBack }) {
+function BackupSettings({ data, setData, familyId, onBack }) {
   const [msg, setMsg] = useState(null);
   const [importData, setImportData] = useState("");
+  const [autoBackups, setAutoBackups] = useState([]);
+  const [loadingBackups, setLoadingBackups] = useState(false);
+
+  useEffect(() => {
+    if (familyId) {
+      setLoadingBackups(true);
+      listBackups(familyId).then(b => { setAutoBackups(b); setLoadingBackups(false); });
+    }
+  }, [familyId]);
+
+  const handleRestore = async (date) => {
+    if (!confirm(`${date} tarihli yedeğe dönmek istediğinize emin misiniz? Mevcut verilerinizin üzerine yazılacak.`)) return;
+    const restored = await restoreBackup(familyId, date);
+    if (restored) {
+      setData({ ...DD, ...restored, settings: { ...DD.settings, ...(restored.settings || {}) }, liveRates: restored.liveRates || DD.liveRates, savings: { ...DD.savings, ...(restored.savings || {}) } });
+      setMsg({ type: "success", text: `✓ ${date} tarihli yedek geri yüklendi` });
+    } else {
+      setMsg({ type: "error", text: "Yedek geri yüklenemedi" });
+    }
+    setTimeout(() => setMsg(null), 3000);
+  };
 
   const exportData = (markBackup = false) => {
     try {
@@ -1351,6 +1414,20 @@ function BackupSettings({ data, setData, onBack }) {
         <div style={{ color: X.td, fontSize: 11, marginBottom: 8, textAlign: "center" }}>— veya —</div>
         <textarea value={importData} onChange={e => setImportData(e.target.value)} placeholder="JSON içeriğini buraya yapıştırın..." style={{ width: "100%", background: "rgba(200,220,232,0.65)", border: `1px solid ${X.border}`, borderRadius: 10, padding: "12px 14px", color: X.t, fontSize: 12, fontFamily: fm, outline: "none", boxSizing: "border-box", minHeight: 100, resize: "vertical", marginBottom: 8 }} />
         <Btn onClick={pasteImport} v="outline" c={X.p} disabled={!importData.trim()}>📋 Panodan İçe Aktar</Btn>
+      </Card>
+
+      {/* Otomatik Yedekler */}
+      <Card s={{ marginBottom: 12, background: "rgba(99,102,241,0.06)", border: "1px solid rgba(99,102,241,0.2)" }}>
+        <div style={{ color: X.p, fontSize: 12, fontWeight: 700, marginBottom: 6 }}>🔄 Otomatik Yedekler (Son 7 Gün)</div>
+        <div style={{ color: X.td, fontSize: 11, marginBottom: 10, lineHeight: 1.5 }}>Verileriniz her gün otomatik olarak yedeklenir. Sorun yaşarsanız buradan geri dönebilirsiniz.</div>
+        {loadingBackups && <div style={{ color: X.td, fontSize: 12 }}>Yükleniyor...</div>}
+        {!loadingBackups && autoBackups.length === 0 && <div style={{ color: X.td, fontSize: 12 }}>Henüz otomatik yedek yok. İlk yedek bugün oluşturulacak.</div>}
+        {autoBackups.map(date => (
+          <div key={date} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `1px solid ${X.border}` }}>
+            <div style={{ color: X.t, fontSize: 13, fontWeight: 600 }}>📅 {date}</div>
+            <button onClick={() => handleRestore(date)} style={{ background: X.bd, border: `1px solid ${X.b}`, borderRadius: 8, padding: "5px 12px", color: X.b, fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: ff }}>Geri Yükle</button>
+          </div>
+        ))}
       </Card>
 
       <Card s={{ background: X.od, border: `1px solid ${X.o}` }}>
@@ -6456,7 +6533,7 @@ function Settings({ data, setData, isAdmin, family }) {
 
   if (sec === "emergency") return <EmergencyFundSettings data={data} setData={setData} onBack={() => setSec(null)} />;
   if (sec === "rates") return <RatesSettings data={data} setData={setData} onBack={() => setSec(null)} />;
-  if (sec === "backup") return <BackupSettings data={data} setData={setData} onBack={() => setSec(null)} />;
+  if (sec === "backup") return <BackupSettings data={data} setData={setData} familyId={family?.familyId} onBack={() => setSec(null)} />;
   if (sec === "calendar") {
     const hasPayDays = data.settings.fixedExpenses.some(e => e.paymentDay) || data.debts.some(d => d.paymentDay);
     return (
