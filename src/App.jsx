@@ -2460,7 +2460,7 @@ function ReceiptModal({ receipts, onClose, onSave, onDelete }) {
   const analysis = useMemo(() => analyzeReceipts(receipts), [receipts]);
 
   return (
-    <Modal title="📷 Market Fişi" onClose={onClose}>
+    <Modal title="📷 Harcama Fişi" onClose={onClose}>
       {/* Tab bar */}
       <div style={{ display: "flex", gap: 0, marginBottom: 16, borderRadius: 10, overflow: "hidden", border: `1px solid ${X.border}` }}>
         <button onClick={() => setStep("list")} style={{ flex: 1, padding: "10px 0", background: step === "list" || step === "capture" || step === "analyzing" || step === "result" ? X.g : "transparent", color: step === "list" || step === "capture" || step === "analyzing" || step === "result" ? "#fff" : X.tm, border: "none", fontSize: 13, fontWeight: 700, fontFamily: ff, cursor: "pointer" }}>📷 Fiş Yükle</button>
@@ -2493,8 +2493,8 @@ function ReceiptModal({ receipts, onClose, onSave, onDelete }) {
           {receipts.length === 0 && (
               <div style={{ color: X.td, fontSize: 13, textAlign: "center", padding: "20px 0" }}>
                 <div style={{ fontSize: 32, marginBottom: 8 }}>📷</div>
-                <div>Henüz market fişi yüklenmedi</div>
-                <div style={{ fontSize: 11, marginTop: 4 }}>Güncel Durum → 📷 Market Fişi'nden fiş yükleyin</div>
+                <div>Henüz harcama fişi yüklenmedi</div>
+                <div style={{ fontSize: 11, marginTop: 4 }}>Güncel Durum → 📷 Harcama Fişi'nden fiş yükleyin</div>
               </div>
             )}
           {receipts.length > 0 && (
@@ -3010,7 +3010,7 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
         {/* Receipt + Simulation — konfor harcaması kartıyla aynı yükseklik */}
         <div onClick={() => setModal("receipt")} style={{ background: "rgba(194,65,12,0.20)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(194,65,12,0.26)", borderRadius: 16, padding: "16px 8px", cursor: "pointer", textAlign: "center", position: "relative", boxShadow: neu, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
           <div style={{ fontSize: 18, marginBottom: 3 }}>📷</div>
-          <div style={{ color: X.o, fontSize: 13, fontWeight: 800 }}>Market Fişi</div>
+          <div style={{ color: X.o, fontSize: 13, fontWeight: 800 }}>Harcama Fişi</div>
           <div style={{ color: X.td, fontSize: 10, marginTop: 4 }}>Fotoğraf çek veya seç</div>
         </div>
         <div onClick={() => setModal("simulate")} style={{ background: "rgba(124,58,237,0.18)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(124,58,237,0.24)", borderRadius: 16, padding: "16px 8px", cursor: "pointer", textAlign: "center", position: "relative", boxShadow: neu, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
@@ -4870,8 +4870,8 @@ ${goldRiskLine ? "- Altın borcu kur hareketinden nasıl etkilenir?" : ""}
                 ) : (
                   <Card s={{ textAlign: "center", padding: "30px 0" }}>
                     <div style={{ fontSize: 36, marginBottom: 8, opacity: 0.5 }}>📷</div>
-                    <div style={{ color: X.td, fontSize: 13 }}>Henüz market fişi yüklenmedi</div>
-                    <div style={{ color: X.td, fontSize: 11, marginTop: 4 }}>Güncel Durum → 📷 Market Fişi'nden fiş yükleyin</div>
+                    <div style={{ color: X.td, fontSize: 13 }}>Henüz harcama fişi yüklenmedi</div>
+                    <div style={{ color: X.td, fontSize: 11, marginTop: 4 }}>Güncel Durum → 📷 Harcama Fişi'nden fiş yükleyin</div>
                   </Card>
                 )}
 
@@ -7016,7 +7016,7 @@ function Settings({ data, setData, isAdmin, family }) {
 
         {resetItem("Kredi Kartı Aktarım İşaretleri", "🔄", "Kredi kartı hesabına aktarım işaretleri", () => clearMonthField("ccTransferred", {}))}
 
-        {resetItem("Market Fişi Kayıtları", "📷", "Tüm aylardaki fiş verileri", () => clearMonthField("receipts", []))}
+        {resetItem("Harcama Fişi Kayıtları", "📷", "Tüm aylardaki fiş verileri", () => clearMonthField("receipts", []))}
 
         {resetItem("Birikim Havuzu", "💰", "TL, USD, EUR ve altın birikim kayıtları", () => setData(d => ({ ...d, savings: { TRY: [], USD: [], EUR: [], XAU: [] } })))}
 
