@@ -4135,7 +4135,30 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
             const goalLines = (data.savingsGoals || []).filter(g => !g.completed).map(g => {
               const totalAct = (g.transactions || []).reduce((s, t) => s + (t.tlAmount || 0), 0);
               const targetTL = g.currency === "TRY" ? g.targetAmount : g.targetAmount * (data.liveRates?.[g.currency] || 1);
-              return `  ${g.name}${g.purpose ? " ("+g.purpose+")" : ""}: ${C(totalAct)} / ${C(targetTL)} TL hedef, öncelik #${g.priority}`;
+              const pct = targetTL > 0 ? Math.round((totalAct / targetTL) * 100) : 0;
+              const remaining = Math.max(0, targetTL - totalAct);
+              return `  ${g.name}${g.purpose ? " ("+g.purpose+")" : ""}: ${C(totalAct)} / ${C(targetTL)} TL (%${pct}), kalan ${C(remaining)}, öncelik #${g.priority}`;
+            }).join("\n");
+
+            // Planlı etkinlikler
+            const eventLines = (data.plannedEvents || []).filter(ev => ev.date >= mk).map(ev => {
+              const remaining = (ev.kumbara || 0) - (ev.kumbaraAccumulated || 0);
+              let monthsLeft = 0;
+              let cur = mk;
+              for (let i = 0; i < 60; i++) { if (cur === ev.date) break; cur = nmk(cur); monthsLeft++; }
+              const monthlyNeeded = monthsLeft > 0 ? Math.ceil(remaining / monthsLeft) : remaining;
+              return `  ${ev.name}: ${ev.date} (${monthsLeft} ay sonra), bütçe ${C(ev.budget || 0)}, kumbara biriken ${C(ev.kumbaraAccumulated || 0)} / hedef ${C(ev.kumbara || 0)}, kalan ${C(remaining)} (aylık ${C(monthlyNeeded)} gerekli)${ev.maxTaksit ? `, taksit hakkı ${C(Math.max(0, (ev.maxTaksit || 0) - (ev.taksitUsed || 0)))}` : ""}`;
+            }).join("\n");
+
+            // Gelecek 3 ay taksit + borç yükü projeksiyonu
+            const futureLoadLines = [nmk(mk), nmk(nmk(mk)), nmk(nmk(nmk(mk)))].map(fm => {
+              const fInst = data.installmentPlans.reduce((s, p) => { let c2 = p.startMonth; for (let i = 0; i < p.months; i++) { if (c2 === fm) return s + p.monthlyPayment; c2 = nmk(c2); } return s; }, 0);
+              const fDebt = data.debts.filter(d2 => d2.remainingMonths > 0).reduce((s, d2) => {
+                const rate = d2.currency === "XAU" ? (data.liveRates?.XAU || 0) : d2.currency === "USD" ? (data.liveRates?.USD || 0) : d2.currency === "EUR" ? (data.liveRates?.EUR || 0) : 1;
+                return s + d2.monthlyPayment * rate;
+              }, 0);
+              const fFixed = data.settings.fixedExpenses.reduce((s, e) => s + (e.amount || 0), 0);
+              return `  ${ml(fm)}: sabit ${C(fFixed)} + taksit ${C(fInst)} + borç ${C(Math.round(fDebt))} = toplam zorunlu ${C(fFixed + fInst + Math.round(fDebt))}`;
             }).join("\n");
 
             // Dönem bilgisi — 15'lik döngü
@@ -4273,6 +4296,12 @@ ${goldRiskLine ? goldRiskLine : (debtLines || "  Aktif borç yok")}
 BİRİKİM HEDEFLERİ:
 ${goalLines || "  Tanımlanmamış"}
 
+PLANLI ETKİNLİKLER:
+${eventLines || "  Planlanmış etkinlik yok"}
+
+GELECEK 3 AY ZORUNLU YÜK PROJEKSİYONU:
+${futureLoadLines}
+
 BEKLEYEN ÖDEMELER (NOT: bunlar da B blokeye dahil, X'ten zaten düşülmüş):
 ${data.settings.fixedExpenses.filter(e => !data.months[mk]?.fixedPaid?.[e.id]).map(e => `  ${e.name}: ${C(e.amount)} — ${e.paymentDay || "?"}. günde`).join("\n") || "  Tümü ödendi"}
 
@@ -4288,13 +4317,19 @@ GÖREV — sen bir finans DANIŞMANISIN, muhasebeci değilsin. Kullanıcı sayı
 - Y (bankadaki para) aktarımları karşılamaya yeterli mi?
 ${goldRiskLine ? "- Altın borcu kur hareketinden nasıl etkilenir?" : ""}
 
-## Fırsat & Tasarruf
+## İleriye Bakış
+- Gelecek 3 ayın zorunlu yükünü değerlendir — rahatlatıcı mı, sıkıştırıcı mı?
+- Planlı etkinlik varsa: kumbara biriktirme hızı yeterli mi? Ayarlama gerekiyor mu?
+- Birikim hedeflerine ulaşma hızı — mevcut tempoda ne zaman tamamlanır?
 - ${hasPastData ? "Geçmiş dönemlerle kıyasla iyileşme veya kötüleşme var mı?" : "İlk dönem — karşılaştırma yok, ama mevcut veriden çıkarım yap."}
-- Birikim potansiyeli: dönem sonunda tahmini ne kadar birikim yapılabilir? (X üzerinden hesapla, alt-üst senaryo)
-- Somut bir tasarruf fırsatı var mı? (örn: bir kategoride bütçe altı kalma, erken ödeme avantajı)
+
+## Birikim Fırsatı
+- Bu dönem sonunda tahmini ne kadar birikim yapılabilir? (X üzerinden, alt-üst senaryo)
+- Somut bir tasarruf fırsatı var mı? (bir kategoride bütçe altı kalma, erken ödeme avantajı vb.)
 
 ## 3 Aksiyon
-- Bu döneme özel 3 somut, uygulanabilir aksiyon. Her birinde RAKAM ver (örn: "X kategorisinde günlük Y TL ile sınırla"). "Tasarruf edin" gibi boş tavsiye VERME.`;
+- Bu döneme özel 3 somut, uygulanabilir aksiyon. Her birinde RAKAM ver (örn: "X kategorisinde günlük Y TL ile sınırla"). "Tasarruf edin" gibi boş tavsiye VERME.
+- Etkinlik/hedef varsa bunlara yönelik aksiyon da ver.`;
 
             const idToken = await auth.currentUser?.getIdToken();
             if (!idToken) { setAiText("Oturum bulunamadı. Çıkış yapıp tekrar giriş yapın."); setAiLoading(false); return; }
