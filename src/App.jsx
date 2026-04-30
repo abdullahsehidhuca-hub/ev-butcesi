@@ -30,7 +30,7 @@ const PM = [{ id: "account", label: "Hesaptan", icon: "🏦" }, { id: "cc", labe
 
 const MIN_TL_SAVINGS_PCT = 0.15;   // toplam birikimin en az %15'i TL olmalı
 
-const DD = { settings: { monthlyBudget: 450000, fixedExpenses: [], variableExpenses: [], cards: [], emergencyFundTarget: null, billTypes: [], generalCardBudget: 0, emergencyTampon: 20000 }, months: {}, installmentPlans: [], debts: [], savingsGoals: [], completedGoals: [], plannedEvents: [], completedEvents: [], merchantMap: {}, goldRates: {}, usdRates: {}, eurRates: {}, liveRates: { USD: null, EUR: null, XAU: null, fetchedAt: null }, savings: { TRY: [], USD: [], EUR: [], XAU: [] }, lastClosedMonth: null, lastBackup: null };
+const DD = { settings: { monthlyBudget: 0, fixedExpenses: [], variableExpenses: [], cards: [], emergencyFundTarget: null, billTypes: [], generalCardBudget: 0, emergencyTampon: 20000, onboardingCompleted: null }, months: {}, installmentPlans: [], debts: [], savingsGoals: [], completedGoals: [], plannedEvents: [], completedEvents: [], merchantMap: {}, goldRates: {}, usdRates: {}, eurRates: {}, liveRates: { USD: null, EUR: null, XAU: null, fetchedAt: null }, savings: { TRY: [], USD: [], EUR: [], XAU: [] }, lastClosedMonth: null, lastBackup: null };
 const DM = () => ({ budget: null, fixedPaid: {}, variableEntries: {}, ccSingle: [], accountEntries: [], accountTransferred: {}, cardLoaded: 0, cardEntries: [], debtPayments: {}, ccTransferred: {}, csvByCard: {}, finalSavings: null, receipts: [] });
 
 const STORAGE_KEY = "ev-butce-v11";
@@ -118,30 +118,33 @@ async function getFamilyMembers(familyId) {
 }
 
 async function loadDB(familyId) {
+  const lsKey = familyId ? `${STORAGE_KEY}_${familyId}` : STORAGE_KEY;
   try {
     if (familyId) {
       const snap = await get(ref(rtdb, `families/${familyId}/data`));
       if (snap.exists()) {
         const data = snap.val();
-        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch {}
+        try { localStorage.setItem(lsKey, JSON.stringify(data)); } catch {}
         return data;
       }
     }
   } catch (e) { console.warn("Firebase okuma hatası:", e); }
-  try { const r = localStorage.getItem(STORAGE_KEY); if (r) return JSON.parse(r); } catch {}
+  try { const r = localStorage.getItem(lsKey); if (r) return JSON.parse(r); } catch {}
   return null;
 }
 
 async function saveDB(d, familyId) {
+  const lsKey = familyId ? `${STORAGE_KEY}_${familyId}` : STORAGE_KEY;
   const clean = JSON.parse(JSON.stringify(d));
   if (clean.settings) delete clean.settings.claudeApiKey;
   try { if (familyId) await set(ref(rtdb, `families/${familyId}/data`), clean); } catch (e) { console.warn("Firebase kayıt hatası:", e); }
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); } catch {}
+  try { localStorage.setItem(lsKey, JSON.stringify(d)); } catch {}
 }
 
 async function deleteDB(familyId) {
+  const lsKey = familyId ? `${STORAGE_KEY}_${familyId}` : STORAGE_KEY;
   try { if (familyId) await set(ref(rtdb, `families/${familyId}/data`), null); } catch {}
-  try { localStorage.removeItem(STORAGE_KEY); } catch {}
+  try { localStorage.removeItem(lsKey); } catch {}
 }
 
 async function migrateOldData(uid2) {
@@ -540,16 +543,31 @@ function calcMonth(data, m, extraInst) {
   const transferredCC = (md.ccSingle || []).filter(e => md.ccTransferred?.[`single-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
   const transferredFixedCC = data.settings.fixedExpenses.filter(e => e.paymentMethod === "cc" && md.ccTransferred?.[`fixed-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
   const transferredInst = installmentTotal > 0 && md.ccTransferred?.["inst-all"]?.transferred ? installmentTotal : 0;
+  // Taksitleri tek tek kontrol et (her taksit planı ayrı key ile aktarılabilir)
+  const transferredInstByPlan = data.installmentPlans.reduce((s, p) => {
+    let cur = p.startMonth;
+    for (let i = 0; i < p.months; i++) {
+      if (cur === m) {
+        const key = `inst-${p.id}`;
+        if (md.ccTransferred?.[key]?.transferred) return s + p.monthlyPayment;
+        break;
+      }
+      cur = nmk(cur);
+    }
+    return s;
+  }, 0);
+  const totalTransferredInst = Math.max(transferredInst, transferredInstByPlan);
   // A: sadece aktarıldı işaretli hesaptan ödemeler (bankadan çıktı)
   const transferredAcc = (md.accountEntries || []).filter(e => md.accountTransferred?.[e.id]?.transferred).reduce((s, e) => s + e.amount, 0);
-  const groupA = paidFixedAcc + transferredCC + transferredFixedCC + cardLoaded + transferredAcc;
+  const groupA = paidFixedAcc + transferredCC + transferredFixedCC + cardLoaded + transferredAcc + totalTransferredInst;
 
   // === B GRUBU: Kesin çıkacak ama henüz çıkmamış ===
   const unpaidFixedAcc = data.settings.fixedExpenses.filter(e => e.paymentMethod === "account" && !md.fixedPaid?.[e.id]).reduce((s, e) => s + e.amount, 0);
   const untransferredCC = (md.ccSingle || []).filter(e => !md.ccTransferred?.[`single-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
   const untransferredFixedCC = data.settings.fixedExpenses.filter(e => e.paymentMethod === "cc" && !md.ccTransferred?.[`fixed-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
   const untransferredAcc = (md.accountEntries || []).filter(e => !md.accountTransferred?.[e.id]?.transferred).reduce((s, e) => s + e.amount, 0);
-  const groupB = unpaidFixedAcc + untransferredCC + untransferredFixedCC + untransferredAcc + debtTotal + installmentTotal;
+  const untransferredInst = installmentTotal - totalTransferredInst;
+  const groupB = unpaidFixedAcc + untransferredCC + untransferredFixedCC + untransferredAcc + debtTotal + untransferredInst;
 
   // Planlı etkinlik kumbara aylık bloke
   const eventKumbaraBloke = (data.plannedEvents || []).reduce((s, ev) => {
@@ -622,12 +640,22 @@ function calcFlat(data, m, extraInst) {
   const transferredCCF = (md.ccSingle || []).filter(e => md.ccTransferred?.[`single-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
   const transferredFixedCCF = (data.settings.fixedExpenses || []).filter(e => e.paymentMethod === "cc" && md.ccTransferred?.[`fixed-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
   const transferredAccF = (md.accountEntries || []).filter(e => md.accountTransferred?.[e.id]?.transferred).reduce((s, e) => s + e.amount, 0);
-  const groupAF = paidFixedAccF + transferredCCF + transferredFixedCCF + cl + transferredAccF;
+  // Taksit aktarım kontrolü (calcFlat)
+  const transferredInstF = data.installmentPlans.reduce((s, p) => {
+    let cur = p.startMonth;
+    for (let i2 = 0; i2 < p.months; i2++) {
+      if (cur === m) { if (md.ccTransferred?.[`inst-${p.id}`]?.transferred || md.ccTransferred?.["inst-all"]?.transferred) return s + p.monthlyPayment; break; }
+      cur = nmk(cur);
+    }
+    return s;
+  }, 0);
+  const groupAF = paidFixedAccF + transferredCCF + transferredFixedCCF + cl + transferredAccF + transferredInstF;
   const unpaidFixedAccF = (data.settings.fixedExpenses || []).filter(e => e.paymentMethod === "account" && !md.fixedPaid?.[e.id]).reduce((s, e) => s + e.amount, 0);
   const untransferredCCF = (md.ccSingle || []).filter(e => !md.ccTransferred?.[`single-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
   const untransferredFixedCCF = (data.settings.fixedExpenses || []).filter(e => e.paymentMethod === "cc" && !md.ccTransferred?.[`fixed-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
   const untransferredAccF = (md.accountEntries || []).filter(e => !md.accountTransferred?.[e.id]?.transferred).reduce((s, e) => s + e.amount, 0);
-  const groupBF = unpaidFixedAccF + untransferredCCF + untransferredFixedCCF + untransferredAccF + dt + inst;
+  const untransferredInstF = inst - transferredInstF;
+  const groupBF = unpaidFixedAccF + untransferredCCF + untransferredFixedCCF + untransferredAccF + dt + untransferredInstF;
   const remainingX = b - groupAF - groupBF;
   const remaining = remainingX;
   return { remaining, totalSpent: groupAF + groupBF };
@@ -5861,6 +5889,243 @@ function PlanningScreen({ data, setData, mk }) {
   );
 }
 
+/* ═══ ONBOARDING ═══ */
+function OnboardingWizard({ data, setData, familyName }) {
+  const [step, setStep] = useState(0);
+  const [budget, setBudget] = useState("");
+  const [payDay, setPayDay] = useState("15");
+  const [fixedList, setFixedList] = useState([]);
+  const [fixedName, setFixedName] = useState("");
+  const [fixedAmount, setFixedAmount] = useState("");
+  const [fixedMethod, setFixedMethod] = useState("account");
+  const [cards, setCards] = useState([]);
+  const [cardName, setCardName] = useState("");
+
+  const totalSteps = 6;
+  const inpS = { width: "100%", background: "white", border: "1px solid rgba(0,0,0,0.10)", borderRadius: 12, padding: "14px 16px", fontSize: 16, color: "#141008", boxSizing: "border-box", fontFamily: ff };
+  const lblS = { color: "#5A5045", fontSize: 13, marginBottom: 6, fontWeight: 600, display: "block" };
+  const hintS = { color: "#8B7E74", fontSize: 11, marginTop: 8, lineHeight: 1.5 };
+
+  const addFixed = () => {
+    if (!fixedName || !fixedAmount) return;
+    setFixedList(l => [...l, { id: uid(), name: fixedName, amount: parseFloat(fixedAmount) || 0, paymentMethod: fixedMethod, autoPayment: false }]);
+    setFixedName(""); setFixedAmount(""); setFixedMethod("account");
+  };
+  const removeFixed = id => setFixedList(l => l.filter(x => x.id !== id));
+
+  const addCard = () => {
+    if (!cardName) return;
+    setCards(c => [...c, { id: uid(), name: cardName }]);
+    setCardName("");
+  };
+  const removeCard = id => setCards(c => c.filter(x => x.id !== id));
+
+  const finish = () => {
+    setData(d => ({
+      ...d,
+      settings: {
+        ...d.settings,
+        monthlyBudget: parseFloat(budget) || 0,
+        payDay: parseInt(payDay) || 15,
+        fixedExpenses: [...(d.settings.fixedExpenses || []), ...fixedList],
+        cards: [...(d.settings.cards || []), ...cards],
+        onboardingCompleted: true
+      }
+    }));
+  };
+
+  const canNext = () => {
+    if (step === 2) return parseFloat(budget) > 0;
+    return true;
+  };
+
+  const suggestedFixed = [
+    { name: "Kira", icon: "🏠" },
+    { name: "Doğalgaz", icon: "🔥" },
+    { name: "Elektrik", icon: "⚡" },
+    { name: "Su", icon: "💧" },
+    { name: "İnternet", icon: "🌐" },
+    { name: "Telefon", icon: "📱" },
+    { name: "Sigorta", icon: "🛡️" },
+    { name: "Aidat", icon: "🏢" },
+  ];
+
+  return (
+    <div style={{ background: _theme.gradientShort, minHeight: "100dvh", display: "flex", flexDirection: "column", fontFamily: ff }}>
+      {/* İlerleme çubuğu */}
+      {step > 0 && (
+        <div style={{ padding: "16px 20px 0", flexShrink: 0 }}>
+          <div style={{ display: "flex", gap: 4 }}>
+            {Array.from({ length: totalSteps - 1 }, (_, i) => (
+              <div key={i} style={{ flex: 1, height: 4, borderRadius: 2, background: i < step ? X.g : "rgba(0,0,0,0.08)", transition: "background 0.3s" }} />
+            ))}
+          </div>
+          <div style={{ color: "#8B7E74", fontSize: 11, marginTop: 6, textAlign: "right" }}>{step}/{totalSteps - 1}</div>
+        </div>
+      )}
+
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", padding: "20px 24px 40px", maxWidth: 480, margin: "0 auto", width: "100%" }}>
+
+        {/* ADIM 0: Hoş geldiniz */}
+        {step === 0 && (
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 56, marginBottom: 16 }}>👋</div>
+            <div style={{ color: "#141008", fontSize: 22, fontWeight: 800, marginBottom: 8 }}>Hoş geldiniz{familyName ? `, ${familyName}` : ""}!</div>
+            <div style={{ color: "#5A5045", fontSize: 14, lineHeight: 1.6, marginBottom: 32 }}>Ev bütçenizi kolayca yönetmek için birkaç temel bilgiyle başlayalım. Bu işlem 2 dakikadan kısa sürecek.</div>
+            <button onClick={() => setStep(1)} style={{ background: X.g, border: "none", borderRadius: 14, padding: "16px 40px", color: "white", fontSize: 16, fontWeight: 700, cursor: "pointer", fontFamily: ff, width: "100%" }}>Kuruluma Başla</button>
+          </div>
+        )}
+
+        {/* ADIM 1: Maaş günü */}
+        {step === 1 && (
+          <div>
+            <div style={{ fontSize: 32, marginBottom: 12 }}>📅</div>
+            <div style={{ color: "#141008", fontSize: 18, fontWeight: 800, marginBottom: 6 }}>Maaş gününüz</div>
+            <div style={{ color: "#5A5045", fontSize: 13, marginBottom: 20 }}>Maaşınız her ayın kaçında yatıyor? Bütçe döngünüz bu güne göre hesaplanır.</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 16 }}>
+              {["1", "15", "25"].map(d => (
+                <button key={d} onClick={() => setPayDay(d)} style={{ background: payDay === d ? X.g : "white", border: `2px solid ${payDay === d ? X.g : "rgba(0,0,0,0.08)"}`, borderRadius: 12, padding: "14px", color: payDay === d ? "white" : "#141008", fontSize: 18, fontWeight: 800, cursor: "pointer", fontFamily: ff }}>
+                  {d}
+                </button>
+              ))}
+            </div>
+            <label style={lblS}>Farklı bir gün</label>
+            <input type="number" value={!["1", "15", "25"].includes(payDay) ? payDay : ""} onChange={e => setPayDay(e.target.value)} placeholder="Örn: 10" style={{ ...inpS, marginBottom: 8 }} />
+            <div style={hintS}>💡 Bunu daha sonra Ayarlar → Aylık Bütçe'den değiştirebilirsiniz.</div>
+          </div>
+        )}
+
+        {/* ADIM 2: Aylık bütçe */}
+        {step === 2 && (
+          <div>
+            <div style={{ fontSize: 32, marginBottom: 12 }}>💰</div>
+            <div style={{ color: "#141008", fontSize: 18, fontWeight: 800, marginBottom: 6 }}>Aylık bütçeniz</div>
+            <div style={{ color: "#5A5045", fontSize: 13, marginBottom: 20 }}>Evinize her ay giren toplam net gelir nedir? Maaş, ek gelir, kira geliri dahil.</div>
+            <input type="number" value={budget} onChange={e => setBudget(e.target.value)} placeholder="Örn: 80000" style={{ ...inpS, fontSize: 24, textAlign: "center", fontWeight: 700, fontFamily: fm, marginBottom: 8 }} />
+            {parseFloat(budget) > 0 && <div style={{ textAlign: "center", color: X.g, fontSize: 14, fontWeight: 700, fontFamily: fm }}>{C(parseFloat(budget))}</div>}
+            <div style={hintS}>💡 Bunu daha sonra Ayarlar → Aylık Bütçe'den değiştirebilirsiniz.</div>
+          </div>
+        )}
+
+        {/* ADIM 3: Sabit giderler */}
+        {step === 3 && (
+          <div>
+            <div style={{ fontSize: 32, marginBottom: 12 }}>🔒</div>
+            <div style={{ color: "#141008", fontSize: 18, fontWeight: 800, marginBottom: 6 }}>Sabit giderleriniz</div>
+            <div style={{ color: "#5A5045", fontSize: 13, marginBottom: 16 }}>Her ay düzenli ödediğiniz giderleri ekleyin.</div>
+
+            {/* Hazır öneriler */}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>
+              {suggestedFixed.filter(s => !fixedList.find(f => f.name === s.name)).map(s => (
+                <button key={s.name} onClick={() => { setFixedName(s.name); }} style={{ background: fixedName === s.name ? X.gd : "white", border: `1px solid ${fixedName === s.name ? X.g : "rgba(0,0,0,0.08)"}`, borderRadius: 8, padding: "6px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: ff, color: fixedName === s.name ? X.g : "#5A5045" }}>
+                  {s.icon} {s.name}
+                </button>
+              ))}
+            </div>
+
+            <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+              <input value={fixedName} onChange={e => setFixedName(e.target.value)} placeholder="Gider adı" style={{ ...inpS, flex: 1 }} />
+              <input type="number" value={fixedAmount} onChange={e => setFixedAmount(e.target.value)} placeholder="Tutar" style={{ ...inpS, flex: 0.6 }} />
+            </div>
+            <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+              <button onClick={() => setFixedMethod("account")} style={{ flex: 1, background: fixedMethod === "account" ? X.gd : "white", border: `1px solid ${fixedMethod === "account" ? X.g : "rgba(0,0,0,0.08)"}`, borderRadius: 8, padding: "8px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: ff, color: fixedMethod === "account" ? X.g : "#5A5045" }}>🏦 Hesaptan</button>
+              <button onClick={() => setFixedMethod("cc")} style={{ flex: 1, background: fixedMethod === "cc" ? X.gd : "white", border: `1px solid ${fixedMethod === "cc" ? X.g : "rgba(0,0,0,0.08)"}`, borderRadius: 8, padding: "8px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: ff, color: fixedMethod === "cc" ? X.g : "#5A5045" }}>💳 Kredi Kartı</button>
+            </div>
+            <button onClick={addFixed} disabled={!fixedName || !fixedAmount} style={{ width: "100%", background: fixedName && fixedAmount ? X.g : "rgba(0,0,0,0.06)", border: "none", borderRadius: 10, padding: "10px", color: fixedName && fixedAmount ? "white" : "#8B7E74", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: ff, marginBottom: 12 }}>+ Ekle</button>
+
+            {fixedList.length > 0 && fixedList.map(f => (
+              <div key={f.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 10px", marginBottom: 4, background: "white", borderRadius: 8, border: "1px solid rgba(0,0,0,0.06)" }}>
+                <div>
+                  <span style={{ color: "#141008", fontSize: 13, fontWeight: 700 }}>{f.name}</span>
+                  <span style={{ color: "#8B7E74", fontSize: 11, marginLeft: 8 }}>{f.paymentMethod === "cc" ? "💳" : "🏦"}</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ color: "#141008", fontSize: 13, fontWeight: 700, fontFamily: fm }}>{C(f.amount)}</span>
+                  <button onClick={() => removeFixed(f.id)} style={{ background: "none", border: "none", color: X.r, fontSize: 16, cursor: "pointer", padding: "2px 6px" }}>✕</button>
+                </div>
+              </div>
+            ))}
+            {fixedList.length > 0 && (
+              <div style={{ textAlign: "right", color: X.g, fontSize: 13, fontWeight: 700, fontFamily: fm, marginTop: 6 }}>
+                Toplam: {C(fixedList.reduce((s, f) => s + f.amount, 0))}
+              </div>
+            )}
+            <div style={hintS}>💡 Bunu daha sonra Ayarlar → Sabit Giderler'den değiştirebilirsiniz. Şimdi atlayabilirsiniz.</div>
+          </div>
+        )}
+
+        {/* ADIM 4: Kredi kartları */}
+        {step === 4 && (
+          <div>
+            <div style={{ fontSize: 32, marginBottom: 12 }}>💳</div>
+            <div style={{ color: "#141008", fontSize: 18, fontWeight: 800, marginBottom: 6 }}>Kredi kartlarınız</div>
+            <div style={{ color: "#5A5045", fontSize: 13, marginBottom: 20 }}>Kullandığınız kredi kartlarının adını ekleyin. Harcamalarınızı kart bazlı takip edebilirsiniz.</div>
+            <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+              <input value={cardName} onChange={e => setCardName(e.target.value)} placeholder="Örn: Yapıkredi, Garanti" style={{ ...inpS, flex: 1 }} />
+              <button onClick={addCard} disabled={!cardName} style={{ background: cardName ? X.g : "rgba(0,0,0,0.06)", border: "none", borderRadius: 10, padding: "10px 16px", color: cardName ? "white" : "#8B7E74", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: ff }}>+ Ekle</button>
+            </div>
+
+            {cards.map(c2 => (
+              <div key={c2.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 12px", marginBottom: 4, background: "white", borderRadius: 8, border: "1px solid rgba(0,0,0,0.06)" }}>
+                <span style={{ color: "#141008", fontSize: 14, fontWeight: 700 }}>💳 {c2.name}</span>
+                <button onClick={() => removeCard(c2.id)} style={{ background: "none", border: "none", color: X.r, fontSize: 16, cursor: "pointer", padding: "2px 6px" }}>✕</button>
+              </div>
+            ))}
+            <div style={hintS}>💡 Bunu daha sonra Ayarlar → Kartlarım'dan değiştirebilirsiniz. Kredi kartınız yoksa atlayabilirsiniz.</div>
+          </div>
+        )}
+
+        {/* ADIM 5: Özet */}
+        {step === 5 && (
+          <div>
+            <div style={{ fontSize: 32, marginBottom: 12 }}>✅</div>
+            <div style={{ color: "#141008", fontSize: 18, fontWeight: 800, marginBottom: 6 }}>Hazırsınız!</div>
+            <div style={{ color: "#5A5045", fontSize: 13, marginBottom: 20 }}>Kurulum bilgileriniz:</div>
+
+            <div style={{ background: "white", borderRadius: 14, border: "1px solid rgba(0,0,0,0.08)", overflow: "hidden", marginBottom: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 16px", borderBottom: "1px solid rgba(0,0,0,0.06)" }}>
+                <span style={{ color: "#5A5045", fontSize: 13 }}>Maaş günü</span>
+                <span style={{ color: "#141008", fontSize: 13, fontWeight: 700 }}>Ayın {payDay}'i</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 16px", borderBottom: "1px solid rgba(0,0,0,0.06)" }}>
+                <span style={{ color: "#5A5045", fontSize: 13 }}>Aylık bütçe</span>
+                <span style={{ color: X.g, fontSize: 13, fontWeight: 700, fontFamily: fm }}>{C(parseFloat(budget) || 0)}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 16px", borderBottom: "1px solid rgba(0,0,0,0.06)" }}>
+                <span style={{ color: "#5A5045", fontSize: 13 }}>Sabit giderler</span>
+                <span style={{ color: "#141008", fontSize: 13, fontWeight: 700 }}>{fixedList.length > 0 ? `${fixedList.length} adet · ${C(fixedList.reduce((s, f) => s + f.amount, 0))}` : "Eklenmedi"}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 16px" }}>
+                <span style={{ color: "#5A5045", fontSize: 13 }}>Kredi kartları</span>
+                <span style={{ color: "#141008", fontSize: 13, fontWeight: 700 }}>{cards.length > 0 ? `${cards.length} kart` : "Eklenmedi"}</span>
+              </div>
+            </div>
+
+            {parseFloat(budget) > 0 && fixedList.length > 0 && (
+              <div style={{ background: X.gd, borderRadius: 10, padding: "10px 14px", marginBottom: 16 }}>
+                <div style={{ color: X.g, fontSize: 12, fontWeight: 700 }}>Tahmini aylık kalan</div>
+                <div style={{ color: X.g, fontSize: 20, fontWeight: 800, fontFamily: fm }}>{C((parseFloat(budget) || 0) - fixedList.reduce((s, f) => s + f.amount, 0))}</div>
+              </div>
+            )}
+
+            <div style={{ color: "#8B7E74", fontSize: 11, lineHeight: 1.5, marginBottom: 16 }}>Tüm bilgileri daha sonra Ayarlar'dan değiştirebilirsiniz. Değişken giderler, borçlar ve birikim gibi detayları uygulamayı kullanırken ekleyebilirsiniz.</div>
+
+            <button onClick={finish} style={{ width: "100%", background: X.g, border: "none", borderRadius: 14, padding: "16px", color: "white", fontSize: 16, fontWeight: 700, cursor: "pointer", fontFamily: ff }}>Bütçemi Oluştur</button>
+          </div>
+        )}
+
+        {/* İleri / Geri butonları */}
+        {step > 0 && step < 5 && (
+          <div style={{ display: "flex", gap: 10, marginTop: 24 }}>
+            <button onClick={() => setStep(s => s - 1)} style={{ flex: 0.4, background: "rgba(0,0,0,0.04)", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 12, padding: "14px", color: "#5A5045", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: ff }}>← Geri</button>
+            <button onClick={() => setStep(s => s + 1)} disabled={!canNext()} style={{ flex: 0.6, background: canNext() ? X.g : "rgba(0,0,0,0.06)", border: "none", borderRadius: 12, padding: "14px", color: canNext() ? "white" : "#8B7E74", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: ff }}>{step === 4 ? "Özete Git →" : "İleri →"}</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function FamilyManagement({ isAdmin, family, onBack }) {
   const [members, setMembers] = useState({});
   const [loading, setLoading] = useState(true);
@@ -7334,6 +7599,12 @@ export default function App() {
   if (!user) return <LoginScreen pendingInvite={pendingInvite} setPendingInvite={setPendingInvite} />;
   if (!family) return <div style={{ background: _theme.gradientShort, height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: X.tm, fontFamily: ff, fontSize: 14, padding: 20, textAlign: "center" }}>Aile kaydı bulunamadı. Lütfen çıkış yapıp yeniden kayıt olun veya davet koduyla giriş yapın.<br/><button onClick={() => signOut(auth)} style={{ marginTop: 16, background: X.rd, border: "none", borderRadius: 8, padding: "8px 20px", color: X.r, fontWeight: 700, cursor: "pointer" }}>Çıkış Yap</button></div>;
   if (!loaded) return <div style={{ background: _theme.gradientShort, height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: X.g, fontFamily: ff, fontSize: 16 }}>Veriler yükleniyor...</div>;
+
+  // Onboarding: yeni kullanıcı kontrolü
+  // Mevcut kullanıcılarda onboardingCompleted yok (undefined) ve monthlyBudget > 0 — onları atla
+  // Yeni kullanıcılarda onboardingCompleted yok ve monthlyBudget 0 — onboarding göster
+  const needsOnboarding = !data.settings.onboardingCompleted && !data.settings.monthlyBudget;
+  if (needsOnboarding) return <OnboardingWizard data={data} setData={setData} familyName={family?.name} />;
 
   const backupNeeded = needsWeeklyBackup(data);
   const memberLocked = !isAdmin && backupNeeded;
