@@ -3,8 +3,10 @@ import { getAuth } from "firebase-admin/auth";
 import { getDatabase } from "firebase-admin/database";
 
 if (!getApps().length) {
+  const sa = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY || "{}");
+  if (sa.private_key) sa.private_key = sa.private_key.replace(/\\n/g, "\n");
   initializeApp({
-    credential: cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY || "{}")),
+    credential: cert(sa),
     databaseURL: "https://ev-butcesi-96167-default-rtdb.europe-west1.firebasedatabase.app"
   });
 }
