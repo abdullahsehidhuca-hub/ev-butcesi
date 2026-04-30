@@ -5891,6 +5891,7 @@ function PlanningScreen({ data, setData, mk }) {
 
 /* ═══ ONBOARDING ═══ */
 function OnboardingWizard({ data, setData, familyName }) {
+  const _theme = THEMES[data?.settings?.theme] || THEMES.default;
   const [step, setStep] = useState(0);
   const [budget, setBudget] = useState("");
   const [payDay, setPayDay] = useState("15");
