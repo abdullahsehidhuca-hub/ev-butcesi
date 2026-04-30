@@ -6885,6 +6885,7 @@ function Settings({ data, setData, isAdmin, family }) {
     { id: "theme", l: "Tema", i: "🎨", d: THEMES[data.settings.theme || "default"]?.name || "Varsayılan" },
     { id: "family", l: "Aile Bilgileri", i: "👨‍👩‍👧‍👦", d: isAdmin ? "Yönetici" : "Üye" },
     ...(isAdmin ? [{ id: "reset", l: "Sıfırla", i: "🗑️", d: "Geri alınamaz" }] : []),
+    { id: "howto", l: "Nasıl Kullanılır", i: "📖", d: "Uygulama rehberi" },
     { id: "logout", l: "Çıkış Yap", i: "🚪", d: auth.currentUser?.email || "" },
   ];
   const BackBtn = () => <button onClick={() => setSec(null)} style={{ background: "none", border: "none", color: X.g, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff, padding: 0, marginBottom: 16 }}>← Geri</button>;
@@ -7061,6 +7062,62 @@ function Settings({ data, setData, isAdmin, family }) {
     </div>
   );
   if (sec === "family") return (<FamilyManagement isAdmin={isAdmin} family={family} onBack={() => setSec(null)} />);
+  if (sec === "howto") {
+    const sections = [
+      { icon: "🏠", title: "Güncel Durum", items: [
+        { q: "Bütçe özeti ne gösteriyor?", a: "Aylık bütçenizden sabit giderler, taksitler ve borçlar düşüldükten sonra kalan kullanılabilir paranızı (X) gösterir. Y bankadaki para, B bloke edilen paradır." },
+        { q: "Sabit gider ödemesini nasıl işaretlerim?", a: "Güncel Durum'da sabit giderler listesinden ödeme butonuna basın. Ödenen kalemler yeşile döner." },
+        { q: "Kredi kartı harcaması nasıl giriyorum?", a: "Tek çekim için 'KK Tek Çekim', taksitli alışveriş için 'Taksit' butonunu kullanın. Harcamayı karta aktarmayı unutmayın." },
+        { q: "Harcama fişi nasıl çalışıyor?", a: "📷 butonuyla fişin fotoğrafını çekin. AI otomatik analiz eder: mağaza adı, ürünler, fiyatlar ve kategoriler çıkarılır. Sonucu onaylayıp kaydedersiniz." },
+        { q: "Simülasyon ne işe yarar?", a: "'Ya şunu alsam?' senaryolarını test etmenizi sağlar. Gerçek bütçenizi etkilemeden bir harcamanın X'i nasıl etkileyeceğini görürsünüz." },
+      ]},
+      { icon: "📊", title: "Analiz", items: [
+        { q: "Risk & Yönlendirme ne gösteriyor?", a: "7 kritik faktörü otomatik izler: bütçe kullanımı, harcama gücü, sürdürülebilirlik, kategori kontrolü, beklenmeyen gider fonu, gider artışları ve nakit akışı. Her biri alarm/dikkat/güvenli olarak renklendirilir." },
+        { q: "AI Finans Danışmanı ne yapıyor?", a: "Tüm bütçe verilerinizi, harcama alışkanlıklarınızı, market fişlerinizi ve hedeflerinizi analiz ederek kişisel tavsiyeler verir. Günde 3 kez kullanılabilir." },
+        { q: "Birikim nasıl takip edilir?", a: "TL, Dolar, Euro ve Altın cinsinden birikimlerinizi alış/satış olarak kaydedebilirsiniz. Canlı kurlarla toplam TL değerinizi görürsünüz." },
+      ]},
+      { icon: "📅", title: "Planlama", items: [
+        { q: "Taksit takvimi ne gösteriyor?", a: "Tüm aktif taksitlerinizin hangi ay ne kadar ödeme gerektirdiğini ay ay gösterir. Gelecekteki yükünüzü önceden görürsünüz." },
+        { q: "Birikim hedefi nasıl eklenir?", a: "Planlama → Hedefler'den yeni hedef ekleyin. İsim, hedef tutar, para birimi ve öncelik belirleyin. İlerlemenizi takip edin." },
+        { q: "Planlı etkinlik nedir?", a: "Tatil, düğün, bayram gibi ileriye dönük büyük harcamalar için kumbara oluşturursunuz. Uygulama her ay ne kadar biriktirmeniz gerektiğini hesaplar." },
+      ]},
+      { icon: "⚙️", title: "Ayarlar", items: [
+        { q: "Tema nasıl değiştirilir?", a: "Ayarlar → Tema'dan 'Varsayılan' (kahve/krem, Quicksand font) veya 'Sıcak Kurumsal' (beyaz/krem, DM Sans font) seçebilirsiniz." },
+        { q: "Eşimi nasıl davet ederim?", a: "Ayarlar → Aile Bilgileri → Yeni Üye Ekle. İsim ve e-posta girin, 6 haneli davet kodu oluşturulur. Bu kodu eşinizle paylaşın." },
+        { q: "Yedekleme nasıl çalışır?", a: "Verileriniz otomatik olarak her gün buluta yedeklenir (son 7 gün saklanır). Ayarlar → Yedekleme'den manuel yedek alabilir veya eski yedeğe dönebilirsiniz." },
+      ]},
+      { icon: "💡", title: "İpuçları", items: [
+        { q: "X, Y, B ne demek?", a: "X = kullanılabilir para (harcayabileceğiniz), Y = bankadaki toplam para, B = bloke tutar (taksit, borç, sabit giderler için ayrılmış). X = Y − B formülüyle hesaplanır." },
+        { q: "Dönem nedir?", a: "Bütçe döngünüz maaş gününden bir sonraki maaş gününe kadardır. Örneğin maaş 15'inde yatıyorsa dönem 15 Nisan – 14 Mayıs'tır." },
+        { q: "KK aktarımı neden önemli?", a: "Kredi kartıyla yaptığınız harcamalar bankadan otomatik çıkmaz. Aktarım işaretlediğinizde uygulama o tutarı 'ödenmiş' sayar ve blokeden düşer." },
+      ]},
+    ];
+    const [openIdx, setOpenIdx] = useState(null);
+    return (
+      <div style={{ padding: "20px 16px 90px" }}>
+        <BackBtn />
+        <h2 style={{ color: X.t, fontSize: 18, margin: "0 0 16px", fontFamily: ff }}>📖 Nasıl Kullanılır</h2>
+        {sections.map((sec2, si) => (
+          <div key={si} style={{ marginBottom: 16 }}>
+            <div style={{ color: X.t, fontSize: 15, fontWeight: 800, marginBottom: 8 }}>{sec2.icon} {sec2.title}</div>
+            {sec2.items.map((item, qi) => {
+              const key = `${si}-${qi}`;
+              const isOpen = openIdx === key;
+              return (
+                <Card key={qi} onClick={() => setOpenIdx(isOpen ? null : key)} s={{ cursor: "pointer", marginBottom: 6, padding: "12px 14px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div style={{ color: X.t, fontSize: 13, fontWeight: 700, flex: 1 }}>{item.q}</div>
+                    <span style={{ color: X.td, fontSize: 16, transform: isOpen ? "rotate(90deg)" : "none", transition: "transform 0.2s" }}>›</span>
+                  </div>
+                  {isOpen && <div style={{ color: X.tm, fontSize: 12, lineHeight: 1.6, marginTop: 8, paddingTop: 8, borderTop: "1px solid rgba(0,0,0,0.06)" }}>{item.a}</div>}
+                </Card>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    );
+  }
   if (sec === "logout") return (<div style={{ padding: "20px 16px 90px" }}><BackBtn /><Card s={{ textAlign: "center", padding: 24 }}><div style={{ fontSize: 36, marginBottom: 8 }}>🚪</div><div style={{ color: X.t, fontSize: 14, marginBottom: 8 }}>Giriş: <strong>{family?.name || auth.currentUser?.email}</strong></div><div style={{ color: X.tm, fontSize: 12, marginBottom: 16 }}>Çıkış yaptığınızda verileriniz bulutta güvende kalır. İsminiz ve şifrenizle tekrar giriş yapabilirsiniz.</div><Btn c={X.r} onClick={() => signOut(auth)}>Çıkış Yap</Btn></Card></div>);
   return null;
 }
