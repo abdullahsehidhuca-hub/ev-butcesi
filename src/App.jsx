@@ -4228,6 +4228,9 @@ KURALLAR:
 - Olmayan veriyi UYDURMA
 - Geçmiş dönem yoksa karşılaştırma yapma, "ilk dönem" olduğunu belirt
 - MADDE MADDE yaz, paragraf değil — her başlık altında kısa maddeler
+- ÇİFT SAYMA YAPMA: Bloke (B) içinde olan kalemleri X'ten tekrar düşme. X zaten net rakamdır.
+- Setcard/Multinet tutarları KK tek çekim içinde zaten sayılıdır — ayrı ek harcama DEĞİLDİR.
+- Market fişleri mevcut KK veya hesap hareketlerinin detayıdır — ayrı ek harcama DEĞİLDİR.
 
 ÖDEME DÖNEMİ:
 - Döngü: her ayın 15'inden takip eden ayın 14'üne
@@ -4235,8 +4238,11 @@ KURALLAR:
 - Mevcut dönem: ${mk} → ${periodStartDate.toLocaleDateString("tr-TR")} – ${periodEndDate.toLocaleDateString("tr-TR")}
 - Dönemin ${daysIntoPeriod}. günü, ${daysLeftInPeriod} gün kaldı (%${periodProgress})
 
-BÜTÇE:
+BÜTÇE YAPISI (ÖNEMLİ — çift sayma yapma!):
 - Bütçe: ${C(c.effectiveBudget)} | Bankada (Y): ${C(c.remainingY)} | Bloke (B): ${C(c.groupB)} | Kullanılabilir (X): ${C(c.remainingX)}
+- FORMÜL: X = Bütçe − B (bloke) − yapılan harcamalar. X zaten net kullanılabilir paradır.
+- B (bloke) şunları İÇERİR: aktarılmamış KK ödemeleri, ödenmemiş sabit giderler, taksitler, borç ödemeleri, değişken gider tahmini, beklenmeyen gider fonu. Bunlar X'ten ZATEN düşülmüştür.
+- Aktarılmamış KK ödemeleri hesaba aktarıldığında X DEĞİŞMEZ — sadece B azalır, Y azalır, net etki sıfır.
 - Sabit giderler bütçenin %${fixedRatioPct}'i | Yaklaşan artış: ${upcomingIncreaseCount} kalem
 
 HARCAMA HIZI:
@@ -4255,7 +4261,7 @@ ${accEntries || "  Kayıt yok"}
 KREDİ KARTI TEK ÇEKİM:
 ${ccEntries || "  Kayıt yok"}
 
-AKTARILMAMIŞ KK (henüz hesaba geçmedi):
+AKTARILMAMIŞ KK (henüz hesaba geçmedi — NOT: bunlar B blokeye dahil, X'ten zaten düşülmüş):
 ${untransferredLines || "  Tümü aktarıldı"}
 ${receiptLines.length > 0 ? "\nMARKET FİŞİ:" + receiptLines.join("\n") : "\nMARKET FİŞİ: Yok"}
 ${csvLines.length > 0 ? "\nEKSTRE:" + csvLines.join("\n") : ""}
@@ -4267,29 +4273,28 @@ ${goldRiskLine ? goldRiskLine : (debtLines || "  Aktif borç yok")}
 BİRİKİM HEDEFLERİ:
 ${goalLines || "  Tanımlanmamış"}
 
-BEKLEYEN ÖDEMELER:
+BEKLEYEN ÖDEMELER (NOT: bunlar da B blokeye dahil, X'ten zaten düşülmüş):
 ${data.settings.fixedExpenses.filter(e => !data.months[mk]?.fixedPaid?.[e.id]).map(e => `  ${e.name}: ${C(e.amount)} — ${e.paymentDay || "?"}. günde`).join("\n") || "  Tümü ödendi"}
 
-GÖREV — aşağıdaki başlıklar altında madde madde yaz:
+GÖREV — sen bir finans DANIŞMANISIN, muhasebeci değilsin. Kullanıcı sayıları zaten uygulamadan görüyor. Sen sayıları tekrarlama, YORUM ve TAVSİYE ver. Her başlık altında kısa, somut, rakamsal maddeler yaz:
 
-## Dönem Seyri
-- Harcama hızı dönem sonuna kadar ne getirir? Sayısal tahmin.
-- Bütçeyi aşma riski var mı?
+## Ne Yapmalıyım?
+- Kalan ${daysLeftInPeriod} günde somut olarak ne yapılmalı? Günlük harcama hedefi ne olmalı?
+- Hangi kategoride frene basılmalı, hangisi normal seyrinde?
+- Ertelenebilecek veya iptal edilebilecek bir harcama görüyor musun?
 
-## Kategori Analizi  
-- Hangi kategori beklenenden sapıyor?
-- ${hasPastData ? "Geçmiş dönemlerle kıyasla, trend var mı?" : "İlk dönem olduğunu belirt, karşılaştırma yok."}
+## Dikkat Noktaları
+- Bu dönemde gözden kaçan bir risk var mı? (örn: ay sonu yığılma, fon tükenme, kur riski)
+- Y (bankadaki para) aktarımları karşılamaya yeterli mi?
+${goldRiskLine ? "- Altın borcu kur hareketinden nasıl etkilenir?" : ""}
 
-## Nakit Akışı
-- Aktarılmamış ödemeler hesaba geçince X ne olur?
-- Kritik sıkışma noktası var mı?
+## Fırsat & Tasarruf
+- ${hasPastData ? "Geçmiş dönemlerle kıyasla iyileşme veya kötüleşme var mı?" : "İlk dönem — karşılaştırma yok, ama mevcut veriden çıkarım yap."}
+- Birikim potansiyeli: dönem sonunda tahmini ne kadar birikim yapılabilir? (X üzerinden hesapla, alt-üst senaryo)
+- Somut bir tasarruf fırsatı var mı? (örn: bir kategoride bütçe altı kalma, erken ödeme avantajı)
 
-## Dönem Sonu Tahmini
-- Birikim havuzuna ne kadar girecek? Alt ve üst tahmin.
-${goldRiskLine ? "- Altın borcu kur değişiminin etkisini değerlendir." : ""}
-
-## Aksiyonlar
-- Bu döneme özel 2 somut aksiyon. Rakam ver, genel tavsiye verme.`;
+## 3 Aksiyon
+- Bu döneme özel 3 somut, uygulanabilir aksiyon. Her birinde RAKAM ver (örn: "X kategorisinde günlük Y TL ile sınırla"). "Tasarruf edin" gibi boş tavsiye VERME.`;
 
             const idToken = await auth.currentUser?.getIdToken();
             if (!idToken) { setAiText("Oturum bulunamadı. Çıkış yapıp tekrar giriş yapın."); setAiLoading(false); return; }
