@@ -5980,9 +5980,9 @@ function OnboardingWizard({ data, setData, familyName }) {
   const [cardName, setCardName] = useState("");
 
   const totalSteps = 6;
-  const inpS = { width: "100%", background: "white", border: "1px solid rgba(0,0,0,0.10)", borderRadius: 12, padding: "14px 16px", fontSize: 16, color: "#141008", boxSizing: "border-box", fontFamily: ff };
-  const lblS = { color: "#5A5045", fontSize: 13, marginBottom: 6, fontWeight: 600, display: "block" };
-  const hintS = { color: "#8B7E74", fontSize: 11, marginTop: 8, lineHeight: 1.5 };
+  const inpS = { width: "100%", background: "white", border: "1px solid rgba(0,0,0,0.10)", borderRadius: 10, padding: "10px 12px", fontSize: 14, color: "#141008", boxSizing: "border-box", fontFamily: ff };
+  const lblS = { color: "#5A5045", fontSize: 12, marginBottom: 4, fontWeight: 600, display: "block" };
+  const hintS = { color: "#8B7E74", fontSize: 10, marginTop: 6, lineHeight: 1.4 };
 
   const addFixed = () => {
     if (!fixedName || !fixedAmount) return;
@@ -6029,40 +6029,40 @@ function OnboardingWizard({ data, setData, familyName }) {
   ];
 
   return (
-    <div style={{ background: _theme.gradientShort, minHeight: "100dvh", display: "flex", flexDirection: "column", fontFamily: ff }}>
+    <div style={{ background: _theme.gradientShort, height: "100dvh", display: "flex", flexDirection: "column", fontFamily: ff, overflow: "hidden" }}>
       {/* İlerleme çubuğu */}
       {step > 0 && (
-        <div style={{ padding: "16px 20px 0", flexShrink: 0 }}>
+        <div style={{ padding: "12px 16px 0", flexShrink: 0 }}>
           <div style={{ display: "flex", gap: 4 }}>
             {Array.from({ length: totalSteps - 1 }, (_, i) => (
-              <div key={i} style={{ flex: 1, height: 4, borderRadius: 2, background: i < step ? X.g : "rgba(0,0,0,0.08)", transition: "background 0.3s" }} />
+              <div key={i} style={{ flex: 1, height: 3, borderRadius: 2, background: i < step ? X.g : "rgba(0,0,0,0.08)", transition: "background 0.3s" }} />
             ))}
           </div>
-          <div style={{ color: "#8B7E74", fontSize: 11, marginTop: 6, textAlign: "right" }}>{step}/{totalSteps - 1}</div>
+          <div style={{ color: "#8B7E74", fontSize: 10, marginTop: 4, textAlign: "right" }}>{step}/{totalSteps - 1}</div>
         </div>
       )}
 
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", padding: "20px 24px 40px", maxWidth: 480, margin: "0 auto", width: "100%" }}>
+      <div style={{ flex: 1, overflow: "auto", WebkitOverflowScrolling: "touch", padding: "16px 20px env(safe-area-inset-bottom, 20px)", maxWidth: 480, margin: "0 auto", width: "100%", boxSizing: "border-box" }}>
 
         {/* ADIM 0: Hoş geldiniz */}
         {step === 0 && (
-          <div style={{ textAlign: "center" }}>
-            <div style={{ fontSize: 56, marginBottom: 16 }}>👋</div>
-            <div style={{ color: "#141008", fontSize: 22, fontWeight: 800, marginBottom: 8 }}>Hoş geldiniz{familyName ? `, ${familyName}` : ""}!</div>
-            <div style={{ color: "#5A5045", fontSize: 14, lineHeight: 1.6, marginBottom: 32 }}>Ev bütçenizi kolayca yönetmek için birkaç temel bilgiyle başlayalım. Bu işlem 2 dakikadan kısa sürecek.</div>
-            <button onClick={() => setStep(1)} style={{ background: X.g, border: "none", borderRadius: 14, padding: "16px 40px", color: "white", fontSize: 16, fontWeight: 700, cursor: "pointer", fontFamily: ff, width: "100%" }}>Kuruluma Başla</button>
+          <div style={{ textAlign: "center", paddingTop: 40 }}>
+            <div style={{ fontSize: 44, marginBottom: 12 }}>👋</div>
+            <div style={{ color: "#141008", fontSize: 20, fontWeight: 800, marginBottom: 6 }}>Hoş geldiniz{familyName ? `, ${familyName}` : ""}!</div>
+            <div style={{ color: "#5A5045", fontSize: 13, lineHeight: 1.5, marginBottom: 24 }}>Ev bütçenizi kolayca yönetmek için birkaç temel bilgiyle başlayalım. Bu işlem 2 dakikadan kısa sürecek.</div>
+            <button onClick={() => setStep(1)} style={{ background: X.g, border: "none", borderRadius: 12, padding: "14px 32px", color: "white", fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: ff, width: "100%" }}>Kuruluma Başla</button>
           </div>
         )}
 
         {/* ADIM 1: Maaş günü */}
         {step === 1 && (
           <div>
-            <div style={{ fontSize: 32, marginBottom: 12 }}>📅</div>
-            <div style={{ color: "#141008", fontSize: 18, fontWeight: 800, marginBottom: 6 }}>Maaş gününüz</div>
-            <div style={{ color: "#5A5045", fontSize: 13, marginBottom: 20 }}>Maaşınız her ayın kaçında yatıyor? Bütçe döngünüz bu güne göre hesaplanır.</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 16 }}>
+            <div style={{ fontSize: 28, marginBottom: 8 }}>📅</div>
+            <div style={{ color: "#141008", fontSize: 16, fontWeight: 800, marginBottom: 4 }}>Maaş gününüz</div>
+            <div style={{ color: "#5A5045", fontSize: 12, marginBottom: 12 }}>Maaşınız her ayın kaçında yatıyor? Bütçe döngünüz bu güne göre hesaplanır.</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginBottom: 10 }}>
               {["1", "15", "25"].map(d => (
-                <button key={d} onClick={() => setPayDay(d)} style={{ background: payDay === d ? X.g : "white", border: `2px solid ${payDay === d ? X.g : "rgba(0,0,0,0.08)"}`, borderRadius: 12, padding: "14px", color: payDay === d ? "white" : "#141008", fontSize: 18, fontWeight: 800, cursor: "pointer", fontFamily: ff }}>
+                <button key={d} onClick={() => setPayDay(d)} style={{ background: payDay === d ? X.g : "white", border: `2px solid ${payDay === d ? X.g : "rgba(0,0,0,0.08)"}`, borderRadius: 10, padding: "10px", color: payDay === d ? "white" : "#141008", fontSize: 16, fontWeight: 800, cursor: "pointer", fontFamily: ff }}>
                   {d}
                 </button>
               ))}
@@ -6076,10 +6076,10 @@ function OnboardingWizard({ data, setData, familyName }) {
         {/* ADIM 2: Aylık bütçe */}
         {step === 2 && (
           <div>
-            <div style={{ fontSize: 32, marginBottom: 12 }}>💰</div>
-            <div style={{ color: "#141008", fontSize: 18, fontWeight: 800, marginBottom: 6 }}>Aylık bütçeniz</div>
-            <div style={{ color: "#5A5045", fontSize: 13, marginBottom: 20 }}>Evinize her ay giren toplam net gelir nedir? Maaş, ek gelir, kira geliri dahil.</div>
-            <input type="number" value={budget} onChange={e => setBudget(e.target.value)} placeholder="Örn: 80000" style={{ ...inpS, fontSize: 24, textAlign: "center", fontWeight: 700, fontFamily: fm, marginBottom: 8 }} />
+            <div style={{ fontSize: 28, marginBottom: 8 }}>💰</div>
+            <div style={{ color: "#141008", fontSize: 16, fontWeight: 800, marginBottom: 4 }}>Aylık bütçeniz</div>
+            <div style={{ color: "#5A5045", fontSize: 12, marginBottom: 12 }}>Evinize her ay giren toplam net gelir nedir? Maaş, ek gelir, kira geliri dahil.</div>
+            <input type="number" value={budget} onChange={e => setBudget(e.target.value)} placeholder="Örn: 80000" style={{ ...inpS, fontSize: 20, textAlign: "center", fontWeight: 700, fontFamily: fm, marginBottom: 6 }} />
             {parseFloat(budget) > 0 && <div style={{ textAlign: "center", color: X.g, fontSize: 14, fontWeight: 700, fontFamily: fm }}>{C(parseFloat(budget))}</div>}
             <div style={hintS}>💡 Bunu daha sonra Ayarlar → Aylık Bütçe'den değiştirebilirsiniz.</div>
           </div>
@@ -6088,12 +6088,12 @@ function OnboardingWizard({ data, setData, familyName }) {
         {/* ADIM 3: Sabit giderler */}
         {step === 3 && (
           <div>
-            <div style={{ fontSize: 32, marginBottom: 12 }}>🔒</div>
-            <div style={{ color: "#141008", fontSize: 18, fontWeight: 800, marginBottom: 6 }}>Sabit giderleriniz</div>
-            <div style={{ color: "#5A5045", fontSize: 13, marginBottom: 16 }}>Her ay düzenli ödediğiniz giderleri ekleyin.</div>
+            <div style={{ fontSize: 28, marginBottom: 8 }}>🔒</div>
+            <div style={{ color: "#141008", fontSize: 16, fontWeight: 800, marginBottom: 4 }}>Sabit giderleriniz</div>
+            <div style={{ color: "#5A5045", fontSize: 12, marginBottom: 10 }}>Her ay düzenli ödediğiniz giderleri ekleyin.</div>
 
             {/* Hazır öneriler */}
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 10 }}>
               {suggestedFixed.filter(s => !fixedList.find(f => f.name === s.name)).map(s => (
                 <button key={s.name} onClick={() => { setFixedName(s.name); }} style={{ background: fixedName === s.name ? X.gd : "white", border: `1px solid ${fixedName === s.name ? X.g : "rgba(0,0,0,0.08)"}`, borderRadius: 8, padding: "6px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: ff, color: fixedName === s.name ? X.g : "#5A5045" }}>
                   {s.icon} {s.name}
@@ -6135,9 +6135,9 @@ function OnboardingWizard({ data, setData, familyName }) {
         {/* ADIM 4: Kredi kartları */}
         {step === 4 && (
           <div>
-            <div style={{ fontSize: 32, marginBottom: 12 }}>💳</div>
-            <div style={{ color: "#141008", fontSize: 18, fontWeight: 800, marginBottom: 6 }}>Kredi kartlarınız</div>
-            <div style={{ color: "#5A5045", fontSize: 13, marginBottom: 20 }}>Kullandığınız kredi kartlarının adını ekleyin. Harcamalarınızı kart bazlı takip edebilirsiniz.</div>
+            <div style={{ fontSize: 28, marginBottom: 8 }}>💳</div>
+            <div style={{ color: "#141008", fontSize: 16, fontWeight: 800, marginBottom: 4 }}>Kredi kartlarınız</div>
+            <div style={{ color: "#5A5045", fontSize: 12, marginBottom: 12 }}>Kullandığınız kredi kartlarının adını ekleyin. Harcamalarınızı kart bazlı takip edebilirsiniz.</div>
             <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
               <input value={cardName} onChange={e => setCardName(e.target.value)} placeholder="Örn: Yapıkredi, Garanti" style={{ ...inpS, flex: 1 }} />
               <button onClick={addCard} disabled={!cardName} style={{ background: cardName ? X.g : "rgba(0,0,0,0.06)", border: "none", borderRadius: 10, padding: "10px 16px", color: cardName ? "white" : "#8B7E74", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: ff }}>+ Ekle</button>
@@ -6156,9 +6156,9 @@ function OnboardingWizard({ data, setData, familyName }) {
         {/* ADIM 5: Özet */}
         {step === 5 && (
           <div>
-            <div style={{ fontSize: 32, marginBottom: 12 }}>✅</div>
-            <div style={{ color: "#141008", fontSize: 18, fontWeight: 800, marginBottom: 6 }}>Hazırsınız!</div>
-            <div style={{ color: "#5A5045", fontSize: 13, marginBottom: 20 }}>Kurulum bilgileriniz:</div>
+            <div style={{ fontSize: 28, marginBottom: 8 }}>✅</div>
+            <div style={{ color: "#141008", fontSize: 16, fontWeight: 800, marginBottom: 4 }}>Hazırsınız!</div>
+            <div style={{ color: "#5A5045", fontSize: 12, marginBottom: 12 }}>Kurulum bilgileriniz:</div>
 
             <div style={{ background: "white", borderRadius: 14, border: "1px solid rgba(0,0,0,0.08)", overflow: "hidden", marginBottom: 16 }}>
               <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 16px", borderBottom: "1px solid rgba(0,0,0,0.06)" }}>
@@ -6186,17 +6186,17 @@ function OnboardingWizard({ data, setData, familyName }) {
               </div>
             )}
 
-            <div style={{ color: "#8B7E74", fontSize: 11, lineHeight: 1.5, marginBottom: 16 }}>Tüm bilgileri daha sonra Ayarlar'dan değiştirebilirsiniz. Değişken giderler, borçlar ve birikim gibi detayları uygulamayı kullanırken ekleyebilirsiniz.</div>
+            <div style={{ color: "#8B7E74", fontSize: 10, lineHeight: 1.4, marginBottom: 12 }}>Tüm bilgileri daha sonra Ayarlar'dan değiştirebilirsiniz. Değişken giderler, borçlar ve birikim gibi detayları uygulamayı kullanırken ekleyebilirsiniz.</div>
 
-            <button onClick={finish} style={{ width: "100%", background: X.g, border: "none", borderRadius: 14, padding: "16px", color: "white", fontSize: 16, fontWeight: 700, cursor: "pointer", fontFamily: ff }}>Bütçemi Oluştur</button>
+            <button onClick={finish} style={{ width: "100%", background: X.g, border: "none", borderRadius: 12, padding: "14px", color: "white", fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: ff, marginBottom: 20 }}>Bütçemi Oluştur</button>
           </div>
         )}
 
         {/* İleri / Geri butonları */}
         {step > 0 && step < 5 && (
-          <div style={{ display: "flex", gap: 10, marginTop: 24 }}>
-            <button onClick={() => setStep(s => s - 1)} style={{ flex: 0.4, background: "rgba(0,0,0,0.04)", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 12, padding: "14px", color: "#5A5045", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: ff }}>← Geri</button>
-            <button onClick={() => setStep(s => s + 1)} disabled={!canNext()} style={{ flex: 0.6, background: canNext() ? X.g : "rgba(0,0,0,0.06)", border: "none", borderRadius: 12, padding: "14px", color: canNext() ? "white" : "#8B7E74", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: ff }}>{step === 4 ? "Özete Git →" : "İleri →"}</button>
+          <div style={{ display: "flex", gap: 8, marginTop: 16, paddingBottom: 16 }}>
+            <button onClick={() => setStep(s => s - 1)} style={{ flex: 0.4, background: "rgba(0,0,0,0.04)", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 10, padding: "12px", color: "#5A5045", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: ff }}>← Geri</button>
+            <button onClick={() => setStep(s => s + 1)} disabled={!canNext()} style={{ flex: 0.6, background: canNext() ? X.g : "rgba(0,0,0,0.06)", border: "none", borderRadius: 10, padding: "12px", color: canNext() ? "white" : "#8B7E74", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: ff }}>{step === 4 ? "Özete Git →" : "İleri →"}</button>
           </div>
         )}
       </div>
