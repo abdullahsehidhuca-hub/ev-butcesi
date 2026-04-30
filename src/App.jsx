@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
 import * as Papa from "papaparse";
 import { initializeApp } from "firebase/app";
 import { getDatabase, ref, set, get, onValue } from "firebase/database";
-import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from "firebase/auth";
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword } from "firebase/auth";
 
 // Firebase Config
 const firebaseConfig = {
@@ -2405,28 +2405,16 @@ function ReceiptModal({ receipts, onClose, onSave, onDelete }) {
     try {
       const base64 = imgSrc.split(",")[1];
       const mediaType = imgSrc.split(";")[0].split(":")[1] || "image/jpeg";
-      const resp = await fetch("https://api.anthropic.com/v1/messages", {
+      const idToken = await auth.currentUser?.getIdToken();
+      if (!idToken) { setError("Oturum bulunamadı. Tekrar giriş yapın."); setStep("capture"); setAnalyzing(false); return; }
+      const resp = await fetch("/api/analyze-receipt", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": import.meta.env.VITE_ANTHROPIC_API_KEY,
-          "anthropic-version": "2023-06-01",
-          "anthropic-dangerous-direct-browser-access": "true"
-        },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 2000,
-          messages: [{ role: "user", content: [
-            { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
-            { type: "text", text: "Bu bir market/mağaza fişi. Fişi analiz et ve SADECE aşağıdaki JSON formatında yanıt ver, başka hiçbir şey yazma:\n{\"store\":\"mağaza adı\",\"totalAmount\":toplam_tutar_sayı,\"items\":[{\"name\":\"ürün adı\",\"qty\":adet_sayı,\"price\":birim_fiyat_sayı,\"brand\":\"marka veya boş string\",\"category\":\"kategori\"}]}\ncategory değerleri SADECE şunlardan biri olmalı: süt ürünleri, et/tavuk, meyve/sebze, temel gıda, atıştırmalık, içecek, temizlik, kişisel bakım, bebek/çocuk, diğer.\nFiyatlar Türk Lirası cinsindendir. Eğer fiş okunamıyorsa {\"error\":\"Fiş okunamadı\"} döndür." }
-          ]}]
-        })
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${idToken}` },
+        body: JSON.stringify({ base64, mediaType })
       });
-      const rawData = await resp.json();
-      const rawText = (rawData.content || []).map(c => c.text || "").join("");
-      const cleanText = rawText.replace(/```json|```/g, "").trim();
-      const parsed = JSON.parse(cleanText);
-      if (parsed.error) { setError(parsed.error); setStep("capture"); }
+      const parsed = await resp.json();
+      if (!resp.ok) { setError(parsed.error || "Fiş analiz edilemedi."); setStep("capture"); }
+      else if (parsed.error) { setError(parsed.error); setStep("capture"); }
       else { setResult(parsed); setStep("result"); }
     } catch (err) {
       console.error("Fiş analizi hatası:", err);
@@ -4063,8 +4051,6 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
         });
 
         const callAI = async () => {
-          const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
-          if (!apiKey) { setAiText("API anahtarı tanımlanmamış. Vercel'de VITE_ANTHROPIC_API_KEY ekleyin."); return; }
           setAiLoading(true); setAiText("");
           try {
             // Tarih ve döngü bilgisi
@@ -4184,18 +4170,46 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
               return `  ${ve.name}: bu dönem ${C(cur)}${prev > 0 ? `, önceki ${C(prev)} (${delta !== null ? (delta >= 0 ? "+" : "") + delta + "%" : ""})` : ""}${avg3 > 0 ? `, ${pastAmts.length} dönem ort: ${C(avg3)}` : ""}${trend}`;
             }).join("\n");
 
-            // Aktarılmamış KK kalemleri
-            const untransferred = ccTransferItems.filter(i => !md.ccTransferred?.[i.key]?.transferred);
+            // Aktarılmamış KK kalemleri (AnalysisScreen içinde hesapla)
+            const _isEkstre = data.settings.ccPaymentMode === "ekstre";
+            const _prevMd = _isEkstre ? (data.months[pmk(mk)] || DM()) : null;
+            const _ccItems = (() => {
+              const items = [];
+              const _cards = data.settings.cards || [];
+              const kp = _isEkstre ? "prev-" : "";
+              const srcMonth = _isEkstre ? pmk(mk) : mk;
+              const srcMd = _isEkstre ? _prevMd : md2;
+              data.settings.fixedExpenses.filter(e => e.paymentMethod === "cc").forEach(e => {
+                const cid = e.cardId || _cards[0]?.id;
+                items.push({ key: `${kp}fixed-${e.id}`, label: e.name, amount: e.amount });
+              });
+              (srcMd?.ccSingle || []).forEach(e => {
+                items.push({ key: `${kp}single-${e.id}`, label: e.note || e.merchantName || "Tek çekim", amount: e.amount });
+              });
+              const targetMonth = _isEkstre ? pmk(mk) : mk;
+              data.installmentPlans.forEach(p => {
+                let cur = p.startMonth;
+                for (let i = 0; i < p.months; i++) {
+                  if (cur === targetMonth) {
+                    items.push({ key: `${kp}inst-${p.id}`, label: p.note || "Taksit", amount: p.monthlyPayment });
+                    break;
+                  }
+                  cur = nmk(cur);
+                }
+              });
+              return items;
+            })();
+            const untransferred = _ccItems.filter(i => !md2.ccTransferred?.[i.key]?.transferred);
             const untransferredLines = untransferred.map(i => `  ${i.label}: ${C(i.amount)}`).join("\n");
 
             // Dönem içi harcama yığılması
-            const allTxDates2 = [...(md.ccSingle || []), ...(md.accountEntries || [])].map(e => e.date).filter(Boolean);
+            const allTxDates2 = [...(md2.ccSingle || []), ...(md2.accountEntries || [])].map(e => e.date).filter(Boolean);
             const periodMidDay = new Date(periodStartDate); periodMidDay.setDate(periodStartDate.getDate() + Math.floor(periodDays / 2));
             const firstHalfTxCount = allTxDates2.filter(d => new Date(d) <= periodMidDay).length;
             const firstHalfPct = allTxDates2.length > 0 ? Math.round((firstHalfTxCount / allTxDates2.length) * 100) : 0;
 
             // Setcard/Multinet kullanım
-            const setcardTotal = (md.ccSingle || []).filter(e => (e.note||"").toLowerCase().includes("setcard") || (e.note||"").toLowerCase().includes("multinet")).reduce((s,e) => s + e.amount, 0);
+            const setcardTotal = (md2.ccSingle || []).filter(e => (e.note||"").toLowerCase().includes("setcard") || (e.note||"").toLowerCase().includes("multinet")).reduce((s,e) => s + e.amount, 0);
 
             // Altın borcu kur riski
             const goldDebt = data.debts.find(d2 => d2.currency === "XAU" && d2.remainingMonths > 0);
@@ -4277,19 +4291,17 @@ ${goldRiskLine ? "- Altın borcu kur değişiminin etkisini değerlendir." : ""}
 ## Aksiyonlar
 - Bu döneme özel 2 somut aksiyon. Rakam ver, genel tavsiye verme.`;
 
-            const res = await fetch("https://api.anthropic.com/v1/messages", {
+            const idToken = await auth.currentUser?.getIdToken();
+            if (!idToken) { setAiText("Oturum bulunamadı. Çıkış yapıp tekrar giriş yapın."); setAiLoading(false); return; }
+            const res = await fetch("/api/ai-advisor", {
               method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "x-api-key": apiKey,
-                "anthropic-version": "2023-06-01",
-                "anthropic-dangerous-direct-browser-access": "true"
-              },
-              body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 2000, messages: [{ role: "user", content: prompt }] })
+              headers: { "Content-Type": "application/json", "Authorization": `Bearer ${idToken}` },
+              body: JSON.stringify({ prompt })
             });
             const d = await res.json();
-            if (d.error) throw new Error(d.error.message);
-            setAiText((d.content || []).map(b => b.text || "").join(""));
+            if (!res.ok) throw new Error(d.error || "Analiz yapılamadı");
+            setAiText(d.text || "");
+            if (typeof d.remaining === "number") setAiText(prev => prev + `\n\n---\n_Bugün ${d.remaining} AI danışman hakkınız kaldı._`);
           } catch(e) { setAiText("Analiz yüklenemedi: " + e.message); }
           setAiLoading(false);
         };
@@ -6274,6 +6286,122 @@ function OnboardingWizard({ data, setData, familyName }) {
   );
 }
 
+/* ═══ TANITIM EKRANI ═══ */
+function IntroScreen({ onDone }) {
+  const _theme = THEMES[_tid] || THEMES.default;
+  const [page, setPage] = useState(0);
+
+  const pages = [
+    {
+      icon: "🏠",
+      title: "Güncel Durum",
+      desc: "Aylık bütçe özetinizi görün",
+      items: [
+        "Sabit gider ödemelerini takip edin",
+        "Kredi kartı harcamalarını ve taksitleri yönetin",
+        "Market fişi çekin, AI otomatik analiz etsin",
+        "Hesap ve kart yükleme hareketlerini kaydedin",
+        "Simülasyon ile \"ya şunu alsam?\" senaryoları deneyin"
+      ]
+    },
+    {
+      icon: "📊",
+      title: "Analiz",
+      desc: "Harcamalarınızı derinlemesine inceleyin",
+      items: [
+        "Ekstre analizi ve harcama trendi grafikleri",
+        "Risk ve yönlendirme kartı (otomatik uyarılar)",
+        "Birikim yönetimi (TL, dolar, euro, altın)",
+        "AI Finans Danışmanı — kişisel analiz (günde 3 hak)",
+        "12 aylık bütçe projeksiyonu"
+      ]
+    },
+    {
+      icon: "📅",
+      title: "Planlama",
+      desc: "Geleceği planlayın",
+      items: [
+        "Taksit ve ödeme takvimi",
+        "Birikim alım/satım planlama",
+        "Hedef belirleme ve ilerleme takibi",
+        "Yaklaşan ödemelerin takvim görünümü"
+      ]
+    },
+    {
+      icon: "⚙️",
+      title: "Ayarlar",
+      desc: "Uygulamayı kendinize göre ayarlayın",
+      items: [
+        "Bütçe, kart, sabit/değişken gider tanımları",
+        "Tema seçimi (klasik veya sıcak kurumsal)",
+        "Aile yönetimi — eşinizi davet edin",
+        "Otomatik yedekleme ve geri yükleme",
+        "Fatura bütçeleri ve takvim hatırlatmaları"
+      ]
+    }
+  ];
+
+  const p = pages[page];
+  const isLast = page === pages.length - 1;
+
+  return (
+    <div style={{ background: _theme.gradient, minHeight: "100dvh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: ff, padding: 16 }}>
+      <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+      <div style={{ ...glassSolid, borderRadius: 20, width: "100%", maxWidth: 380, padding: 28, boxShadow: neu }}>
+        {/* İlerleme */}
+        <div style={{ display: "flex", gap: 6, marginBottom: 24 }}>
+          {pages.map((_, i) => (
+            <div key={i} style={{ flex: 1, height: 4, borderRadius: 2, background: i <= page ? X.g : "rgba(0,0,0,0.08)", transition: "background 0.3s" }} />
+          ))}
+        </div>
+
+        {/* İçerik */}
+        <div style={{ textAlign: "center", marginBottom: 20 }}>
+          <div style={{ fontSize: 44, marginBottom: 8 }}>{p.icon}</div>
+          <div style={{ color: X.t, fontSize: 20, fontWeight: 800 }}>{p.title}</div>
+          <div style={{ color: X.tm, fontSize: 13, marginTop: 4 }}>{p.desc}</div>
+        </div>
+
+        <div style={{ background: "rgba(0,0,0,0.03)", borderRadius: 14, padding: "16px 18px", marginBottom: 20 }}>
+          {p.items.map((item, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "6px 0", borderBottom: i < p.items.length - 1 ? "1px solid rgba(0,0,0,0.05)" : "none" }}>
+              <span style={{ color: X.g, fontSize: 12, marginTop: 1, flexShrink: 0 }}>●</span>
+              <span style={{ color: X.t, fontSize: 13, lineHeight: 1.5 }}>{item}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* AI bilgilendirme (Analiz sayfasında) */}
+        {page === 1 && (
+          <div style={{ background: "rgba(15,118,110,0.06)", border: `1px solid rgba(15,118,110,0.2)`, borderRadius: 10, padding: "10px 14px", marginBottom: 16 }}>
+            <div style={{ color: X.g, fontSize: 11, fontWeight: 700, marginBottom: 4 }}>AI Danışman Hakkında</div>
+            <div style={{ color: X.tm, fontSize: 11, lineHeight: 1.6 }}>
+              AI Finans Danışmanı günde <strong style={{ color: X.t }}>3 kez</strong> kullanılabilir. Her kullanımda bütçenizi analiz eder ve kişisel öneriler sunar. Market fişi analizi ise sınırsızdır.
+            </div>
+          </div>
+        )}
+
+        {/* Butonlar */}
+        <div style={{ display: "flex", gap: 8 }}>
+          {page > 0 && (
+            <button onClick={() => setPage(p2 => p2 - 1)} style={{ flex: 0.35, background: "rgba(0,0,0,0.04)", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 12, padding: "14px", color: X.tm, fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: ff }}>← Geri</button>
+          )}
+          <button onClick={() => isLast ? onDone() : setPage(p2 => p2 + 1)} style={{ flex: 1, background: X.g, border: "none", borderRadius: 12, padding: "14px", color: "white", fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: ff }}>
+            {isLast ? "Uygulamaya Başla" : "İleri →"}
+          </button>
+        </div>
+
+        {/* Atla */}
+        {!isLast && (
+          <div style={{ textAlign: "center", marginTop: 12 }}>
+            <button onClick={onDone} style={{ background: "none", border: "none", color: X.td, fontSize: 12, cursor: "pointer", fontFamily: ff }}>Tanıtımı atla →</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function FamilyManagement({ isAdmin, family, onBack }) {
   const [members, setMembers] = useState({});
   const [loading, setLoading] = useState(true);
@@ -7541,7 +7669,30 @@ function LoginScreen({ pendingInvite, setPendingInvite }) {
   const [invData, setInvData] = useState(null);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
+  const [linkData, setLinkData] = useState(null); // email link'ten dönen kullanıcı bilgisi
 
+  // Sayfa yüklendiğinde: URL'de email link var mı kontrol et
+  useEffect(() => {
+    if (isSignInWithEmailLink(auth, window.location.href)) {
+      const params = new URLSearchParams(window.location.search);
+      const urlEmail = params.get("email") || localStorage.getItem("emailForSignIn") || "";
+      const urlName = params.get("name") || "";
+      const urlType = params.get("type") || "newAdmin";
+      const urlInvCode = params.get("invCode") || "";
+
+      if (urlEmail) {
+        setEmail(urlEmail);
+        setName(urlName);
+        setLinkData({ email: urlEmail, name: urlName, type: urlType, invCode: urlInvCode });
+        setMode("setPassword");
+      } else {
+        setErr("E-posta bilgisi bulunamadı. Lütfen tekrar kayıt olun.");
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    }
+  }, []);
+
+  // Giriş (mevcut kullanıcılar: isim + şifre)
   const handleLogin = async () => {
     if (!name || !pass) { setErr("İsim ve şifre gerekli"); return; }
     setLoading(true); setErr("");
@@ -7550,7 +7701,6 @@ function LoginScreen({ pendingInvite, setPendingInvite }) {
       if (found) {
         await signInWithEmailAndPassword(auth, found.email, pass);
       } else if (name.includes("@")) {
-        // E-posta ile giriş (eski hesaplarla uyumluluk)
         setPendingInvite({ type: "migrateName", name });
         await signInWithEmailAndPassword(auth, name, pass);
       } else {
@@ -7565,24 +7715,28 @@ function LoginScreen({ pendingInvite, setPendingInvite }) {
     setLoading(false);
   };
 
+  // Kayıt: email doğrulama linki gönder (şifre yok henüz)
   const handleRegister = async () => {
-    if (!name || !email || !pass) { setErr("Tüm alanları doldurun"); return; }
-    if (pass.length < 6) { setErr("Şifre en az 6 karakter olmalı"); return; }
+    if (!name || !email) { setErr("İsim ve e-posta gerekli"); return; }
     setLoading(true); setErr("");
     try {
       const existing = await lookupName(name);
       if (existing) { setErr("Bu isim zaten kayıtlı. Giriş yapın."); setLoading(false); return; }
-      setPendingInvite({ type: "newAdmin", name, email });
-      await createUserWithEmailAndPassword(auth, email, pass);
+      const actionCodeSettings = {
+        url: `${window.location.origin}${window.location.pathname}?name=${encodeURIComponent(name)}&type=newAdmin&email=${encodeURIComponent(email)}`,
+        handleCodeInApp: true
+      };
+      await sendSignInLinkToEmail(auth, email, actionCodeSettings);
+      localStorage.setItem("emailForSignIn", email);
+      setMode("emailSent");
     } catch (e) {
-      if (e.code === "auth/email-already-in-use") setErr("Bu e-posta zaten kayıtlı.");
-      else if (e.code === "auth/invalid-email") setErr("Geçersiz e-posta adresi.");
+      if (e.code === "auth/invalid-email") setErr("Geçersiz e-posta adresi.");
       else setErr(e.message);
-      setPendingInvite(null);
     }
     setLoading(false);
   };
 
+  // Davet kodu kontrol
   const handleCheckInvite = async () => {
     if (!invCode || invCode.length !== 6) { setErr("6 haneli davet kodunu girin"); return; }
     setLoading(true); setErr("");
@@ -7596,28 +7750,63 @@ function LoginScreen({ pendingInvite, setPendingInvite }) {
     setLoading(false);
   };
 
-  const handleInviteRegister = async () => {
-    if (!pass || pass.length < 6) { setErr("Şifre en az 6 karakter olmalı"); return; }
+  // Davetli: email doğrulama linki gönder
+  const handleInviteSendLink = async () => {
     setLoading(true); setErr("");
     try {
-      setPendingInvite({ type: "invite", code: invCode, invData });
-      await createUserWithEmailAndPassword(auth, invData.email, pass);
+      const actionCodeSettings = {
+        url: `${window.location.origin}${window.location.pathname}?name=${encodeURIComponent(invData.name)}&type=invite&invCode=${invCode}&email=${encodeURIComponent(invData.email)}`,
+        handleCodeInApp: true
+      };
+      await sendSignInLinkToEmail(auth, invData.email, actionCodeSettings);
+      localStorage.setItem("emailForSignIn", invData.email);
+      setMode("emailSent");
     } catch (e) {
-      if (e.code === "auth/email-already-in-use") setErr("Bu e-posta zaten kayıtlı. Yöneticinizden yeni kod isteyin.");
-      else setErr(e.message);
-      setPendingInvite(null);
+      setErr(e.message);
     }
     setLoading(false);
   };
+
+  // Email linkinden döndükten sonra: şifre belirle + hesap oluştur
+  const handleSetPassword = async () => {
+    if (!pass || pass.length < 6) { setErr("Şifre en az 6 karakter olmalı"); return; }
+    setLoading(true); setErr("");
+    try {
+      // 1. Email link ile giriş yap (hesap yoksa oluşturulur)
+      const result = await signInWithEmailLink(auth, linkData.email, window.location.href);
+      // 2. Şifre belirle (sonraki girişlerde kullanılacak)
+      await updatePassword(result.user, pass);
+      // 3. Aile oluştur veya katıl (doğrudan Firebase'e yaz)
+      if (linkData.type === "invite" && linkData.invCode) {
+        const inv = await lookupInvitation(linkData.invCode);
+        if (inv) {
+          await joinViaInvitation(result.user.uid, linkData.invCode, inv);
+        }
+      } else {
+        await migrateOldData(result.user.uid);
+        await createFamily(result.user.uid, result.user.email, linkData.name);
+      }
+      // 4. URL'yi temizle
+      window.history.replaceState({}, document.title, window.location.pathname);
+      localStorage.removeItem("emailForSignIn");
+    } catch (e) {
+      if (e.code === "auth/invalid-action-code") setErr("Bu doğrulama linki geçersiz veya süresi dolmuş. Lütfen tekrar kayıt olun.");
+      else if (e.code === "auth/email-already-in-use") setErr("Bu e-posta zaten kayıtlı. Giriş yapın.");
+      else setErr(e.message);
+    }
+    setLoading(false);
+  };
+
+  const modeTitle = { login: "Giriş yap", register: "Yeni hesap oluştur", invite: "Davet ile katıl", emailSent: "E-posta gönderildi", setPassword: "Şifre belirleyin" };
 
   return (
     <div style={{ background: THEMES[_tid].gradient, minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: ff, padding: 16 }}>
       <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
       <div style={{ ...glassSolid, borderRadius: 20, width: "100%", maxWidth: 380, padding: 28, boxShadow: neu }}>
         <div style={{ textAlign: "center", marginBottom: 24 }}>
-          <div style={{ fontSize: 40, marginBottom: 8 }}>💰</div>
-          <div style={{ color: X.t, fontSize: 22, fontWeight: 800 }}>EV BÜTÇESİ</div>
-          <div style={{ color: X.tm, fontSize: 13, marginTop: 4 }}>{mode === "login" ? "Giriş yap" : mode === "register" ? "Yeni hesap oluştur" : "Davet ile katıl"}</div>
+          <div style={{ fontSize: 40, marginBottom: 8 }}>{mode === "emailSent" ? "📧" : mode === "setPassword" ? "🔐" : "💰"}</div>
+          <div style={{ color: X.t, fontSize: 22, fontWeight: 800 }}>{mode === "emailSent" || mode === "setPassword" ? (modeTitle[mode]) : "EV BÜTÇESİ"}</div>
+          <div style={{ color: X.tm, fontSize: 13, marginTop: 4 }}>{mode !== "emailSent" && mode !== "setPassword" && modeTitle[mode]}</div>
         </div>
         {err && <div style={{ background: X.rd, border: `1px solid ${X.r}`, borderRadius: 10, padding: "8px 12px", marginBottom: 12, color: X.r, fontSize: 12, fontWeight: 600 }}>{err}</div>}
 
@@ -7634,8 +7823,8 @@ function LoginScreen({ pendingInvite, setPendingInvite }) {
         {mode === "register" && (<>
           <Inp label="İsim Soyisim" value={name} onChange={setName} placeholder="İsim Soyisim" />
           <Inp label="E-posta" value={email} onChange={setEmail} placeholder="ornek@gmail.com" />
-          <Inp label="Şifre" type="password" value={pass} onChange={setPass} placeholder="En az 6 karakter" />
-          <Btn onClick={handleRegister} disabled={loading}>{loading ? "Kayıt yapılıyor..." : "Kayıt Ol"}</Btn>
+          <div style={{ color: X.tm, fontSize: 11, marginBottom: 12, lineHeight: 1.5 }}>Bu adrese bir doğrulama linki gönderilecek. Gerçek bir e-posta adresi girin.</div>
+          <Btn onClick={handleRegister} disabled={loading}>{loading ? "Gönderiliyor..." : "Doğrulama Linki Gönder"}</Btn>
           <div style={{ textAlign: "center", marginTop: 16 }}>
             <button onClick={() => { setMode("login"); setErr(""); }} style={{ background: "none", border: "none", color: X.b, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: ff }}>← Giriş Yap</button>
           </div>
@@ -7651,11 +7840,48 @@ function LoginScreen({ pendingInvite, setPendingInvite }) {
 
         {mode === "invite" && invData && (<>
           <div style={{ background: X.gd, border: `1px solid ${X.g}`, borderRadius: 10, padding: 12, marginBottom: 12, textAlign: "center" }}>
-            <div style={{ color: X.g, fontSize: 13, fontWeight: 700 }}>Hoş geldiniz!</div>
+            <div style={{ color: X.g, fontSize: 13, fontWeight: 700 }}>Davet doğrulandı</div>
             <div style={{ color: X.t, fontSize: 18, fontWeight: 800, marginTop: 4 }}>{invData.name}</div>
+            <div style={{ color: X.tm, fontSize: 12, marginTop: 4 }}>{invData.email}</div>
           </div>
+          <div style={{ color: X.tm, fontSize: 11, marginBottom: 12, lineHeight: 1.5 }}>Yukarıdaki e-posta adresine bir doğrulama linki göndereceğiz. Bu adrese erişiminiz olmalı.</div>
+          <Btn onClick={handleInviteSendLink} disabled={loading} c={X.g}>{loading ? "Gönderiliyor..." : "Doğrulama Linki Gönder"}</Btn>
+          <div style={{ textAlign: "center", marginTop: 16 }}>
+            <button onClick={() => { setMode("invite"); setErr(""); setInvData(null); setInvCode(""); }} style={{ background: "none", border: "none", color: X.b, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: ff }}>← Farklı kod gir</button>
+          </div>
+        </>)}
+
+        {mode === "emailSent" && (<>
+          <div style={{ textAlign: "center", padding: "8px 0" }}>
+            <div style={{ color: X.t, fontSize: 14, fontWeight: 700, marginBottom: 8 }}>Doğrulama e-postası gönderildi</div>
+            <div style={{ color: X.tm, fontSize: 13, lineHeight: 1.6 }}>
+              <strong style={{ color: X.t }}>{email || invData?.email}</strong> adresine bir doğrulama linki gönderdik.
+            </div>
+            <div style={{ background: X.bd, border: `1px solid ${X.b}`, borderRadius: 10, padding: 12, marginTop: 16, textAlign: "left" }}>
+              <div style={{ color: X.b, fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Yapmanız gerekenler:</div>
+              <div style={{ color: X.tm, fontSize: 12, lineHeight: 1.8 }}>
+                1. E-posta kutunuzu kontrol edin<br/>
+                2. Spam/gereksiz klasörünü de kontrol edin<br/>
+                3. Gelen linke tıklayın<br/>
+                4. Şifrenizi belirleyin
+              </div>
+            </div>
+            <div style={{ color: X.td, fontSize: 11, marginTop: 12 }}>Link 1 saat geçerlidir.</div>
+          </div>
+          <div style={{ textAlign: "center", marginTop: 16 }}>
+            <button onClick={() => { setMode("login"); setErr(""); setInvData(null); }} style={{ background: "none", border: "none", color: X.b, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: ff }}>← Giriş Ekranına Dön</button>
+          </div>
+        </>)}
+
+        {mode === "setPassword" && linkData && (<>
+          <div style={{ background: X.gd, border: `1px solid ${X.g}`, borderRadius: 10, padding: 12, marginBottom: 12, textAlign: "center" }}>
+            <div style={{ color: X.g, fontSize: 13, fontWeight: 700 }}>E-posta doğrulandı</div>
+            <div style={{ color: X.t, fontSize: 18, fontWeight: 800, marginTop: 4 }}>{linkData.name}</div>
+            <div style={{ color: X.tm, fontSize: 12, marginTop: 4 }}>{linkData.email}</div>
+          </div>
+          <div style={{ color: X.tm, fontSize: 12, marginBottom: 12, textAlign: "center", lineHeight: 1.5 }}>Sonraki girişleriniz için bir şifre belirleyin.</div>
           <Inp label="Şifrenizi belirleyin" type="password" value={pass} onChange={setPass} placeholder="En az 6 karakter" />
-          <Btn onClick={handleInviteRegister} disabled={loading} c={X.g}>{loading ? "Hesap oluşturuluyor..." : "Hesap Oluştur ve Katıl"}</Btn>
+          <Btn onClick={handleSetPassword} disabled={loading} c={X.g}>{loading ? "Hesap oluşturuluyor..." : "Şifreyi Belirle ve Devam Et"}</Btn>
         </>)}
       </div>
     </div>
@@ -7759,6 +7985,9 @@ export default function App() {
   // Yeni kullanıcılarda onboardingCompleted yok ve monthlyBudget 0 — onboarding göster
   const needsOnboarding = !data.settings.onboardingCompleted && !data.settings.monthlyBudget;
   if (needsOnboarding) return <OnboardingWizard data={data} setData={setData} familyName={family?.name} />;
+
+  // Tanıtım ekranı: onboarding sonrası bir kez gösterilir
+  if (data.settings.onboardingCompleted && !data.settings.introSeen) return <IntroScreen onDone={() => setData(d => ({ ...d, settings: { ...d.settings, introSeen: true } }))} />;
 
   const backupNeeded = needsWeeklyBackup(data);
   const memberLocked = !isAdmin && backupNeeded;
