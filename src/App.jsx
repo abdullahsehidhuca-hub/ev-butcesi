@@ -4089,13 +4089,15 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
               `  ${e.date || "-"} | ${e.note || e.merchantName || "Harcama"} | ${C(e.amount)}${e.categoryId ? ` [${ves.find(v=>v.id===e.categoryId)?.name||"?"}]` : " [kategorisiz]"}`
             ).join("\n");
 
-            // Fiş verisi — son 3 ayın fişleri
+            // Fiş verisi — son 3 ayın fişleri + analitik özet
             const last3Months = [mk, pmk(mk), pmk(pmk(mk))];
             const receiptLines = [];
+            const allReceipts = [];
             last3Months.forEach(m => {
               const mData = data.months[m] || {};
               const receipts = mData.receipts || [];
               if (receipts.length === 0) return;
+              receipts.forEach(r => allReceipts.push({ ...r, monthKey: m }));
               receiptLines.push(`\n${ml(m)} fişleri (${receipts.length} fiş):`);
               receipts.forEach(r => {
                 receiptLines.push(`  Mağaza: ${r.store || "?"} | Toplam: ${C(r.totalAmount || 0)} | Tarih: ${r.date || "-"}`);
@@ -4105,6 +4107,53 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
                 });
               });
             });
+
+            // Fiş analitik özeti
+            const receiptAnalytics = (() => {
+              if (allReceipts.length === 0) return "";
+              // Mağaza bazlı: ziyaret sayısı ve toplam harcama
+              const byStore = {};
+              allReceipts.forEach(r => {
+                const s = (r.store || "Bilinmeyen").trim();
+                if (!byStore[s]) byStore[s] = { count: 0, total: 0 };
+                byStore[s].count++;
+                byStore[s].total += r.totalAmount || 0;
+              });
+              const storeLines = Object.entries(byStore).sort((a, b) => b[1].total - a[1].total).map(([s, v]) => `  ${s}: ${v.count} ziyaret, toplam ${C(v.total)}, ortalama ${C(Math.round(v.total / v.count))}/ziyaret`).join("\n");
+
+              // Kategori bazlı: tüm ürünlerin toplam tutarı
+              const byCat = {};
+              allReceipts.forEach(r => (r.items || []).forEach(item => {
+                const cat = item.category || "diğer";
+                if (!byCat[cat]) byCat[cat] = { total: 0, count: 0, items: [] };
+                byCat[cat].total += (item.price || 0) * (item.qty || 1);
+                byCat[cat].count++;
+                byCat[cat].items.push({ name: item.name, brand: item.brand, price: item.price, qty: item.qty || 1 });
+              }));
+              const catLines = Object.entries(byCat).sort((a, b) => b[1].total - a[1].total).map(([cat, v]) => `  ${cat}: ${C(Math.round(v.total))}, ${v.count} kalem`).join("\n");
+
+              // En pahalı 5 ürün
+              const allItems = [];
+              allReceipts.forEach(r => (r.items || []).forEach(item => {
+                allItems.push({ name: item.name, brand: item.brand, price: item.price || 0, qty: item.qty || 1, store: r.store });
+              }));
+              const topItems = allItems.sort((a, b) => (b.price * b.qty) - (a.price * a.qty)).slice(0, 5).map(i => `  ${i.name}${i.brand ? " ("+i.brand+")" : ""}: ${C(i.price * i.qty)} — ${i.store}`).join("\n");
+
+              // Ortalama fiş tutarı
+              const avgReceipt = allReceipts.length > 0 ? Math.round(allReceipts.reduce((s, r) => s + (r.totalAmount || 0), 0) / allReceipts.length) : 0;
+
+              return `\nMARKET ALIŞVERİŞ ANALİTİĞİ (son 3 dönem, ${allReceipts.length} fiş):
+Ortalama fiş tutarı: ${C(avgReceipt)}
+
+Mağaza bazlı:
+${storeLines}
+
+Ürün kategorisi bazlı:
+${catLines}
+
+En yüksek tutarlı 5 ürün:
+${topItems}`;
+            })();
 
             // CSV ekstresi verisi
             const csvLines = [];
@@ -4286,7 +4335,8 @@ ${ccEntries || "  Kayıt yok"}
 
 AKTARILMAMIŞ KK (henüz hesaba geçmedi — NOT: bunlar B blokeye dahil, X'ten zaten düşülmüş):
 ${untransferredLines || "  Tümü aktarıldı"}
-${receiptLines.length > 0 ? "\nMARKET FİŞİ:" + receiptLines.join("\n") : "\nMARKET FİŞİ: Yok"}
+${receiptLines.length > 0 ? "\nMARKET FİŞİ (NOT: bu tutarlar KK/hesap hareketlerinde zaten sayılıdır, ayrı ek harcama DEĞİLDİR):" + receiptLines.join("\n") : "\nMARKET FİŞİ: Yok"}
+${receiptAnalytics}
 ${csvLines.length > 0 ? "\nEKSTRE:" + csvLines.join("\n") : ""}
 ${pastPeriods.length > 0 ? "\nGEÇMİŞ DÖNEMLER:\n" + pastPeriods.map(p => `  ${p.label}: harcama=${C(p.totalSpent)}, X=${C(p.remainingX)}`).join("\n") : "\nGEÇMİŞ: İlk dönem, veri yok"}
 
@@ -4326,6 +4376,13 @@ ${goldRiskLine ? "- Altın borcu kur hareketinden nasıl etkilenir?" : ""}
 ## Birikim Fırsatı
 - Bu dönem sonunda tahmini ne kadar birikim yapılabilir? (X üzerinden, alt-üst senaryo)
 - Somut bir tasarruf fırsatı var mı? (bir kategoride bütçe altı kalma, erken ödeme avantajı vb.)
+
+## Alışveriş Yönlendirmesi
+- Market fiş verisi varsa: alışveriş alışkanlıklarını analiz et
+- Sık gidilen mağazalar arasında fiyat karşılaştırması var mı?
+- En çok harcanan ürün kategorisinde tasarruf fırsatı var mı?
+- Alışveriş sıklığı (çok sık küçük alışveriş mi, nadir büyük alışveriş mi?) ve bu tercihin bütçeye etkisi
+- Market fişi yoksa bu bölümü atla
 
 ## 3 Aksiyon
 - Bu döneme özel 3 somut, uygulanabilir aksiyon. Her birinde RAKAM ver (örn: "X kategorisinde günlük Y TL ile sınırla"). "Tasarruf edin" gibi boş tavsiye VERME.
