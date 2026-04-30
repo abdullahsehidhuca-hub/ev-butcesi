@@ -30,7 +30,7 @@ const PM = [{ id: "account", label: "Hesaptan", icon: "🏦" }, { id: "cc", labe
 
 const MIN_TL_SAVINGS_PCT = 0.15;   // toplam birikimin en az %15'i TL olmalı
 
-const DD = { settings: { monthlyBudget: 0, fixedExpenses: [], variableExpenses: [], cards: [], emergencyFundTarget: null, billTypes: [], generalCardBudget: 0, emergencyTampon: 20000, onboardingCompleted: null }, months: {}, installmentPlans: [], debts: [], savingsGoals: [], completedGoals: [], plannedEvents: [], completedEvents: [], merchantMap: {}, goldRates: {}, usdRates: {}, eurRates: {}, liveRates: { USD: null, EUR: null, XAU: null, fetchedAt: null }, savings: { TRY: [], USD: [], EUR: [], XAU: [] }, lastClosedMonth: null, lastBackup: null };
+const DD = { settings: { monthlyBudget: 0, fixedExpenses: [], variableExpenses: [], cards: [], emergencyFundTarget: null, billTypes: [], generalCardBudget: 0, emergencyTampon: 0, onboardingCompleted: null }, months: {}, installmentPlans: [], debts: [], savingsGoals: [], completedGoals: [], plannedEvents: [], completedEvents: [], merchantMap: {}, goldRates: {}, usdRates: {}, eurRates: {}, liveRates: { USD: null, EUR: null, XAU: null, fetchedAt: null }, savings: { TRY: [], USD: [], EUR: [], XAU: [] }, lastClosedMonth: null, lastBackup: null };
 const DM = () => ({ budget: null, fixedPaid: {}, variableEntries: {}, ccSingle: [], accountEntries: [], accountTransferred: {}, cardLoaded: 0, cardEntries: [], debtPayments: {}, ccTransferred: {}, csvByCard: {}, finalSavings: null, receipts: [] });
 
 const STORAGE_KEY = "ev-butce-v11";
@@ -7468,7 +7468,7 @@ function LoginScreen({ pendingInvite, setPendingInvite }) {
         {err && <div style={{ background: X.rd, border: `1px solid ${X.r}`, borderRadius: 10, padding: "8px 12px", marginBottom: 12, color: X.r, fontSize: 12, fontWeight: 600 }}>{err}</div>}
 
         {mode === "login" && (<>
-          <Inp label="İsim Soyisim" value={name} onChange={setName} placeholder="Örn: Abdullah Şehid Huca" />
+          <Inp label="İsim Soyisim" value={name} onChange={setName} placeholder="İsim Soyisim" />
           <Inp label="Şifre" type="password" value={pass} onChange={setPass} placeholder="••••••" />
           <Btn onClick={handleLogin} disabled={loading}>{loading ? "Giriş yapılıyor..." : "Giriş Yap"}</Btn>
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, marginTop: 16 }}>
@@ -7478,7 +7478,7 @@ function LoginScreen({ pendingInvite, setPendingInvite }) {
         </>)}
 
         {mode === "register" && (<>
-          <Inp label="İsim Soyisim" value={name} onChange={setName} placeholder="Örn: Abdullah Şehid Huca" />
+          <Inp label="İsim Soyisim" value={name} onChange={setName} placeholder="İsim Soyisim" />
           <Inp label="E-posta" value={email} onChange={setEmail} placeholder="ornek@gmail.com" />
           <Inp label="Şifre" type="password" value={pass} onChange={setPass} placeholder="En az 6 karakter" />
           <Btn onClick={handleRegister} disabled={loading}>{loading ? "Kayıt yapılıyor..." : "Kayıt Ol"}</Btn>
