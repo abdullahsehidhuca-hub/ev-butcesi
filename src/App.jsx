@@ -542,7 +542,7 @@ function calcMonth(data, m, extraInst) {
     return s;
   }, 0);
 
-  // Genel harcama kartı (sabit bütçe)
+  // Konfor harcaması kartı (sabit bütçe)
   const generalCardBudget = data.settings.generalCardBudget || 0;
   const cardLoaded = md.cardLoaded || 0;
   const cardLoadRemaining = Math.max(0, generalCardBudget - cardLoaded);
@@ -908,7 +908,7 @@ function getMonthBreakdown(data, m) {
   }
   // Kart yükleme
   if (mc.cardLoaded > 0) {
-    rows.push({ label: "Genel harcama kartı", value: mc.cardLoaded, sign: "−", color: X.g });
+    rows.push({ label: "Konfor harcaması kartı", value: mc.cardLoaded, sign: "−", color: X.g });
   }
   // Değişken gider kalan tahmini
   if (mc.envelopeRemaining > 0) {
@@ -936,7 +936,7 @@ function calcRisk(data, mk) {
    *
    * F1: Bu Ay Kalan Bütçe Oranı (25p) — Bu ayın kalan bütçe yüzdesi
    * F2: 12 Aylık Sürdürülebilirlik (25p) — Gelecek 12 ay projeksiyon
-   * F3: Genel Harcama Kartı Kapasitesi (20p) — aylık serbest bütçe kontrolü
+   * F3: Konfor Harcaması Kartı Kapasitesi (20p) — aylık serbest bütçe kontrolü
    * F4: Harcama Eğilimi (15p) — Son 3 ayın karşılaştırması
    * F5: Yaklaşan Gider Artışları (15p) — Yaklaşan maliyet artışları
    */
@@ -1061,13 +1061,13 @@ function genWarnings(data, mk) {
 const INFO = {
   ccSingle: { title: "Kredi Kartı Tek Çekim", text: "Kredi kartınızla tek seferde yaptığınız harcamaları buraya kaydedersiniz. Bu tutar anında bütçenizden düşer ve aynı zamanda ay sonunda kredi kartı hesabınıza aktarmanız gereken tutara eklenir.\n\nÖrnek: Marketten 500 ₺'lik bir alışveriş yaptınız, kredi kartıyla tek çekim ödediyseniz buraya 500 ₺ girersiniz." },
   ccInstall: { title: "Kredi Kartı Taksitli", text: "Kredi kartıyla taksitli yaptığınız harcamalarınızın toplam aylık taksit yükünü gösterir. Yeni bir taksitli alışveriş eklediğinizde, ilk taksit gelecek aydan itibaren bütçenize otomatik yansır.\n\nÖrnek: 30.000 ₺ × 6 taksit alırsanız, 6 ay boyunca her ay 5.000 ₺ bütçenizden düşülür." },
-  cardLoad: { title: "Genel Harcama Kartı", text: "Aylık harcamalar için kullandığınız banka kartı. Restoran, kıyafet, çocuk harcamaları, ufak tefek alımlar buradan yapılır.\n\nKuralı: Serbest bütçenin (kalan) en fazla %75'i karta aktarılabilir. Tek seferde bu tutarın en fazla %70'i yüklenebilir. Kalan %25 beklenmeyen gider fonu olarak korunur.\n\nHaftalık parça parça yükleme yaparak bütçe kontrolünü artırabilirsiniz." },
+  cardLoad: { title: "Konfor Harcaması Kartı", text: "Dışarıda yemek, kafe, etkinlik, kıyafet gibi konfor harcamalarınız için kullandığınız banka kartı.\n\nAyarlar'dan belirlediğiniz limit kadar bu karta yükleme yapabilirsiniz. Harcama yaptıkça kalan tutar azalır.\n\nKredi kartı yerine banka kartıyla yapılan konfor harcamaları, bütçenizde anında görünür — ekstre sürprizi olmaz." },
   debt: { title: "Borç Ödemeleri", text: "Aktif borçlarınızın bu ay ödemeniz gereken toplam tutarını gösterir. Türk Lirası, dolar veya altın bazlı borçlarınız olabilir. Dolar ve altın borçları için güncel kur kullanılır.\n\nHer borç ödemesi yaptığınızda 'Ödedim' butonuna basarak teyit edersiniz, kalan taksit sayısı azalır." },
   simulate: { title: "Taksit Simülasyonu", text: "Yeni bir taksitli alım yapmadan önce 'şu kadar X taksitle alırsam bütçem nasıl etkilenir' sorusunu test etmek için kullanılır.\n\nTutar ve taksit sayısını girin, 'Simüle Et' deyin. Uygulama gelecek 6-8 ayın bütçenizin durumunu hem mevcut hem de bu taksitli alımla birlikte gösterir. Güvenliyse 'Onayla ve Kaydet' diyerek doğrudan kredi kartı taksitli kısmına ekleyebilirsiniz." },
   savings: { title: "Birikim", text: "Bu ay bütçeden ne kadar birikim kalacağını gösterir.\n\nKalan Bütçe = Aylık Bütçe − Sabit Giderler − Borçlar − Genel Kart Limiti − Değişken Gider Tahmini − Beklenmeyen Gider Fonu\n\nBu tutar ay boyunca sabit kalır. Ay kapandığında kalan bütçe otomatik olarak TL birikim havuzuna eklenir.\n\nAcil tampon miktarını Ayarlar → Aylık Bütçe bölümünden değiştirebilirsiniz." },
   fixed: { title: "Sabit Zorunlu Giderler", text: "Her ay sabit ve zorunlu olarak ödenen giderler. Kira, aidat, ev yardımcısı, burslar, sabit destek tutarları gibi.\n\nBu giderlerin tutarları belirli ve değişmez. Artış tarihleri tanımlanmışsa uygulama o tarih yaklaştığında uyarı verir. Her birini ödediğinizde 'Ödedim' butonuyla teyit edersiniz." },
   variable: { title: "Değişken Zorunlu Giderler", text: "Her ay ödemek zorunda olduğunuz ama tutarı değişen giderler. Elektrik, su, doğalgaz, internet, telefon, akaryakıt, yemek kartı yüklemesi gibi.\n\nHer kalem için bir 'beklenen tutar' belirlersiniz. Eğer girdiğiniz tutar beklenen tutarın %10'undan fazla aşarsa uygulama uyarı verir — böylece anormal faturaları erken yakalarsınız." },
-  risk: { title: "Risk Skoru", text: "0-100 arası bir puan. 0 en güvenli, 100 en kritik durum.\n\nBeş faktöre bakılarak hesaplanır:\n\n1. Bu Ay Kalan Bütçe Oranı (25 puan): Bu ayın kalan bütçesinin toplam bütçeye oranı. Beklenmedik harcamalara karşı tampon gücünüzü gösterir. %50 üstü güvenli, %10 altı kritik.\n\n2. 12 Aylık Sürdürülebilirlik Durumu (25 puan): Mevcut harcama düzeniyle gelecek 12 ay içinde bütçe aşımı oluşup oluşmayacağını hesaplar. Değişken gider tahminlerini de içerir.\n\n3. Genel Harcama Kartı Kapasitesi (20 puan): Tüm zorunlu çıkışlar düşüldükten sonra genel harcama kartına yüklenebilecek aylık tutarı ölçer. Alt limit: 40.000 ₺. Gelecek 6 ayın en kötü durumunu da hesaba katar.\n\n4. Harcama Eğilimi (15 puan): Son 3 ayın harcama ortalamasına göre bu ayın artış/azalış yönünü analiz eder. Sürekli artan harcama eğilimi bütçeyi tehdit eder.\n\n5. Yaklaşan Gider Artışları (15 puan): Önümüzdeki 6 ay içinde bilinen sabit gider artışlarını ve bunların bütçeye toplam etkisini değerlendirir.\n\nSeviyeler: 0-14 GÜVENLİ, 15-29 DÜŞÜK, 30-49 ORTA, 50-69 YÜKSEK, 70-100 KRİTİK." },
+  risk: { title: "Risk Skoru", text: "0-100 arası bir puan. 0 en güvenli, 100 en kritik durum.\n\nBeş faktöre bakılarak hesaplanır:\n\n1. Bu Ay Kalan Bütçe Oranı (25 puan): Bu ayın kalan bütçesinin toplam bütçeye oranı. Beklenmedik harcamalara karşı tampon gücünüzü gösterir. %50 üstü güvenli, %10 altı kritik.\n\n2. 12 Aylık Sürdürülebilirlik Durumu (25 puan): Mevcut harcama düzeniyle gelecek 12 ay içinde bütçe aşımı oluşup oluşmayacağını hesaplar. Değişken gider tahminlerini de içerir.\n\n3. Konfor Harcaması Kartı Kapasitesi (20 puan): Tüm zorunlu çıkışlar düşüldükten sonra konfor harcaması kartına yüklenebilecek aylık tutarı ölçer. Alt limit: 40.000 ₺. Gelecek 6 ayın en kötü durumunu da hesaba katar.\n\n4. Harcama Eğilimi (15 puan): Son 3 ayın harcama ortalamasına göre bu ayın artış/azalış yönünü analiz eder. Sürekli artan harcama eğilimi bütçeyi tehdit eder.\n\n5. Yaklaşan Gider Artışları (15 puan): Önümüzdeki 6 ay içinde bilinen sabit gider artışlarını ve bunların bütçeye toplam etkisini değerlendirir.\n\nSeviyeler: 0-14 GÜVENLİ, 15-29 DÜŞÜK, 30-49 ORTA, 50-69 YÜKSEK, 70-100 KRİTİK." },
   ccTransfer: { title: "Kredi Kartına Aktarılacak Tutar", text: "Bu ay kredi kartından yapılan tüm ödemelerin (sabit, değişken, tek çekim, taksitler) toplamıdır. Ay sonunda bu tutarı bankada kredi kartı hesabınıza aktarmanız gerekiyor — böylece kredi kartı borcunuz hesabınızdaki kullanılabilir bakiyeyi yanıltmaz." },
 };
 
@@ -1136,7 +1136,7 @@ function CardLoadModal({ currentLoaded, maxTotal, entries, onClose, onSave, onDe
   const sorted = [...(entries || [])].sort((a2, b2) => (b2.date || "").localeCompare(a2.date || ""));
 
   return (
-    <Modal title="🛒 Genel Harcama Kartı" onClose={onClose}>
+    <Modal title="🛒 Konfor Harcaması Kartı" onClose={onClose}>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
         <div><div style={{ color: X.tm, fontSize: 11 }}>Bu Ay Yüklenen</div><div style={{ color: X.t, fontSize: 22, fontWeight: 800, fontFamily: fm }}>{C(currentLoaded)}</div></div>
         {maxTotal > 0 && <div style={{ textAlign: "right" }}><div style={{ color: X.tm, fontSize: 11 }}>Aylık Limit</div><div style={{ color: X.td, fontSize: 22, fontWeight: 800, fontFamily: fm }}>{C(maxTotal)}</div></div>}
@@ -2592,7 +2592,7 @@ function ReceiptModal({ receipts, onClose, onSave, onDelete }) {
               return (
                 <div style={{ background: X.rd, borderLeft: `3px solid ${X.r}`, borderRadius: "0 8px 8px 0", padding: "10px 12px", marginBottom: 10, fontSize: 12, lineHeight: 1.6 }}>
                   <div style={{ color: X.r, fontWeight: 800, marginBottom: 3 }}>⚠️ Bu mağaza {cardName} kapsamında değil</div>
-                  <div style={{ color: X.tm }}>"{result.store}" gıda/market kategorisinde değil. Bu alışverişi genel harcama kartıyla yapmak daha uygun.</div>
+                  <div style={{ color: X.tm }}>"{result.store}" gıda/market kategorisinde değil. Bu alışverişi konfor harcaması kartıyla yapmak daha uygun.</div>
                 </div>
               );
             }
@@ -2610,7 +2610,7 @@ function ReceiptModal({ receipts, onClose, onSave, onDelete }) {
               <div style={{ background: X.rd, borderLeft: `3px solid ${X.r}`, borderRadius: "0 8px 8px 0", padding: "10px 12px", marginBottom: 10, fontSize: 12, lineHeight: 1.6 }}>
                 <div style={{ color: X.r, fontWeight: 800, marginBottom: 3 }}>⚠️ {C(unsuitableTotal)} tutarında {cardName} dışı kalem</div>
                 <div style={{ color: X.tm }}>
-                  {unsuitable.map(it => it.name).join(", ")} — atıştırmalık ve içecekler {cardName} kapsamında değil. Kategori dışı market alışverişlerinizi genel harcama kartıyla yapmanız, {cardName} bakiyenizin amacına uygun kullanımını sağlar.
+                  {unsuitable.map(it => it.name).join(", ")} — atıştırmalık ve içecekler {cardName} kapsamında değil. Kategori dışı market alışverişlerinizi konfor harcaması kartıyla yapmanız, {cardName} bakiyenizin amacına uygun kullanımını sağlar.
                 </div>
               </div>
             );
@@ -3009,8 +3009,8 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
         <div onClick={() => setModal("cardLoad")} style={{ background: "rgba(15,118,110,0.32)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(15,118,110,0.30)", borderRadius: 16, padding: "16px 8px", cursor: "pointer", textAlign: "center", position: "relative", boxShadow: neu, overflow: "hidden", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
           <InfoBtn onClick={() => setInfo("cardLoad")} />
           <div style={{ fontSize: 18, marginBottom: 3 }}>🛒</div>
-          <div style={{ color: X.g, fontSize: 13, fontWeight: 800 }}>Genel Harcama Kartı</div>
-          <div style={{ color: X.t, fontSize: 15, fontWeight: 800, fontFamily: fm, marginTop: 2 }}>{C(md.cardLoaded || 0)}{c.generalCardBudget > 0 && <span style={{ color: X.td, fontSize: 11 }}> / {C(c.generalCardBudget)}</span>}</div>
+          <div style={{ color: X.g, fontSize: 13, fontWeight: 800 }}>Konfor Harcaması Kartı</div>
+          <div style={{ color: X.t, fontSize: 15, fontWeight: 800, fontFamily: fm, marginTop: 2 }}>{isEkstreMode && c.generalCardBudget > 0 ? <>{C(c.generalCardBudget - (md.cardLoaded || 0))}<span style={{ color: X.td, fontSize: 11 }}> / {C(c.generalCardBudget)}</span></> : <>{C(md.cardLoaded || 0)}{c.generalCardBudget > 0 && <span style={{ color: X.td, fontSize: 11 }}> / {C(c.generalCardBudget)}</span>}</>}</div>
         </div>
         <div onClick={() => setModal("debtPay")} style={{ background: "rgba(180,83,9,0.28)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(180,83,9,0.28)", borderRadius: 16, padding: "16px 8px", cursor: "pointer", textAlign: "center", position: "relative", boxShadow: neu, overflow: "hidden", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
           <InfoBtn onClick={() => setInfo("debt")} />
@@ -3019,7 +3019,7 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
           <div style={{ color: X.t, fontSize: 15, fontWeight: 800, fontFamily: fm, marginTop: 2 }}>{C(c.debtTotal)}</div>
         </div>
 
-        {/* Receipt + Simulation — genel harcama kartıyla aynı yükseklik */}
+        {/* Receipt + Simulation — konfor harcaması kartıyla aynı yükseklik */}
         <div onClick={() => setModal("receipt")} style={{ background: "rgba(194,65,12,0.20)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(194,65,12,0.26)", borderRadius: 16, padding: "16px 8px", cursor: "pointer", textAlign: "center", position: "relative", boxShadow: neu, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
           <div style={{ fontSize: 18, marginBottom: 3 }}>📷</div>
           <div style={{ color: X.o, fontSize: 13, fontWeight: 800 }}>Market Fişi</div>
@@ -3299,7 +3299,7 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
       {modal === "budget" && <BudgetModal mk={mk} cur={md.budget || data.settings.monthlyBudget} def={data.settings.monthlyBudget} onSave={v => setMonthField(mk, "budget", v)} onClose={() => setModal(null)} />}
       {modal === "receipt" && <ReceiptModal receipts={md.receipts || []} onClose={() => setModal(null)} onSave={handleReceiptSave} onDelete={handleReceiptDelete} />}
       {info && info === "cardLoad" && (
-        <Modal title="ℹ️ Genel Harcama Kartı" onClose={() => setInfo(null)}>
+        <Modal title="ℹ️ Konfor Harcaması Kartı" onClose={() => setInfo(null)}>
           <div style={{ marginBottom: 16 }}>
             <div style={{ color: X.tm, fontSize: 11, fontWeight: 700, marginBottom: 10 }}>BU AY KART DURUMU</div>
             <div style={{ borderRadius: 10, padding: "12px 14px", background: "rgba(160,190,200,0.35)" }}>
@@ -3324,7 +3324,7 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
               </div>
             </div>
           </div>
-          <div style={{ color: X.t, fontSize: 13, lineHeight: 1.6 }}>Genel harcama kartı limitini Ayarlar → Aylık Bütçe bölümünden güncelleyebilirsiniz.</div>
+          <div style={{ color: X.t, fontSize: 13, lineHeight: 1.6 }}>Konfor harcaması kartı limitini Ayarlar → Aylık Bütçe bölümünden güncelleyebilirsiniz.</div>
           <Btn onClick={() => setInfo(null)} s={{ marginTop: 16 }}>Anladım</Btn>
         </Modal>
       )}
@@ -3654,7 +3654,7 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
       const variableCutTarget = Math.floor(c.variableTotal * 0.85);
       tips.push({
         title: "🚨 Kritik — Acil Aksiyon",
-        text: `Bütçeniz kırmızı alarmda. Bu ay genel harcama kartına en fazla ${C(reducedCardMax)} yükleyin (normalin %30'u). Restoran, kıyafet, eğlence gibi isteğe bağlı tüm harcamaları durdurun — sadece market ve zorunlu ihtiyaçlar. Değişken giderlerinizi ${C(variableCutTarget)} altında tutmayı hedefleyin (yani normalden ${C(c.variableTotal - variableCutTarget)} daha az). Yeni hiçbir taksitli alım yapmayın, simülasyon bile çalıştırmayın. Mevcut ${C(totalInstMonthly)} aylık taksit yükünüz var, bunlar kapanana kadar ek yük almayın. Borç ödemelerinizi (${C(totalDebtMonthly)}/ay) aksatmayın çünkü bunlar birikmesin. Birikim havuzunuza dokunmayın — açık kapatma için son çare olarak saklayın. Eğer açık çok büyükse ek gelir kaynakları düşünün ya da ailenize durumu açıkça anlatın.`,
+        text: `Bütçeniz kırmızı alarmda. Bu ay konfor harcaması kartına en fazla ${C(reducedCardMax)} yükleyin (normalin %30'u). Restoran, kıyafet, eğlence gibi isteğe bağlı tüm harcamaları durdurun — sadece market ve zorunlu ihtiyaçlar. Değişken giderlerinizi ${C(variableCutTarget)} altında tutmayı hedefleyin (yani normalden ${C(c.variableTotal - variableCutTarget)} daha az). Yeni hiçbir taksitli alım yapmayın, simülasyon bile çalıştırmayın. Mevcut ${C(totalInstMonthly)} aylık taksit yükünüz var, bunlar kapanana kadar ek yük almayın. Borç ödemelerinizi (${C(totalDebtMonthly)}/ay) aksatmayın çünkü bunlar birikmesin. Birikim havuzunuza dokunmayın — açık kapatma için son çare olarak saklayın. Eğer açık çok büyükse ek gelir kaynakları düşünün ya da ailenize durumu açıkça anlatın.`,
         color: X.r
       });
     } else if (risk.score >= 50) {
@@ -3663,7 +3663,7 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
       const variableCutTarget = Math.floor(c.variableTotal * 0.92);
       tips.push({
         title: "🟠 Yüksek Risk — Sıkı Tasarruf",
-        text: `Bu ay genel harcama kartına en fazla ${C(reducedCardMax)} yükleyin (normalin yarısı). Restoran ve eğlence harcamalarını minimum seviyeye çekin, kıyafet alımını erteleyebiliyorsanız erteleyin. Değişken zorunlu giderlerinizi ${C(variableCutTarget)} altında tutun — özellikle elektrik ve akaryakıtta tasarruf yapın. Yeni taksitli alım yapmayın, çok zorunluysa önce mutlaka simülasyon çalıştırıp güvenli olduğunu onaylayın. Mevcut ${C(totalInstMonthly)} aylık taksitlerinizi erken kapatabiliyorsanız kapatmayı düşünün. Borç ödemelerinizi (${C(totalDebtMonthly)}/ay) düzenli yapın. Birikim havuzunuza şimdilik dokunmayın, gelecek 2-3 ay zor geçebilir.`,
+        text: `Bu ay konfor harcaması kartına en fazla ${C(reducedCardMax)} yükleyin (normalin yarısı). Restoran ve eğlence harcamalarını minimum seviyeye çekin, kıyafet alımını erteleyebiliyorsanız erteleyin. Değişken zorunlu giderlerinizi ${C(variableCutTarget)} altında tutun — özellikle elektrik ve akaryakıtta tasarruf yapın. Yeni taksitli alım yapmayın, çok zorunluysa önce mutlaka simülasyon çalıştırıp güvenli olduğunu onaylayın. Mevcut ${C(totalInstMonthly)} aylık taksitlerinizi erken kapatabiliyorsanız kapatmayı düşünün. Borç ödemelerinizi (${C(totalDebtMonthly)}/ay) düzenli yapın. Birikim havuzunuza şimdilik dokunmayın, gelecek 2-3 ay zor geçebilir.`,
         color: "#FF6B35"
       });
     } else if (risk.score >= 30) {
@@ -3671,21 +3671,21 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
       const reducedCardMax = Math.floor(fullCardMax * 0.75);
       tips.push({
         title: "🟡 Orta Risk — Aktif Kontrol",
-        text: `Bu ay genel harcama kartına en fazla ${C(reducedCardMax)} yükleyin (normalin %75'i). Lüks alımları erteleyin, dışarıda yemek sayısını azaltın. Değişken zorunlu giderlerinizde dikkatli olun, beklenen tutarların üstüne çıkmayın. Yeni taksitli alımlardan önce mutlaka simülasyon çalıştırın — en az 6 ay ilerisini test edin, açık çıkıyorsa vazgeçin. Mevcut ${C(totalInstMonthly)} aylık taksit ve ${C(totalDebtMonthly)} aylık borç ödemenizi düzenli yapın, ek yük almayın. Bu ay birikim hedefiniz ${C(c.savingsTarget)} — bu hedefe ulaşmaya çalışın, en azından ${C(Math.floor(c.savingsTarget * 0.7))} biriktirin.`,
+        text: `Bu ay konfor harcaması kartına en fazla ${C(reducedCardMax)} yükleyin (normalin %75'i). Lüks alımları erteleyin, dışarıda yemek sayısını azaltın. Değişken zorunlu giderlerinizde dikkatli olun, beklenen tutarların üstüne çıkmayın. Yeni taksitli alımlardan önce mutlaka simülasyon çalıştırın — en az 6 ay ilerisini test edin, açık çıkıyorsa vazgeçin. Mevcut ${C(totalInstMonthly)} aylık taksit ve ${C(totalDebtMonthly)} aylık borç ödemenizi düzenli yapın, ek yük almayın. Bu ay birikim hedefiniz ${C(c.savingsTarget)} — bu hedefe ulaşmaya çalışın, en azından ${C(Math.floor(c.savingsTarget * 0.7))} biriktirin.`,
         color: X.w
       });
     } else if (risk.score >= 15) {
       // DÜŞÜK
       tips.push({
         title: "🟢 Düşük Risk — Bilinçli Devam",
-        text: `Bütçeniz iyi durumda ama bazı uyarıcı sinyaller var. Genel harcama kartına normal limitiniz olan ${C(fullCardMax)} kadar yükleyebilirsiniz ama tek seferde ${C(c.cardLoadMaxPerTx)} sınırını unutmayın. Değişken zorunlu giderlerinizi takip edin, beklenmedik artışlar olursa nedenini araştırın. Yeni taksitli alımlardan önce simülasyonu kullanmayı alışkanlık haline getirin — özellikle 3 taksitten uzun olanlar için. Mevcut ${C(totalInstMonthly)} taksit ve ${C(totalDebtMonthly)} borç yükünüz makul seviyede. Bu ay birikim hedefiniz ${C(c.savingsTarget)} — bu hedefin altına düşmemeye çalışın çünkü gelecek ay artışlar geliyor olabilir.`,
+        text: `Bütçeniz iyi durumda ama bazı uyarıcı sinyaller var. Konfor harcaması kartına normal limitiniz olan ${C(fullCardMax)} kadar yükleyebilirsiniz ama tek seferde ${C(c.cardLoadMaxPerTx)} sınırını unutmayın. Değişken zorunlu giderlerinizi takip edin, beklenmedik artışlar olursa nedenini araştırın. Yeni taksitli alımlardan önce simülasyonu kullanmayı alışkanlık haline getirin — özellikle 3 taksitten uzun olanlar için. Mevcut ${C(totalInstMonthly)} taksit ve ${C(totalDebtMonthly)} borç yükünüz makul seviyede. Bu ay birikim hedefiniz ${C(c.savingsTarget)} — bu hedefin altına düşmemeye çalışın çünkü gelecek ay artışlar geliyor olabilir.`,
         color: "#84CC16"
       });
     } else {
       // GÜVENLİ
       tips.push({
         title: "✅ Güvenli — Sağlıklı Bütçe",
-        text: `Bütçeniz sağlıklı, normal hayatınıza devam edebilirsiniz. Genel harcama kartına bu ay ${C(fullCardMax)} kadar yükleyebilirsiniz (tek seferde ${C(c.cardLoadMaxPerTx)} sınırı geçerli). Değişken zorunlu giderlerinizi normal seviyede tutun, anormal bir şey görürseniz uyarı alacaksınız. Yeni taksitli alımlar yapabilirsiniz fakat alışkanlık olarak simülasyonu çalıştırın — geleceği görmek faydalı. Mevcut ${C(totalInstMonthly)} taksit ve ${C(totalDebtMonthly)} borç yükünüz kontrol altında. Bu ay birikim hedefiniz ${C(c.savingsTarget)} — bu hedefe ulaşırsanız birikim havuzunuza ${C(c.savingsTarget)} eklenmiş olacak. Lüks bir alım, tatil planı veya hediye alımı için uygun bir dönem.`,
+        text: `Bütçeniz sağlıklı, normal hayatınıza devam edebilirsiniz. Konfor harcaması kartına bu ay ${C(fullCardMax)} kadar yükleyebilirsiniz (tek seferde ${C(c.cardLoadMaxPerTx)} sınırı geçerli). Değişken zorunlu giderlerinizi normal seviyede tutun, anormal bir şey görürseniz uyarı alacaksınız. Yeni taksitli alımlar yapabilirsiniz fakat alışkanlık olarak simülasyonu çalıştırın — geleceği görmek faydalı. Mevcut ${C(totalInstMonthly)} taksit ve ${C(totalDebtMonthly)} borç yükünüz kontrol altında. Bu ay birikim hedefiniz ${C(c.savingsTarget)} — bu hedefe ulaşırsanız birikim havuzunuza ${C(c.savingsTarget)} eklenmiş olacak. Lüks bir alım, tatil planı veya hediye alımı için uygun bir dönem.`,
         color: X.g
       });
     }
@@ -3713,7 +3713,7 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
       const monthlySaveTarget = Math.ceil(totalDeficit / risk.monthsUntilDeficit);
       tips.push({
         title: "🔮 Projeksiyon Uyarısı",
-        text: `Mevcut harcama düzeninde ${risk.monthsUntilDeficit} ay sonra bütçe açık verecek ve önümüzdeki 12 ay içinde toplam ${C(totalDeficit)} açık birikecek. Bunu önlemek için bu aydan itibaren her ay en az ${C(monthlySaveTarget)} fazladan tasarruf etmelisiniz — yani genel harcama kartına yüklediğiniz tutarı bu kadar azaltın ya da değişken giderlerinizi bu kadar kısın.`,
+        text: `Mevcut harcama düzeninde ${risk.monthsUntilDeficit} ay sonra bütçe açık verecek ve önümüzdeki 12 ay içinde toplam ${C(totalDeficit)} açık birikecek. Bunu önlemek için bu aydan itibaren her ay en az ${C(monthlySaveTarget)} fazladan tasarruf etmelisiniz — yani konfor harcaması kartına yüklediğiniz tutarı bu kadar azaltın ya da değişken giderlerinizi bu kadar kısın.`,
         color: X.r
       });
     }
@@ -3751,8 +3751,8 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
       tips.push({
         title: isHard ? "🚨 Aylık Serbest Bütçe Yetersiz" : "⚠️ Aylık Serbest Bütçe Azalıyor",
         text: isHard
-          ? `Genel harcama kartına bu ay yükleyebileceğiniz tutar ${C(cardLoadCapacity)} seviyesine düştü. Bu, ₺15.000 alt limitinin altında. Aylık zorunlu harcamalarınız (market, akaryakıt, fatura) için yeterli alan kalmıyor. Kredi kartı tek çekim harcamalarınızı veya taksit yükünüzü gözden geçirin.`
-          : `Genel harcama kartına bu ay yükleyebileceğiniz tutar ${C(cardLoadCapacity)} seviyesinde ve ₺15.000 alt limitine yaklaşıyor. Yeni tek çekim veya taksitli işlem yapmadan önce bu dengeyi göz önünde bulundurun.`,
+          ? `Konfor harcaması kartına bu ay yükleyebileceğiniz tutar ${C(cardLoadCapacity)} seviyesine düştü. Bu, ₺15.000 alt limitinin altında. Aylık zorunlu harcamalarınız (market, akaryakıt, fatura) için yeterli alan kalmıyor. Kredi kartı tek çekim harcamalarınızı veya taksit yükünüzü gözden geçirin.`
+          : `Konfor harcaması kartına bu ay yükleyebileceğiniz tutar ${C(cardLoadCapacity)} seviyesinde ve ₺15.000 alt limitine yaklaşıyor. Yeni tek çekim veya taksitli işlem yapmadan önce bu dengeyi göz önünde bulundurun.`,
         color: isHard ? X.r : X.w
       });
     }
@@ -3968,7 +3968,7 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
         const f1Oneri = c.remainingX < 0
           ? "Acil: hangi bekleyen ödemeleri erteleyebileceğinizi değerlendirin. Yeni harcama kesinlikle yapmayın."
           : xRatioOfBudget < 0.15
-          ? `Genel kart yüklemesini ${C(Math.min(c.cardLoadRemaining, c.remainingX * 0.5))} ile sınırlı tutun.`
+          ? `Konfor kartı yüklemesini ${C(Math.min(c.cardLoadRemaining, c.remainingX * 0.5))} ile sınırlı tutun.`
           : null;
 
         // F2: X < değişken kalan tahmin
@@ -4857,7 +4857,7 @@ ${goldRiskLine ? "- Altın borcu kur değişiminin etkisini değerlendir." : ""}
           }
         });
         // Kart yüklemeleri (tarih bilgisi yok, ay başı varsay)
-        if ((md.cardLoaded || 0) > 0) addTx(mk + "-01", "Kart", md.cardLoaded, "Genel harcama kartı");
+        if ((md.cardLoaded || 0) > 0) addTx(mk + "-01", "Kart", md.cardLoaded, "Konfor harcaması kartı");
 
         const weekDays = ["Pz", "Sl", "Çr", "Pr", "Cm", "Ct", "Pa"];
         const cells = [];
@@ -6129,6 +6129,12 @@ function OnboardingWizard({ data, setData, familyName }) {
                 <div style={{ color: "#8B7E74", fontSize: 11, lineHeight: 1.4 }}>Bu ay kredi kartıyla yaptığım harcamalar gelecek ay maaşımdan kesilir (ekstre döngüsü)</div>
               </button>
             </div>
+            {ccMode === "ekstre" && (
+              <div style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: 10, padding: "10px 12px", marginBottom: 8 }}>
+                <div style={{ color: "#B45309", fontSize: 11, fontWeight: 700, marginBottom: 4 }}>💡 Önemli tavsiye</div>
+                <div style={{ color: "#8B7E74", fontSize: 11, lineHeight: 1.5 }}>Dışarıda yemek, kafe, etkinlik, atölye gibi konfor harcamalarınızı banka hesap kartınızla (konfor harcaması kartı) yapın. Bu sizi ekstre döneminde bilinmezlikten korur — ne kadar harcadığınızı anında görürsünüz.</div>
+              </div>
+            )}
             <div style={hintS}>💡 Bunu daha sonra Ayarlar → Aylık Bütçe'den değiştirebilirsiniz.</div>
           </div>
         )}
@@ -6581,8 +6587,8 @@ function Settings({ data, setData, isAdmin, family }) {
             <div style={{ color: X.tm, fontSize: 12, lineHeight: 1.5 }}>Bu ayda zaten harcama kaydı var. Bütçeyi değiştirirseniz kalan bütçe ve banka bakiyesi hesaplamaları etkilenir, tutarsızlık oluşabilir.</div>
           </div>
         )}
-        <Inp label="Genel Harcama Kartı Limiti (₺)" type="number" value={form.gcb ?? data.settings.generalCardBudget ?? 0} onChange={v => setForm(f => ({ ...f, gcb: v }))} suffix="₺" />
-        <div style={{ color: X.td, fontSize: 12, marginTop: -8, marginBottom: 12, lineHeight: 1.5 }}>Ay başında genel harcama kartına yüklenecek sabit limit. Kalan bütçe hesabında bu tutar bloke edilir.</div>
+        <Inp label="Konfor Harcaması Kartı Limiti (₺)" type="number" value={form.gcb ?? data.settings.generalCardBudget ?? 0} onChange={v => setForm(f => ({ ...f, gcb: v }))} suffix="₺" />
+        <div style={{ color: X.td, fontSize: 12, marginTop: -8, marginBottom: 12, lineHeight: 1.5 }}>Ay başında konfor harcaması kartına yüklenecek sabit limit. Kalan bütçe hesabında bu tutar bloke edilir.</div>
         <Inp label="Beklenmeyen Gider Fonu (₺)" type="number" value={form.et ?? data.settings.emergencyTampon ?? 0} onChange={v => setForm(f => ({ ...f, et: v }))} suffix="₺" />
         <div style={{ color: X.td, fontSize: 12, marginTop: -8, marginBottom: 12, lineHeight: 1.5 }}>Kategorisiz ve tahmini aşan harcamalar buradan karşılanır. Ay sonunda kullanılmayan kısım birikime eklenir.</div>
         <div style={{ color: X.tm, fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Kredi Kartı Ödeme Yöntemi</div>
@@ -6683,7 +6689,7 @@ function Settings({ data, setData, isAdmin, family }) {
 
         {resetItem("Kredi Kartı Taksitli", "📅", "Tüm taksit planları", () => setData(d => ({ ...d, installmentPlans: [] })))}
 
-        {resetItem("Genel Harcama Kartı", "🛒", "Tüm aylardaki kart yüklemeleri", () => clearMonthField("cardLoaded", 0))}
+        {resetItem("Konfor Harcaması Kartı", "🛒", "Tüm aylardaki kart yüklemeleri", () => clearMonthField("cardLoaded", 0))}
 
         {resetItem("Sabit Gider Ödemeleri", "📌", "Ödendi işaretleri (giderler silinmez)", () => clearMonthField("fixedPaid", {}))}
 
@@ -7771,7 +7777,7 @@ export default function App() {
       { label: "Borç ödemeleri", value: c.debtTotal || 0, sign: "" },
       { label: "Taksit ödemeleri", value: c.installmentTotal || 0, sign: "" },
       { label: "Değişken gider kalan tahmini", value: c.variableBlokeKalan || 0, sign: "" },
-      { label: "Genel kart kalan hakkı", value: c.cardBlokeKalan || 0, sign: "" },
+      { label: "Konfor kartı kalan hakkı", value: c.cardBlokeKalan || 0, sign: "" },
       { label: "Beklenmeyen Gider Fonu", value: c.emergencyBuffer || 0, sign: "" },
       { label: "Etkinlik kumbara bloke", value: c.eventKumbaraBloke || 0, sign: "" },
     ].filter(r => r.value > 0);
@@ -7784,7 +7790,7 @@ export default function App() {
       { label: "Ödenen sabit giderler (hesaptan)", value: c.paidFixedAcc || 0, sign: "−" },
       { label: "Aktarılan Kredi Kartı harcamaları", value: (c.transferredCC || 0) + (c.transferredFixedCC || 0), sign: "−" },
       { label: "Aktarılan hesaptan ödemeler", value: c.transferredAcc || 0, sign: "−" },
-      { label: "Genel kart yükleme", value: c.cardLoaded || 0, sign: "−" },
+      { label: "Konfor kartı yükleme", value: c.cardLoaded || 0, sign: "−" },
     ].filter((r, i) => i === 0 || r.value > 0);
     setHeaderDetail({ title: "Kalan Bütçe Detayı", rows, total: c.remainingY || 0, totalLabel: `Bankadaki Reel Tutar: ${C(c.remainingY||0)}  |  Bloke Sonrası Kalan: ${C(c.remainingX||0)}`, totalColor: (c.remainingX||0) >= 0 ? X.g : X.r });
   };
