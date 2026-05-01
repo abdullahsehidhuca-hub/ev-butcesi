@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
 import * as Papa from "papaparse";
 import { initializeApp } from "firebase/app";
 import { getDatabase, ref, set, get, onValue } from "firebase/database";
-import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult } from "firebase/auth";
 
 // Firebase Config
 const firebaseConfig = {
@@ -8092,31 +8092,75 @@ function LoginScreen({ pendingInvite, setPendingInvite }) {
     setLoading(false);
   };
 
-  // Google ile giriş
+  // Google ile giriş — mobilde redirect, masaüstünde popup
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+  // Redirect dönüşünü kontrol et (sayfa yüklendiğinde)
+  useEffect(() => {
+    getRedirectResult(auth).then(async result => {
+      if (!result) return;
+      const u = result.user;
+      const displayName = u.displayName || u.email.split("@")[0];
+      const existingFamily = await getUserFamily(u.uid);
+      if (existingFamily) return; // zaten kayıtlı
+
+      // Davet modu kontrolü (localStorage'da saklanmış olabilir)
+      const pendingGoogleInvite = localStorage.getItem("pendingGoogleInvite");
+      if (pendingGoogleInvite) {
+        try {
+          const { code, invData: inv } = JSON.parse(pendingGoogleInvite);
+          const freshInv = await lookupInvitation(code);
+          if (freshInv) await joinViaInvitation(u.uid, code, { ...freshInv, email: u.email });
+        } catch {}
+        localStorage.removeItem("pendingGoogleInvite");
+      } else {
+        const existingName = await lookupName(displayName);
+        if (existingName && existingName.uid !== u.uid) {
+          const newName = prompt(`"${displayName}" ismi zaten kayıtlı. Lütfen farklı bir isim girin:`);
+          if (newName && newName.trim()) {
+            await createFamily(u.uid, u.email, newName.trim());
+          } else {
+            await signOut(auth);
+          }
+        } else {
+          await createFamily(u.uid, u.email, displayName);
+        }
+      }
+    }).catch(() => {});
+  }, []);
+
   const handleGoogleSignIn = async (inviteMode = false) => {
     setLoading(true); setErr("");
     try {
       const provider = new GoogleAuthProvider();
+
+      // Davet moduysa bilgiyi localStorage'a kaydet (redirect sonrası kullanılacak)
+      if (inviteMode && invData) {
+        localStorage.setItem("pendingGoogleInvite", JSON.stringify({ code: invCode, invData }));
+      } else {
+        localStorage.removeItem("pendingGoogleInvite");
+      }
+
+      if (isMobile) {
+        // Mobilde redirect kullan (popup engelleniyor)
+        await signInWithRedirect(auth, provider);
+        return; // sayfa yeniden yüklenecek
+      }
+
+      // Masaüstünde popup kullan
       const result = await signInWithPopup(auth, provider);
       const u = result.user;
       const displayName = u.displayName || u.email.split("@")[0];
 
-      // Mevcut aile kaydı var mı kontrol et
       const existingFamily = await getUserFamily(u.uid);
-      if (existingFamily) {
-        // Zaten kayıtlı kullanıcı — direkt giriş
-        setLoading(false);
-        return;
-      }
+      if (existingFamily) { setLoading(false); return; }
 
-      // Davet moduyla mı geldi?
       if (inviteMode && invData) {
         await joinViaInvitation(u.uid, invCode, { ...invData, email: u.email, name: invData.name });
+        localStorage.removeItem("pendingGoogleInvite");
       } else {
-        // Yeni kullanıcı — isim kontrolü
         const existingName = await lookupName(displayName);
         if (existingName && existingName.uid !== u.uid) {
-          // Bu isim başkasına ait — kullanıcıdan farklı isim iste
           const newName = prompt(`"${displayName}" ismi zaten kayıtlı. Lütfen farklı bir isim girin:`);
           if (newName && newName.trim()) {
             await createFamily(u.uid, u.email, newName.trim());
@@ -8131,8 +8175,7 @@ function LoginScreen({ pendingInvite, setPendingInvite }) {
         }
       }
     } catch (e) {
-      if (e.code === "auth/popup-closed-by-user") { /* kullanıcı kapattı, hata gösterme */ }
-      else if (e.code === "auth/cancelled-popup-request") { /* birden fazla popup, yoksay */ }
+      if (e.code === "auth/popup-closed-by-user" || e.code === "auth/cancelled-popup-request") { /* yoksay */ }
       else setErr(e.message);
     }
     setLoading(false);
