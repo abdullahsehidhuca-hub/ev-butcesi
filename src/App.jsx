@@ -31,7 +31,7 @@ const PM = [{ id: "account", label: "Hesaptan", icon: "🏦" }, { id: "cc", labe
 const MIN_TL_SAVINGS_PCT = 0.15;   // toplam birikimin en az %15'i TL olmalı
 
 const DD = { settings: { monthlyBudget: 0, fixedExpenses: [], variableExpenses: [], cards: [], emergencyFundTarget: null, billTypes: [], generalCardBudget: 0, emergencyTampon: 0, ccPaymentMode: "instant", onboardingCompleted: null }, months: {}, installmentPlans: [], debts: [], savingsGoals: [], completedGoals: [], plannedEvents: [], completedEvents: [], merchantMap: {}, goldRates: {}, usdRates: {}, eurRates: {}, liveRates: { USD: null, EUR: null, XAU: null, fetchedAt: null }, savings: { TRY: [], USD: [], EUR: [], XAU: [] }, lastClosedMonth: null, lastBackup: null };
-const DM = () => ({ budget: null, incomeEntries: [], fixedPaid: {}, variableEntries: {}, ccSingle: [], accountEntries: [], accountTransferred: {}, cardLoaded: 0, cardEntries: [], debtPayments: {}, ccTransferred: {}, csvByCard: {}, finalSavings: null, receipts: [] });
+const DM = () => ({ budget: null, incomeEntries: [], fixedPaid: {}, variableEntries: {}, ccSingle: [], accountEntries: [], accountTransferred: {}, cardLoaded: 0, cardEntries: [], debitCardEntries: [], debtPayments: {}, ccTransferred: {}, csvByCard: {}, finalSavings: null, receipts: [] });
 
 const STORAGE_KEY = "ev-butce-v11";
 
@@ -596,13 +596,19 @@ function calcMonth(data, m, extraInst) {
   // === A GRUBU: Bankadan gerçekten çıkmış ===
   const paidFixedAcc = data.settings.fixedExpenses.filter(e => e.paymentMethod === "account" && md.fixedPaid?.[e.id]).reduce((s, e) => s + e.amount, 0);
 
+  // Banka kartı tespiti (type === "debit" olan kartlar)
+  const debitCardIds = new Set((data.settings.cards || []).filter(c => c.type === "debit").map(c => c.id));
+  const isDebitCard = cardId => debitCardIds.has(cardId);
+
   // Ekstre modunda: aktarımlar önceki ayın harcamalarına karşı yapılır
+  // Banka kartı harcamaları otomatik aktarılmış sayılır (doğrudan bakiyeden düşer)
   const transferredCC = isEkstre
-    ? (prevMd.ccSingle || []).filter(e => md.ccTransferred?.[`prev-single-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0)
-    : (md.ccSingle || []).filter(e => md.ccTransferred?.[`single-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
+    ? (prevMd.ccSingle || []).filter(e => isDebitCard(e.cardId) || md.ccTransferred?.[`prev-single-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0)
+    : (md.ccSingle || []).filter(e => isDebitCard(e.cardId) || md.ccTransferred?.[`single-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
+  // Banka kartı sabit giderleri otomatik aktarılmış sayılır
   const transferredFixedCC = isEkstre
-    ? data.settings.fixedExpenses.filter(e => e.paymentMethod === "cc" && md.ccTransferred?.[`prev-fixed-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0)
-    : data.settings.fixedExpenses.filter(e => e.paymentMethod === "cc" && md.ccTransferred?.[`fixed-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
+    ? data.settings.fixedExpenses.filter(e => e.paymentMethod === "cc" && (isDebitCard(e.cardId) || md.ccTransferred?.[`prev-fixed-${e.id}`]?.transferred)).reduce((s, e) => s + e.amount, 0)
+    : data.settings.fixedExpenses.filter(e => e.paymentMethod === "cc" && (isDebitCard(e.cardId) || md.ccTransferred?.[`fixed-${e.id}`]?.transferred)).reduce((s, e) => s + e.amount, 0);
 
   const transferredInst = installmentTotal > 0 && md.ccTransferred?.["inst-all"]?.transferred ? installmentTotal : 0;
   const transferredInstByPlan = data.installmentPlans.reduce((s, p) => {
@@ -610,6 +616,8 @@ function calcMonth(data, m, extraInst) {
     const targetMonth = isEkstre ? pmk(m) : m;
     for (let i = 0; i < p.months; i++) {
       if (cur === targetMonth) {
+        // Banka kartı taksitleri otomatik aktarılmış
+        if (isDebitCard(p.cardId)) return s + p.monthlyPayment;
         const key = isEkstre ? `prev-inst-${p.id}` : `inst-${p.id}`;
         if (md.ccTransferred?.[key]?.transferred) return s + p.monthlyPayment;
         break;
@@ -620,18 +628,22 @@ function calcMonth(data, m, extraInst) {
   }, 0);
   const totalTransferredInst = Math.max(transferredInst, transferredInstByPlan);
   const transferredAcc = (md.accountEntries || []).filter(e => md.accountTransferred?.[e.id]?.transferred).reduce((s, e) => s + e.amount, 0);
-  const groupA = paidFixedAcc + transferredCC + transferredFixedCC + cardLoaded + transferredAcc + totalTransferredInst;
+  // Banka kartı harcamaları (debitCardEntries) doğrudan bakiyeden düşer
+  const debitCardSpent = (md.debitCardEntries || []).reduce((s, e) => s + (e.amount || 0), 0);
+  const groupA = paidFixedAcc + transferredCC + transferredFixedCC + cardLoaded + transferredAcc + totalTransferredInst + debitCardSpent;
 
   // === B GRUBU: Kesin çıkacak ama henüz çıkmamış ===
   const unpaidFixedAcc = data.settings.fixedExpenses.filter(e => e.paymentMethod === "account" && !md.fixedPaid?.[e.id]).reduce((s, e) => s + e.amount, 0);
 
   // Ekstre modunda: bu ayki KK harcamaları bütçeyi etkilemez, önceki ayınkiler etkilir
+  // Banka kartı harcamaları zaten aktarılmış — untransferred'da sayılmaz
   const untransferredCC = isEkstre
-    ? (prevMd.ccSingle || []).filter(e => !md.ccTransferred?.[`prev-single-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0)
-    : (md.ccSingle || []).filter(e => !md.ccTransferred?.[`single-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
+    ? (prevMd.ccSingle || []).filter(e => !isDebitCard(e.cardId) && !md.ccTransferred?.[`prev-single-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0)
+    : (md.ccSingle || []).filter(e => !isDebitCard(e.cardId) && !md.ccTransferred?.[`single-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
+  // Banka kartı sabit giderleri untransferred'da sayılmaz
   const untransferredFixedCC = isEkstre
-    ? data.settings.fixedExpenses.filter(e => e.paymentMethod === "cc" && !md.ccTransferred?.[`prev-fixed-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0)
-    : data.settings.fixedExpenses.filter(e => e.paymentMethod === "cc" && !md.ccTransferred?.[`fixed-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
+    ? data.settings.fixedExpenses.filter(e => e.paymentMethod === "cc" && !isDebitCard(e.cardId) && !md.ccTransferred?.[`prev-fixed-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0)
+    : data.settings.fixedExpenses.filter(e => e.paymentMethod === "cc" && !isDebitCard(e.cardId) && !md.ccTransferred?.[`fixed-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
 
   const untransferredAcc = (md.accountEntries || []).filter(e => !md.accountTransferred?.[e.id]?.transferred).reduce((s, e) => s + e.amount, 0);
   // Ekstre modunda taksitler de önceki aydan gelir
@@ -715,22 +727,25 @@ function calcFlat(data, m, extraInst) {
   const paidFixedAccF = (data.settings.fixedExpenses || []).filter(e => e.paymentMethod === "account" && md.fixedPaid?.[e.id]).reduce((s, e) => s + e.amount, 0);
   const ccSourceF = isEkstreF ? prevMdF : md;
   const ccKeyPrefixF = isEkstreF ? "prev-" : "";
-  const transferredCCF = (ccSourceF.ccSingle || []).filter(e => md.ccTransferred?.[`${ccKeyPrefixF}single-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
-  const transferredFixedCCF = (data.settings.fixedExpenses || []).filter(e => e.paymentMethod === "cc" && md.ccTransferred?.[`${ccKeyPrefixF}fixed-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
+  const debitCardIdsF = new Set((data.settings.cards || []).filter(c2 => c2.type === "debit").map(c2 => c2.id));
+  const isDebitF = cid => debitCardIdsF.has(cid);
+  const transferredCCF = (ccSourceF.ccSingle || []).filter(e => isDebitF(e.cardId) || md.ccTransferred?.[`${ccKeyPrefixF}single-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
+  const transferredFixedCCF = (data.settings.fixedExpenses || []).filter(e => e.paymentMethod === "cc" && (isDebitF(e.cardId) || md.ccTransferred?.[`${ccKeyPrefixF}fixed-${e.id}`]?.transferred)).reduce((s, e) => s + e.amount, 0);
   const transferredAccF = (md.accountEntries || []).filter(e => md.accountTransferred?.[e.id]?.transferred).reduce((s, e) => s + e.amount, 0);
   const transferredInstF = data.installmentPlans.reduce((s, p) => {
     let cur = p.startMonth;
     const targetMonthF = isEkstreF ? pmk(m) : m;
     for (let i2 = 0; i2 < p.months; i2++) {
-      if (cur === targetMonthF) { const key = `${ccKeyPrefixF}inst-${p.id}`; if (md.ccTransferred?.[key]?.transferred || md.ccTransferred?.["inst-all"]?.transferred) return s + p.monthlyPayment; break; }
+      if (cur === targetMonthF) { if (isDebitF(p.cardId)) return s + p.monthlyPayment; const key = `${ccKeyPrefixF}inst-${p.id}`; if (md.ccTransferred?.[key]?.transferred || md.ccTransferred?.["inst-all"]?.transferred) return s + p.monthlyPayment; break; }
       cur = nmk(cur);
     }
     return s;
   }, 0);
-  const groupAF = paidFixedAccF + transferredCCF + transferredFixedCCF + cl + transferredAccF + transferredInstF;
+  const debitCardSpentF = (md.debitCardEntries || []).reduce((s, e) => s + (e.amount || 0), 0);
+  const groupAF = paidFixedAccF + transferredCCF + transferredFixedCCF + cl + transferredAccF + transferredInstF + debitCardSpentF;
   const unpaidFixedAccF = (data.settings.fixedExpenses || []).filter(e => e.paymentMethod === "account" && !md.fixedPaid?.[e.id]).reduce((s, e) => s + e.amount, 0);
-  const untransferredCCF = (ccSourceF.ccSingle || []).filter(e => !md.ccTransferred?.[`${ccKeyPrefixF}single-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
-  const untransferredFixedCCF = (data.settings.fixedExpenses || []).filter(e => e.paymentMethod === "cc" && !md.ccTransferred?.[`${ccKeyPrefixF}fixed-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
+  const untransferredCCF = (ccSourceF.ccSingle || []).filter(e => !isDebitF(e.cardId) && !md.ccTransferred?.[`${ccKeyPrefixF}single-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
+  const untransferredFixedCCF = (data.settings.fixedExpenses || []).filter(e => e.paymentMethod === "cc" && !isDebitF(e.cardId) && !md.ccTransferred?.[`${ccKeyPrefixF}fixed-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
   const untransferredAccF = (md.accountEntries || []).filter(e => !md.accountTransferred?.[e.id]?.transferred).reduce((s, e) => s + e.amount, 0);
   const untransferredInstF = effectiveInstF - transferredInstF;
   const groupBF = unpaidFixedAccF + untransferredCCF + untransferredFixedCCF + untransferredAccF + dt + untransferredInstF;
@@ -1132,71 +1147,113 @@ function CCSingleModal({ cards, variableExpenses, onClose, onSave }) {
   );
 }
 
-function CardLoadModal({ currentLoaded, maxTotal, entries, onClose, onSave, onDelete, onEdit }) {
+function CardLoadModal({ currentLoaded, maxTotal, entries, debitEntries, debitLimit, onClose, onSave, onDelete, onEdit, onSaveDebit, onDeleteDebit }) {
+  const [tab2, setTab2] = useState("konfor");
   const [a, sa] = useState("");
   const [d, sd] = useState(td());
+  const [note, setNote] = useState("");
   const [listOpen, setListOpen] = useState(false);
   const [editId, setEditId] = useState(null);
   const [editAmt, setEditAmt] = useState("");
   const [editDate, setEditDate] = useState("");
   const amt = parseFloat(a) || 0;
+
+  // Konfor
   const remaining = Math.max(0, maxTotal - currentLoaded);
   const wouldExceedTotal = maxTotal > 0 && (currentLoaded + amt) > maxTotal;
-  const canSave = amt > 0 && !wouldExceedTotal;
-  const sorted = [...(entries || [])].sort((a2, b2) => (b2.date || "").localeCompare(a2.date || ""));
+  const canSaveKonfor = amt > 0 && !wouldExceedTotal;
+  const sortedKonfor = [...(entries || [])].sort((a2, b2) => (b2.date || "").localeCompare(a2.date || ""));
+
+  // Hesap kartı
+  const debitTotal = (debitEntries || []).reduce((s, e) => s + (e.amount || 0), 0);
+  const debitRemaining = debitLimit > 0 ? Math.max(0, debitLimit - debitTotal) : null;
+  const wouldExceedDebit = debitLimit > 0 && (debitTotal + amt) > debitLimit;
+  const canSaveDebit2 = amt > 0 && !wouldExceedDebit;
+  const sortedDebit = [...(debitEntries || [])].sort((a2, b2) => (b2.date || "").localeCompare(a2.date || ""));
+
+  const tabStyle = (active) => ({ flex: 1, background: active ? X.g : "transparent", border: `1px solid ${active ? X.g : X.border}`, borderRadius: 8, padding: "10px", color: active ? "white" : X.td, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: ff, textAlign: "center" });
 
   return (
-    <Modal title="🛒 Konfor Harcaması Kartı" onClose={onClose}>
-      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
-        <div><div style={{ color: X.tm, fontSize: 11 }}>Bu Ay Yüklenen</div><div style={{ color: X.t, fontSize: 22, fontWeight: 800, fontFamily: fm }}>{C(currentLoaded)}</div></div>
-        {maxTotal > 0 && <div style={{ textAlign: "right" }}><div style={{ color: X.tm, fontSize: 11 }}>Aylık Limit</div><div style={{ color: X.td, fontSize: 22, fontWeight: 800, fontFamily: fm }}>{C(maxTotal)}</div></div>}
+    <Modal title="💳 Hesap Kartı" onClose={onClose}>
+      <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
+        <button onClick={() => { setTab2("konfor"); sa(""); setNote(""); }} style={tabStyle(tab2 === "konfor")}>🛒 Konfor Harcaması</button>
+        <button onClick={() => { setTab2("debit"); sa(""); setNote(""); }} style={tabStyle(tab2 === "debit")}>🏦 Banka Kartı</button>
       </div>
-      {maxTotal > 0 && <div style={{ height: 4, borderRadius: 2, background: X.border, marginBottom: 12 }}><div style={{ height: "100%", borderRadius: 2, background: X.g, width: `${Math.min((currentLoaded / maxTotal) * 100, 100)}%` }} /></div>}
-      <Inp label="Yüklenen Tutar" type="number" value={a} onChange={sa} suffix="₺" />
-      <Inp label="Tarih" type="date" value={d} onChange={sd} />
-      {wouldExceedTotal && <div style={{ color: X.r, fontSize: 12, marginBottom: 8 }}>⚠️ Bu ay toplam {C(maxTotal)} limitini aşıyor</div>}
-      <Btn onClick={() => { if (!canSave) return; onSave(amt, d); sa(""); sd(td()); }} disabled={!canSave}>🛒 Yükle</Btn>
-      <div style={{ marginTop: 14 }}>
-        <div onClick={() => setListOpen(!listOpen)} style={{ ...glassSolid, borderRadius: listOpen ? "10px 10px 0 0" : 10, padding: "12px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span style={{ fontSize: 15, fontWeight: 700, color: X.tm }}>Bu ayki yüklemeler</span>
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            {sorted.length > 0 && <span style={{ fontSize: 11, color: X.td }}>{sorted.length} yükleme</span>}
-            <span style={{ fontSize: 10, color: X.td, transform: listOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>▼</span>
-          </div>
+
+      {tab2 === "konfor" && (<>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
+          <div><div style={{ color: X.tm, fontSize: 11 }}>Bu Ay Yüklenen</div><div style={{ color: X.t, fontSize: 22, fontWeight: 800, fontFamily: fm }}>{C(currentLoaded)}</div></div>
+          {maxTotal > 0 && <div style={{ textAlign: "right" }}><div style={{ color: X.tm, fontSize: 11 }}>Aylık Limit</div><div style={{ color: X.td, fontSize: 22, fontWeight: 800, fontFamily: fm }}>{C(maxTotal)}</div></div>}
         </div>
-        {listOpen && (
-          <div style={{ background: "rgba(160,190,200,0.35)", borderRadius: "0 0 10px 10px", borderTop: `1px solid ${X.border}`, padding: "6px 10px 10px" }}>
-            {sorted.length === 0
-              ? <div style={{ color: X.td, fontSize: 13, padding: "6px 0" }}>Bu ay henüz yükleme yapılmadı.</div>
-              : sorted.map(e => editId === e.id ? (
-                <div key={e.id} style={{ padding: 10, borderRadius: 8, marginBottom: 4, background: "rgba(15,118,110,0.07)", border: "1px solid rgba(15,118,110,0.2)" }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: X.g, marginBottom: 8 }}>Düzenleniyor</div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 6 }}>
-                    <div><div style={{ fontSize: 12, color: X.td, marginBottom: 3 }}>Tutar</div><input type="number" value={editAmt} onChange={ev => setEditAmt(ev.target.value)} style={{ width: "100%", background: "rgba(255,255,255,0.7)", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 8, padding: "8px 10px", fontSize: 13, color: X.t, boxSizing: "border-box" }} /></div>
-                    <div><div style={{ fontSize: 12, color: X.td, marginBottom: 3 }}>Tarih</div><input type="date" value={editDate} onChange={ev => setEditDate(ev.target.value)} style={{ width: "100%", background: "rgba(255,255,255,0.7)", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 8, padding: "8px 10px", fontSize: 13, color: X.t, boxSizing: "border-box" }} /></div>
-                  </div>
-                  <div style={{ display: "flex", gap: 6 }}>
-                    <button onClick={() => { onEdit(e.id, { amount: parseFloat(editAmt) || e.amount, date: editDate }); setEditId(null); }} style={{ flex: 1, background: X.g, border: "none", borderRadius: 8, padding: "8px", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: ff }}>✓ Kaydet</button>
-                    <button onClick={() => setEditId(null)} style={{ flex: 1, background: "transparent", border: "1px solid rgba(0,0,0,0.15)", borderRadius: 8, padding: "8px", color: X.td, fontSize: 13, cursor: "pointer", fontFamily: ff }}>İptal</button>
-                  </div>
-                </div>
-              ) : (
-                <div key={e.id} style={{ padding: "10px 6px", borderRadius: 8, marginBottom: 4, background: "rgba(255,255,255,0.35)", display: "flex", flexDirection: "column", gap: 6 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ fontSize: 15, fontWeight: 600, color: X.t, flex: 1 }}>Kart yükleme</span>
-                    <span style={{ fontSize: 13, color: X.td, whiteSpace: "nowrap" }}>{e.date}</span>
-                    <span style={{ fontSize: 15, fontWeight: 700, color: X.g, fontFamily: fm, whiteSpace: "nowrap" }}>{C(e.amount)}</span>
-                  </div>
-                  <div style={{ display: "flex", gap: 6 }}>
-                    <button onClick={() => { setEditId(e.id); setEditAmt(String(e.amount)); setEditDate(e.date || ""); }} style={{ background: "none", border: "none", color: X.b, fontSize: 22, cursor: "pointer", padding: 0, width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center" }}>✎</button>
-                    <button onClick={() => { if (confirm("Bu yüklemeyi silmek istiyor musunuz?")) onDelete(e.id); }} style={{ background: "none", border: "none", color: X.r, fontSize: 22, cursor: "pointer", padding: 0, width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
-                  </div>
-                </div>
-              ))
-            }
+        {maxTotal > 0 && <div style={{ height: 4, borderRadius: 2, background: X.border, marginBottom: 12 }}><div style={{ height: "100%", borderRadius: 2, background: X.g, width: `${Math.min((currentLoaded / maxTotal) * 100, 100)}%` }} /></div>}
+        <Inp label="Yüklenen Tutar" type="number" value={a} onChange={sa} suffix="₺" />
+        <Inp label="Tarih" type="date" value={d} onChange={sd} />
+        {wouldExceedTotal && <div style={{ color: X.r, fontSize: 12, marginBottom: 8 }}>⚠️ Bu ay toplam {C(maxTotal)} limitini aşıyor</div>}
+        <Btn onClick={() => { if (!canSaveKonfor) return; onSave(amt, d); sa(""); sd(td()); }} disabled={!canSaveKonfor}>🛒 Yükle</Btn>
+        <div style={{ marginTop: 14 }}>
+          <div onClick={() => setListOpen(!listOpen)} style={{ ...glassSolid, borderRadius: listOpen ? "10px 10px 0 0" : 10, padding: "12px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ fontSize: 15, fontWeight: 700, color: X.tm }}>Bu ayki yüklemeler</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              {sortedKonfor.length > 0 && <span style={{ fontSize: 11, color: X.td }}>{sortedKonfor.length} yükleme</span>}
+              <span style={{ fontSize: 10, color: X.td, transform: listOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>▼</span>
+            </div>
           </div>
-        )}
-      </div>
+          {listOpen && (
+            <div style={{ background: "rgba(160,190,200,0.35)", borderRadius: "0 0 10px 10px", borderTop: `1px solid ${X.border}`, padding: "6px 10px 10px" }}>
+              {sortedKonfor.length === 0
+                ? <div style={{ color: X.td, fontSize: 13, padding: "6px 0" }}>Bu ay henüz yükleme yapılmadı.</div>
+                : sortedKonfor.map(e => (
+                  <div key={e.id} style={{ padding: "10px 6px", borderRadius: 8, marginBottom: 4, background: "rgba(255,255,255,0.35)", display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: X.t, flex: 1 }}>Kart yükleme</span>
+                    <span style={{ fontSize: 12, color: X.td }}>{e.date}</span>
+                    <span style={{ fontSize: 14, fontWeight: 700, color: X.g, fontFamily: fm }}>{C(e.amount)}</span>
+                    <button onClick={() => { if (confirm("Silinsin mi?")) onDelete(e.id); }} style={{ background: "none", border: "none", color: X.r, fontSize: 18, cursor: "pointer", padding: "2px" }}>✕</button>
+                  </div>
+                ))
+              }
+            </div>
+          )}
+        </div>
+      </>)}
+
+      {tab2 === "debit" && (<>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
+          <div><div style={{ color: X.tm, fontSize: 11 }}>Bu Ay Harcanan</div><div style={{ color: X.t, fontSize: 22, fontWeight: 800, fontFamily: fm }}>{C(debitTotal)}</div></div>
+          {debitLimit > 0 && <div style={{ textAlign: "right" }}><div style={{ color: X.tm, fontSize: 11 }}>Aylık Limit</div><div style={{ color: X.td, fontSize: 22, fontWeight: 800, fontFamily: fm }}>{C(debitLimit)}</div></div>}
+        </div>
+        {debitLimit > 0 && <div style={{ height: 4, borderRadius: 2, background: X.border, marginBottom: 12 }}><div style={{ height: "100%", borderRadius: 2, background: debitTotal > debitLimit ? X.r : X.g, width: `${Math.min((debitTotal / debitLimit) * 100, 100)}%` }} /></div>}
+        <Inp label="Harcama Tutarı" type="number" value={a} onChange={sa} suffix="₺" />
+        <Inp label="Açıklama" value={note} onChange={setNote} placeholder="Nereye harcandı?" />
+        <Inp label="Tarih" type="date" value={d} onChange={sd} />
+        {wouldExceedDebit && <div style={{ color: X.r, fontSize: 12, marginBottom: 8 }}>⚠️ Aylık {C(debitLimit)} limitini aşıyor</div>}
+        <Btn onClick={() => { if (!canSaveDebit2) return; onSaveDebit({ id: uid(), amount: amt, note, date: d }); sa(""); setNote(""); sd(td()); }} disabled={!canSaveDebit2} c={X.g}>🏦 Harcama Ekle</Btn>
+        <div style={{ marginTop: 14 }}>
+          <div onClick={() => setListOpen(!listOpen)} style={{ ...glassSolid, borderRadius: listOpen ? "10px 10px 0 0" : 10, padding: "12px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ fontSize: 15, fontWeight: 700, color: X.tm }}>Bu ayki harcamalar</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              {sortedDebit.length > 0 && <span style={{ fontSize: 11, color: X.td }}>{sortedDebit.length} harcama</span>}
+              <span style={{ fontSize: 10, color: X.td, transform: listOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>▼</span>
+            </div>
+          </div>
+          {listOpen && (
+            <div style={{ background: "rgba(160,190,200,0.35)", borderRadius: "0 0 10px 10px", borderTop: `1px solid ${X.border}`, padding: "6px 10px 10px" }}>
+              {sortedDebit.length === 0
+                ? <div style={{ color: X.td, fontSize: 13, padding: "6px 0" }}>Bu ay henüz harcama girilmedi.</div>
+                : sortedDebit.map(e => (
+                  <div key={e.id} style={{ padding: "10px 6px", borderRadius: 8, marginBottom: 4, background: "rgba(255,255,255,0.35)", display: "flex", alignItems: "center", gap: 8 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: X.t, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.note || "Harcama"}</div>
+                      <div style={{ fontSize: 11, color: X.td }}>{e.date}</div>
+                    </div>
+                    <span style={{ fontSize: 14, fontWeight: 700, color: X.g, fontFamily: fm, whiteSpace: "nowrap" }}>{C(e.amount)}</span>
+                    <button onClick={() => { if (confirm("Silinsin mi?")) onDeleteDebit(e.id); }} style={{ background: "none", border: "none", color: X.r, fontSize: 18, cursor: "pointer", padding: "2px" }}>✕</button>
+                  </div>
+                ))
+              }
+            </div>
+          )}
+        </div>
+      </>)}
     </Modal>
   );
 }
@@ -2884,25 +2941,29 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
     const keyPrefix = isEkstreMode ? "prev-" : "";
     const sourceMonth = isEkstreMode ? pmk(mk) : mk;
     const sourceMd = isEkstreMode ? prevMdDash : md;
-    // 1. Sabit zorunlu giderler (kredi kartı ile ödenenler)
+    const debitIds = new Set(cards.filter(c2 => c2.type === "debit").map(c2 => c2.id));
+    // 1. Sabit zorunlu giderler (kredi kartı ile ödenenler — banka kartı hariç)
     data.settings.fixedExpenses.filter(e => e.paymentMethod === "cc").forEach(e => {
       const cid = e.cardId || cards[0]?.id;
+      if (debitIds.has(cid)) return; // banka kartı — aktarma gerekmez
       const cardName = cards.find(c2 => c2.id === cid)?.name;
       items.push({ key: `${keyPrefix}fixed-${e.id}`, label: e.name, sub: `Sabit zorunlu${cardName ? " • " + cardName : ""}${isEkstreMode ? " • " + ml(sourceMonth) : ""}`, amount: e.amount, cardId: cid, sortDate: sourceMonth + "-01" });
     });
-    // 2. Tek çekim kredi kartı harcamaları
+    // 2. Tek çekim kredi kartı harcamaları (banka kartı hariç)
     (sourceMd?.ccSingle || []).forEach(e => {
       const cid = e.cardId || cards[0]?.id;
+      if (debitIds.has(cid)) return; // banka kartı — aktarma gerekmez
       const cardName = cards.find(c2 => c2.id === cid)?.name;
       items.push({ key: `${keyPrefix}single-${e.id}`, label: e.note || e.merchantName || "Tek çekim", sub: `${e.date || ""}${cardName ? " • " + cardName : ""}${isEkstreMode ? " • " + ml(sourceMonth) : ""}`, amount: e.amount, cardId: cid, sortDate: e.date || sourceMonth + "-01" });
     });
-    // 3. Taksitler
+    // 3. Taksitler (banka kartı hariç)
     const targetMonth = isEkstreMode ? pmk(mk) : mk;
     data.installmentPlans.forEach(p => {
       let cur = p.startMonth;
       for (let i = 0; i < p.months; i++) {
         if (cur === targetMonth) {
           const cid = p.cardId || cards[0]?.id;
+          if (debitIds.has(cid)) break; // banka kartı — aktarma gerekmez
           const cardName = cards.find(c2 => c2.id === cid)?.name;
           items.push({ key: `${keyPrefix}inst-${p.id}`, label: p.note || "Taksit", sub: `${p.monthlyPayment > 0 ? `Taksit ${i + 1}/${p.months}` : ""}${cardName ? " • " + cardName : ""}${isEkstreMode ? " • " + ml(sourceMonth) : ""}`, amount: p.monthlyPayment, cardId: cid, sortDate: p.createdDate || sourceMonth + "-01" });
           break;
@@ -3046,9 +3107,9 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
         </div>
         <div onClick={() => setModal("cardLoad")} style={{ background: "rgba(15,118,110,0.32)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(15,118,110,0.30)", borderRadius: 16, padding: "16px 8px", cursor: "pointer", textAlign: "center", position: "relative", boxShadow: neu, overflow: "hidden", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
           <InfoBtn onClick={() => setInfo("cardLoad")} />
-          <div style={{ fontSize: 18, marginBottom: 3 }}>🛒</div>
-          <div style={{ color: X.g, fontSize: 13, fontWeight: 800 }}>Konfor Harcaması Kartı</div>
-          <div style={{ color: X.t, fontSize: 15, fontWeight: 800, fontFamily: fm, marginTop: 2 }}>{isEkstreMode && c.generalCardBudget > 0 ? <>{C(c.generalCardBudget - (md.cardLoaded || 0))}<span style={{ color: X.td, fontSize: 11 }}> / {C(c.generalCardBudget)}</span></> : <>{C(md.cardLoaded || 0)}{c.generalCardBudget > 0 && <span style={{ color: X.td, fontSize: 11 }}> / {C(c.generalCardBudget)}</span>}</>}</div>
+          <div style={{ fontSize: 18, marginBottom: 3 }}>💳</div>
+          <div style={{ color: X.g, fontSize: 13, fontWeight: 800 }}>Hesap Kartı</div>
+          <div style={{ color: X.t, fontSize: 15, fontWeight: 800, fontFamily: fm, marginTop: 2 }}>{(() => { const debitSpent = (md.debitCardEntries || []).reduce((s, e) => s + (e.amount || 0), 0); const debitLimit = (data.settings.cards || []).filter(c2 => c2.type === "debit").reduce((s, c2) => s + (c2.monthlyLimit || 0), 0); const konforLoaded = md.cardLoaded || 0; const total = debitSpent + konforLoaded; return debitLimit > 0 || c.generalCardBudget > 0 ? <>{C(total)}<span style={{ color: X.td, fontSize: 11 }}> / {C(debitLimit + c.generalCardBudget)}</span></> : C(total); })()}</div>
         </div>
         <div onClick={() => setModal("debtPay")} style={{ background: "rgba(180,83,9,0.28)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(180,83,9,0.28)", borderRadius: 16, padding: "16px 8px", cursor: "pointer", textAlign: "center", position: "relative", boxShadow: neu, overflow: "hidden", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
           <InfoBtn onClick={() => setInfo("debt")} />
@@ -3332,7 +3393,7 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
       {modal === "ccCombined" && <CCCombinedModal data={data} mk={mk} cards={data.settings.cards || []} variableExpenses={data.settings.variableExpenses || []} ccSingleEntries={md.ccSingle || []} onClose={() => setModal(null)} onSaveSingle={handleCCSingle} onDeleteSingle={deleteCCSingle} onSaveInstall={handleInstSave} onDeletePlan={deleteInstallment} onEditPlan={editInstallment} onEventTaksit={handleEventTaksit} />}
       {modal === "accountPay" && <AccountPayModal variableExpenses={data.settings.variableExpenses || []} entries={md.accountEntries || []} transferred={md.accountTransferred || {}} onClose={() => setModal(null)} onSave={handleAccountPay} onDelete={deleteAccountEntry} onEdit={editAccountEntry} onTransfer={handleAccountTransfer} onUndoTransfer={undoAccountTransfer} />}
       {modal === "simulate" && <CCCombinedModal data={data} mk={mk} cards={data.settings.cards || []} variableExpenses={data.settings.variableExpenses || []} ccSingleEntries={md.ccSingle || []} onClose={() => setModal(null)} onSaveSingle={handleCCSingle} onDeleteSingle={deleteCCSingle} onSaveInstall={handleInstSave} onDeletePlan={deleteInstallment} onEditPlan={editInstallment} onEventTaksit={handleEventTaksit} />}
-      {modal === "cardLoad" && <CardLoadModal currentLoaded={md.cardLoaded || 0} maxTotal={c.generalCardBudget} entries={md.cardEntries || []} onClose={() => setModal(null)} onSave={handleCardLoad} onDelete={deleteCardEntry} onEdit={editCardEntry} />}
+      {modal === "cardLoad" && <CardLoadModal currentLoaded={md.cardLoaded || 0} maxTotal={c.generalCardBudget} entries={md.cardEntries || []} debitEntries={md.debitCardEntries || []} debitLimit={(data.settings.cards || []).filter(c2 => c2.type === "debit").reduce((s, c2) => s + (c2.monthlyLimit || 0), 0)} onClose={() => setModal(null)} onSave={handleCardLoad} onDelete={deleteCardEntry} onEdit={editCardEntry} onSaveDebit={entry => setMonthField(mk, "debitCardEntries", [...(md.debitCardEntries || []), entry])} onDeleteDebit={id => setMonthField(mk, "debitCardEntries", (md.debitCardEntries || []).filter(e => e.id !== id))} />}
       {modal === "debtPay" && <DebtPayModal debts={data.debts} debtPayments={md.debtPayments} data={data} mk={mk} onClose={() => setModal(null)} onPay={handleDebtPay} onUndo={undoDebtPay} />}
       {modal === "budget" && <BudgetModal mk={mk} incomeEntries={md.incomeEntries || []} defaultBudget={data.settings.monthlyBudget} onSave={entries => { setMonthField(mk, "incomeEntries", entries); setMonthField(mk, "budget", entries.reduce((s, e) => s + (e.amount || 0), 0)); }} onClose={() => setModal(null)} />}
       {modal === "receipt" && <ReceiptModal receipts={md.receipts || []} onClose={() => setModal(null)} onSave={handleReceiptSave} onDelete={handleReceiptDelete} />}
@@ -5603,8 +5664,8 @@ function PlanningScreen({ data, setData, mk }) {
                         {d.noteText && <div style={{ color: X.td, fontSize: 11, fontStyle: "italic", marginTop: 2 }}>{d.noteText}</div>}
                       </div>
                       <div style={{ display: "flex", gap: 6, flexShrink: 0, marginLeft: 8 }}>
-                        <button onClick={() => debtEditing === d.id ? debtCancel() : debtStartEdit(d)} style={{ background: X.bd, border: `1px solid ${X.b}`, borderRadius: 6, padding: "4px 10px", color: X.b, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{debtEditing === d.id ? "▲" : "✎"}</button>
-                        <button onClick={() => debtRm(d.id)} style={{ background: X.rd, border: `1px solid ${X.r}`, borderRadius: 6, padding: "4px 10px", color: X.r, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>✕</button>
+                        <button onClick={() => debtEditing === d.id ? debtCancel() : debtStartEdit(d)} style={{ background: X.bd, border: `1px solid ${X.b}`, borderRadius: 8, padding: "7px 14px", color: X.b, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{debtEditing === d.id ? "▲" : "✎"}</button>
+                        <button onClick={() => debtRm(d.id)} style={{ background: X.rd, border: `1px solid ${X.r}`, borderRadius: 8, padding: "7px 14px", color: X.r, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>✕</button>
                       </div>
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
@@ -6268,6 +6329,8 @@ function OnboardingWizard({ data, setData, familyName }) {
   const [fixedMethod, setFixedMethod] = useState("account");
   const [cards, setCards] = useState([]);
   const [cardName, setCardName] = useState("");
+  const [cardType, setCardType] = useState("credit");
+  const [cardLimit, setCardLimit] = useState("");
   const [ccMode, setCcMode] = useState("instant");
   const [fixedIcon, setFixedIcon] = useState("📋");
   const [catList, setCatList] = useState([]);
@@ -6278,7 +6341,7 @@ function OnboardingWizard({ data, setData, familyName }) {
   const totalSteps = 8;
   const inpS = { width: "100%", background: "white", border: "1px solid rgba(0,0,0,0.10)", borderRadius: 10, padding: "10px 12px", fontSize: 14, color: "#141008", boxSizing: "border-box", fontFamily: ff };
   const lblS = { color: "#5A5045", fontSize: 12, marginBottom: 4, fontWeight: 600, display: "block" };
-  const hintS = { color: "#8B7E74", fontSize: 10, marginTop: 6, lineHeight: 1.4 };
+  const hintS = { color: "#5A5045", fontSize: 12, marginTop: 10, lineHeight: 1.6, background: "rgba(180,83,9,0.06)", border: "1px solid rgba(180,83,9,0.15)", borderRadius: 10, padding: "10px 12px" };
 
   const fixedIcons = ["🏠", "🔥", "⚡", "💧", "🌐", "📱", "🛡️", "🏢", "📚", "🏥", "🚗", "👶", "🐾", "📺", "🔧", "🛒", "💊", "🎓", "🏋️", "✈️", "👗", "🎵", "📋"];
   const catIcons = ["🛒", "⛽", "📚", "🏥", "👗", "🍽️", "☕", "🎬", "🏋️", "✈️", "👶", "🐾", "💊", "🔧", "📱", "🚗", "🎁", "💇", "🧹", "📋"];
@@ -6299,8 +6362,8 @@ function OnboardingWizard({ data, setData, familyName }) {
 
   const addCard = () => {
     if (!cardName) return;
-    setCards(c => [...c, { id: uid(), name: cardName }]);
-    setCardName("");
+    setCards(c => [...c, { id: uid(), name: cardName, type: cardType, monthlyLimit: cardType === "debit" ? (parseFloat(cardLimit) || 0) : 0 }]);
+    setCardName(""); setCardType("credit"); setCardLimit("");
   };
   const removeCard = id => setCards(c => c.filter(x => x.id !== id));
 
@@ -6327,13 +6390,13 @@ function OnboardingWizard({ data, setData, familyName }) {
 
   const suggestedFixed = [
     { name: "Kira", icon: "🏠" },
-    { name: "Doğalgaz", icon: "🔥" },
-    { name: "Elektrik", icon: "⚡" },
-    { name: "Su", icon: "💧" },
-    { name: "İnternet", icon: "🌐" },
-    { name: "Telefon", icon: "📱" },
-    { name: "Sigorta", icon: "🛡️" },
     { name: "Aidat", icon: "🏢" },
+    { name: "İnternet", icon: "🌐" },
+    { name: "Telefon Hattı", icon: "📱" },
+    { name: "Sigorta", icon: "🛡️" },
+    { name: "Eğitim Taksidi", icon: "🎓" },
+    { name: "Spor Salonu", icon: "🏋️" },
+    { name: "Abonelik", icon: "📺" },
   ];
 
   return (
@@ -6367,7 +6430,7 @@ function OnboardingWizard({ data, setData, familyName }) {
           <div>
             <div style={{ fontSize: 28, marginBottom: 8 }}>📅</div>
             <div style={{ color: "#141008", fontSize: 16, fontWeight: 800, marginBottom: 4 }}>Maaş gününüz</div>
-            <div style={{ color: "#5A5045", fontSize: 12, marginBottom: 12 }}>Maaşınız her ayın kaçında yatıyor? Bütçe döngünüz bu güne göre hesaplanır.</div>
+            <div style={{ color: "#3D352E", fontSize: 13, marginBottom: 12, lineHeight: 1.5 }}>Maaşınız her ayın kaçında yatıyor? Bütçe döngünüz bu güne göre hesaplanır.</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginBottom: 10 }}>
               {["1", "15", "25"].map(d => (
                 <button key={d} onClick={() => setPayDay(d)} style={{ background: payDay === d ? X.g : "white", border: `2px solid ${payDay === d ? X.g : "rgba(0,0,0,0.08)"}`, borderRadius: 10, padding: "10px", color: payDay === d ? "white" : "#141008", fontSize: 16, fontWeight: 800, cursor: "pointer", fontFamily: ff }}>
@@ -6386,7 +6449,7 @@ function OnboardingWizard({ data, setData, familyName }) {
           <div>
             <div style={{ fontSize: 28, marginBottom: 8 }}>💳</div>
             <div style={{ color: "#141008", fontSize: 16, fontWeight: 800, marginBottom: 4 }}>Kredi kartı ödemeleriniz</div>
-            <div style={{ color: "#5A5045", fontSize: 12, marginBottom: 12 }}>Kredi kartı harcamalarınızın karşılığını ne zaman ödüyorsunuz?</div>
+            <div style={{ color: "#3D352E", fontSize: 13, marginBottom: 12, lineHeight: 1.5 }}>Kredi kartı harcamalarınızın karşılığını ne zaman ödüyorsunuz?</div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 10 }}>
               <button onClick={() => setCcMode("instant")} style={{ background: ccMode === "instant" ? X.gd : "white", border: `2px solid ${ccMode === "instant" ? X.g : "rgba(0,0,0,0.08)"}`, borderRadius: 12, padding: "12px 14px", textAlign: "left", cursor: "pointer" }}>
@@ -6413,7 +6476,7 @@ function OnboardingWizard({ data, setData, familyName }) {
           <div>
             <div style={{ fontSize: 28, marginBottom: 8 }}>💰</div>
             <div style={{ color: "#141008", fontSize: 16, fontWeight: 800, marginBottom: 4 }}>Aylık bütçeniz</div>
-            <div style={{ color: "#5A5045", fontSize: 12, marginBottom: 12 }}>Evinize her ay giren toplam net gelir nedir? Maaş, ek gelir, kira geliri dahil.</div>
+            <div style={{ color: "#3D352E", fontSize: 13, marginBottom: 12, lineHeight: 1.5 }}>Evinize her ay giren toplam net gelir nedir? Maaş, ek gelir, kira geliri dahil.</div>
             <input type="number" value={budget} onChange={e => setBudget(e.target.value)} placeholder="Örn: 80000" style={{ ...inpS, fontSize: 20, textAlign: "center", fontWeight: 700, fontFamily: fm, marginBottom: 6 }} />
             {parseFloat(budget) > 0 && <div style={{ textAlign: "center", color: X.g, fontSize: 14, fontWeight: 700, fontFamily: fm }}>{C(parseFloat(budget))}</div>}
             <div style={hintS}>💡 Bunu daha sonra Ayarlar → Aylık Bütçe'den değiştirebilirsiniz.</div>
@@ -6425,7 +6488,7 @@ function OnboardingWizard({ data, setData, familyName }) {
           <div>
             <div style={{ fontSize: 28, marginBottom: 8 }}>🔒</div>
             <div style={{ color: "#141008", fontSize: 16, fontWeight: 800, marginBottom: 4 }}>Sabit giderleriniz</div>
-            <div style={{ color: "#5A5045", fontSize: 12, marginBottom: 10 }}>Her ay düzenli ödediğiniz giderleri ekleyin.</div>
+            <div style={{ color: "#3D352E", fontSize: 13, marginBottom: 10, lineHeight: 1.5 }}>Her ay <strong>aynı tutarda</strong> ödediğiniz giderleri ekleyin. (Kira, aidat, eğitim taksidi gibi)</div>
 
             {/* Hazır öneriler */}
             <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 10 }}>
@@ -6466,7 +6529,7 @@ function OnboardingWizard({ data, setData, familyName }) {
                 Toplam: {C(fixedList.reduce((s, f) => s + f.amount, 0))}
               </div>
             )}
-            <div style={hintS}>💡 Bunu daha sonra Ayarlar → Sabit Giderler'den değiştirebilirsiniz. Şimdi atlayabilirsiniz.</div>
+            <div style={hintS}>💡 Tutarı her ay değişen faturalar (elektrik, su, doğalgaz) sabit gider değildir — onları Ayarlar → Fatura Bütçeleri'nden tahmini olarak tanımlayabilirsiniz.</div>
           </div>
         )}
 
@@ -6475,13 +6538,14 @@ function OnboardingWizard({ data, setData, familyName }) {
           <div>
             <div style={{ fontSize: 28, marginBottom: 8 }}>🔄</div>
             <div style={{ color: "#141008", fontSize: 16, fontWeight: 800, marginBottom: 4 }}>Harcama kategorileri</div>
-            <div style={{ color: "#5A5045", fontSize: 12, marginBottom: 10 }}>Değişken harcamalarınızı kategorilere ayırın. AI danışman ve raporlar bu kategorileri kullanır.</div>
+            <div style={{ color: "#3D352E", fontSize: 13, marginBottom: 10, lineHeight: 1.5 }}>Değişken harcamalarınızı kategorilere ayırın. AI danışman ve raporlar bu kategorileri kullanır.</div>
 
             {/* Hazır öneriler */}
             <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 10 }}>
               {[
                 { name: "Gıda & Market", icon: "🛒" },
                 { name: "Akaryakıt", icon: "⛽" },
+                { name: "Faturalar", icon: "⚡" },
                 { name: "Eğitim", icon: "📚" },
                 { name: "Sağlık", icon: "🏥" },
                 { name: "Giyim", icon: "👗" },
@@ -6520,24 +6584,40 @@ function OnboardingWizard({ data, setData, familyName }) {
           </div>
         )}
 
-        {/* ADIM 5: Kredi kartları */}
+        {/* ADIM 5: Kartlar */}
         {step === 6 && (
           <div>
             <div style={{ fontSize: 28, marginBottom: 8 }}>💳</div>
-            <div style={{ color: "#141008", fontSize: 16, fontWeight: 800, marginBottom: 4 }}>Kredi kartlarınız</div>
-            <div style={{ color: "#5A5045", fontSize: 12, marginBottom: 12 }}>Kullandığınız kredi kartlarının adını ekleyin. Harcamalarınızı kart bazlı takip edebilirsiniz.</div>
-            <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-              <input value={cardName} onChange={e => setCardName(e.target.value)} placeholder="Örn: Yapıkredi, Garanti" style={{ ...inpS, flex: 1 }} />
-              <button onClick={addCard} disabled={!cardName} style={{ background: cardName ? X.g : "rgba(0,0,0,0.06)", border: "none", borderRadius: 10, padding: "10px 16px", color: cardName ? "white" : "#8B7E74", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: ff }}>+ Ekle</button>
+            <div style={{ color: "#141008", fontSize: 16, fontWeight: 800, marginBottom: 4 }}>Kartlarınız</div>
+            <div style={{ color: "#3D352E", fontSize: 13, marginBottom: 12, lineHeight: 1.5 }}>Kullandığınız kredi kartı veya banka kartlarını ekleyin.</div>
+
+            <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+              <button onClick={() => setCardType("credit")} style={{ flex: 1, background: cardType === "credit" ? "rgba(29,78,216,0.12)" : "white", border: `1px solid ${cardType === "credit" ? X.b : "rgba(0,0,0,0.08)"}`, borderRadius: 8, padding: "10px 6px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: ff, color: cardType === "credit" ? X.b : "#5A5045", textAlign: "center" }}>💳 Kredi Kartı</button>
+              <button onClick={() => setCardType("debit")} style={{ flex: 1, background: cardType === "debit" ? "rgba(15,118,110,0.12)" : "white", border: `1px solid ${cardType === "debit" ? X.g : "rgba(0,0,0,0.08)"}`, borderRadius: 8, padding: "10px 6px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: ff, color: cardType === "debit" ? X.g : "#5A5045", textAlign: "center" }}>🏦 Banka Kartı</button>
             </div>
+
+            <input value={cardName} onChange={e => setCardName(e.target.value)} placeholder="Kart adı" style={{ ...inpS, marginBottom: 8 }} />
+
+            {cardType === "debit" && (
+              <input type="number" value={cardLimit} onChange={e => setCardLimit(e.target.value)} placeholder="Aylık harcama limiti (opsiyonel)" style={{ ...inpS, marginBottom: 8 }} />
+            )}
+
+            <button onClick={addCard} disabled={!cardName} style={{ width: "100%", background: cardName ? X.g : "rgba(0,0,0,0.06)", border: "none", borderRadius: 10, padding: "10px", color: cardName ? "white" : "#8B7E74", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: ff, marginBottom: 12 }}>+ Ekle</button>
 
             {cards.map(c2 => (
               <div key={c2.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 12px", marginBottom: 4, background: "white", borderRadius: 8, border: "1px solid rgba(0,0,0,0.06)" }}>
-                <span style={{ color: "#141008", fontSize: 14, fontWeight: 700 }}>💳 {c2.name}</span>
-                <button onClick={() => removeCard(c2.id)} style={{ background: "none", border: "none", color: X.r, fontSize: 16, cursor: "pointer", padding: "2px 6px" }}>✕</button>
+                <span style={{ color: "#141008", fontSize: 13, fontWeight: 700 }}>{c2.type === "debit" ? "🏦" : "💳"} {c2.name}</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ color: "#8B7E74", fontSize: 11 }}>{c2.type === "debit" ? "Banka" : "Kredi"}{c2.monthlyLimit > 0 ? ` · ${C(c2.monthlyLimit)}` : ""}</span>
+                  <button onClick={() => removeCard(c2.id)} style={{ background: "none", border: "none", color: X.r, fontSize: 16, cursor: "pointer", padding: "2px 6px" }}>✕</button>
+                </div>
               </div>
             ))}
-            <div style={hintS}>💡 Bunu daha sonra Ayarlar → Kartlarım'dan değiştirebilirsiniz. Kredi kartınız yoksa atlayabilirsiniz.</div>
+
+            <div style={hintS}>
+              💳 <strong>Kredi kartı:</strong> Harcamalar ay sonunda hesaba aktarılır.<br/>
+              🏦 <strong>Banka kartı:</strong> Harcamalar doğrudan bakiyeden düşer, aktarma gerekmez.{cardType === "debit" ? " Limit belirlerseniz harcama takibi yapabilirsiniz." : ""}
+            </div>
           </div>
         )}
 
@@ -6546,7 +6626,7 @@ function OnboardingWizard({ data, setData, familyName }) {
           <div>
             <div style={{ fontSize: 28, marginBottom: 8 }}>✅</div>
             <div style={{ color: "#141008", fontSize: 16, fontWeight: 800, marginBottom: 4 }}>Hazırsınız!</div>
-            <div style={{ color: "#5A5045", fontSize: 12, marginBottom: 12 }}>Kurulum bilgileriniz:</div>
+            <div style={{ color: "#3D352E", fontSize: 13, marginBottom: 12, lineHeight: 1.5 }}>Kurulum bilgileriniz:</div>
 
             <div style={{ background: "white", borderRadius: 14, border: "1px solid rgba(0,0,0,0.08)", overflow: "hidden", marginBottom: 16 }}>
               <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 16px", borderBottom: "1px solid rgba(0,0,0,0.06)" }}>
@@ -7001,7 +7081,7 @@ function Settings({ data, setData, isAdmin, family }) {
   const [sec, setSec] = useState(null); const [form, setForm] = useState({}); const mk = cmk();
   const secs = [
     { id: "budget", l: "Aylık Bütçe", i: "💰", d: C(data.settings.monthlyBudget) },
-    { id: "cards", l: "Kartlarım", i: "💳", d: `${(data.settings.cards || []).length} kart` },
+    { id: "cards", l: "Kartlarım", i: "💳", d: (() => { const cc = (data.settings.cards || []).filter(c => c.type !== "debit").length; const dc = (data.settings.cards || []).filter(c => c.type === "debit").length; return [cc > 0 && `${cc} kredi`, dc > 0 && `${dc} banka`].filter(Boolean).join(" · ") || "Kart yok"; })() },
     { id: "fixed", l: "Sabit Giderler", i: "🔒", d: `${data.settings.fixedExpenses.length} kalem` },
     { id: "variable", l: "Harcama Kategorileri", i: "🔄", d: `${data.settings.variableExpenses.length} kategori` },
     { id: "billbudgets", l: "Fatura Bütçeleri", i: "🧾", d: (() => { const bt = data.settings.billTypes || []; return bt.length > 0 ? `${bt.length} tür tanımlı` : "Henüz eklenmedi"; })() },
@@ -7442,8 +7522,8 @@ function FixedSettings({ data, setData, onBack }) {
                   <div style={{ color: X.tm, fontSize: 12 }}>{C(exp.amount)} • {exp.paymentMethod === "cc" ? "💳" + (cardName ? " " + cardName : "") : "🏦"}{exp.paymentDay ? ` • ${exp.paymentDay}${exp.paymentDayEnd ? "-" + exp.paymentDayEnd : ""}'inde` : ""}{exp.autoPayment ? " • ⚡oto" : ""}{exp.increaseDate ? " • 📈" + exp.increaseDate : ""}</div>
                 </div>
                 <div style={{ display: "flex", gap: 6 }}>
-                  <button onClick={() => editing === exp.id ? cancel() : startEdit(exp)} style={{ background: X.bd, border: `1px solid ${X.b}`, borderRadius: 6, padding: "4px 10px", color: X.b, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{editing === exp.id ? "▲" : "✎"}</button>
-                  <button onClick={() => rm(exp.id)} style={{ background: X.rd, border: `1px solid ${X.r}`, borderRadius: 6, padding: "4px 10px", color: X.r, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>✕</button>
+                  <button onClick={() => editing === exp.id ? cancel() : startEdit(exp)} style={{ background: X.bd, border: `1px solid ${X.b}`, borderRadius: 8, padding: "7px 14px", color: X.b, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{editing === exp.id ? "▲" : "✎"}</button>
+                  <button onClick={() => rm(exp.id)} style={{ background: X.rd, border: `1px solid ${X.r}`, borderRadius: 8, padding: "7px 14px", color: X.r, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>✕</button>
                 </div>
               </div>
             </Card>
@@ -7532,8 +7612,8 @@ function VariableSettings({ data, setData, onBack }) {
                 </div>
               </div>
               <div style={{ display: "flex", gap: 6, marginLeft: 8 }}>
-                <button onClick={() => editing === ve.id ? cancel() : startEdit(ve)} style={{ background: X.bd, border: `1px solid ${X.b}`, borderRadius: 6, padding: "4px 10px", color: X.b, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{editing === ve.id ? "▲" : "✎"}</button>
-                <button onClick={() => rm(ve.id)} style={{ background: X.rd, border: `1px solid ${X.r}`, borderRadius: 6, padding: "4px 10px", color: X.r, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>✕</button>
+                <button onClick={() => editing === ve.id ? cancel() : startEdit(ve)} style={{ background: X.bd, border: `1px solid ${X.b}`, borderRadius: 8, padding: "7px 14px", color: X.b, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{editing === ve.id ? "▲" : "✎"}</button>
+                <button onClick={() => rm(ve.id)} style={{ background: X.rd, border: `1px solid ${X.r}`, borderRadius: 8, padding: "7px 14px", color: X.r, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>✕</button>
               </div>
             </div>
           </Card>
@@ -7609,21 +7689,23 @@ function RatesSettings({ data, setData, onBack }) {
 function CardsSettings({ data, setData, onBack }) {
   const [editing, setEditing] = useState(null);
   const [n, sn] = useState("");
+  const [tp, setTp] = useState("credit");
+  const [lmt, setLmt] = useState("");
   const cards = data.settings.cards || [];
 
-  const startNew = () => { sn(""); setEditing("new"); };
-  const startEdit = c => { sn(c.name); setEditing(c.id); };
-  const cancel = () => { setEditing(null); sn(""); };
+  const startNew = () => { sn(""); setTp("credit"); setLmt(""); setEditing("new"); };
+  const startEdit = c => { sn(c.name); setTp(c.type || "credit"); setLmt(c.monthlyLimit ? String(c.monthlyLimit) : ""); setEditing(c.id); };
+  const cancel = () => { setEditing(null); sn(""); setTp("credit"); setLmt(""); };
 
   const save = () => {
     if (!n) return;
     setData(d => {
       const list = [...(d.settings.cards || [])];
       if (editing === "new") {
-        list.push({ id: uid(), name: n });
+        list.push({ id: uid(), name: n, type: tp, monthlyLimit: tp === "debit" ? (parseFloat(lmt) || 0) : 0 });
       } else {
         const idx = list.findIndex(x => x.id === editing);
-        if (idx >= 0) list[idx] = { ...list[idx], name: n };
+        if (idx >= 0) list[idx] = { ...list[idx], name: n, type: tp, monthlyLimit: tp === "debit" ? (parseFloat(lmt) || 0) : 0 };
       }
       return { ...d, settings: { ...d.settings, cards: list } };
     });
@@ -7638,7 +7720,17 @@ function CardsSettings({ data, setData, onBack }) {
   const editForm = (
     <Card s={{ border: `1px solid ${X.g}`, marginBottom: 8 }}>
       <div style={{ color: X.g, fontSize: 13, fontWeight: 700, marginBottom: 10 }}>{editing === "new" ? "Yeni Kart" : "Düzenle"}</div>
-      <Inp label="Kart Adı" value={n} onChange={sn} placeholder="Örn: Garanti Bonus, Yapı Kredi World" />
+      <Inp label="Kart Adı" value={n} onChange={sn} placeholder="Örn: Garanti, Yapıkredi" />
+      <div style={{ marginBottom: 12 }}>
+        <label style={{ fontSize: 12, color: X.tm, fontWeight: 600, marginBottom: 6, display: "block" }}>Kart Tipi</label>
+        <div style={{ display: "flex", gap: 6 }}>
+          <button onClick={() => setTp("credit")} style={{ flex: 1, background: tp === "credit" ? "rgba(29,78,216,0.12)" : X.bg, border: `1px solid ${tp === "credit" ? X.b : X.border}`, borderRadius: 8, padding: "10px 6px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: ff, color: tp === "credit" ? X.b : X.td, textAlign: "center" }}>💳 Kredi Kartı</button>
+          <button onClick={() => setTp("debit")} style={{ flex: 1, background: tp === "debit" ? "rgba(15,118,110,0.12)" : X.bg, border: `1px solid ${tp === "debit" ? X.g : X.border}`, borderRadius: 8, padding: "10px 6px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: ff, color: tp === "debit" ? X.g : X.td, textAlign: "center" }}>🏦 Banka Kartı</button>
+        </div>
+      </div>
+      {tp === "debit" && <Inp label="Aylık Harcama Limiti (opsiyonel)" type="number" value={lmt} onChange={setLmt} suffix="₺" placeholder="0 = limitsiz" />}
+      {tp === "credit" && <div style={{ color: X.td, fontSize: 11, marginBottom: 12, lineHeight: 1.5 }}>Kredi kartı harcamaları hesaba aktarılması gerekir.</div>}
+      {tp === "debit" && <div style={{ color: X.td, fontSize: 11, marginBottom: 12, lineHeight: 1.5 }}>Banka kartı harcamaları doğrudan bakiyeden düşer, aktarma gerekmez.</div>}
       <div style={{ display: "flex", gap: 8 }}>
         <Btn onClick={save} s={{ flex: 1 }}>Kaydet</Btn>
         <Btn onClick={cancel} v="outline" c={X.td} s={{ flex: 1 }}>İptal</Btn>
@@ -7653,7 +7745,7 @@ function CardsSettings({ data, setData, onBack }) {
         <h3 style={{ color: X.t, fontSize: 16, margin: 0 }}>💳 Kartlarım</h3>
         {!editing && <button onClick={startNew} style={{ background: X.gd, border: `1px solid ${X.g}`, borderRadius: 8, padding: "6px 12px", color: X.g, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>+ Ekle</button>}
       </div>
-      <p style={{ color: X.td, fontSize: 12, marginBottom: 16 }}>Kredi kartlarınızı tanımlayın. Harcama girerken hangi karta ait olduğunu seçeceksiniz.</p>
+      <p style={{ color: X.td, fontSize: 12, marginBottom: 16 }}>Kredi kartı ve banka kartlarınızı tanımlayın. Harcama girerken hangi karta ait olduğunu seçeceksiniz.</p>
       {cards.length === 0 && !editing && <Card s={{ textAlign: "center", padding: 20 }}><div style={{ color: X.tm, fontSize: 13 }}>Henüz kart eklenmedi</div></Card>}
       {editing === "new" && editForm}
       {cards.map(c => (
@@ -7661,11 +7753,12 @@ function CardsSettings({ data, setData, onBack }) {
           <Card s={{ marginBottom: editing === c.id ? 0 : 8, borderRadius: editing === c.id ? "14px 14px 0 0" : 14 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div style={{ flex: 1 }}>
-                <div style={{ color: X.t, fontWeight: 700 }}>{c.name}</div>
+                <div style={{ color: X.t, fontWeight: 700 }}>{c.type === "debit" ? "🏦" : "💳"} {c.name}</div>
+                <div style={{ color: X.td, fontSize: 11, marginTop: 2 }}>{c.type === "debit" ? "Banka Kartı" : "Kredi Kartı"}{c.type === "debit" && c.monthlyLimit > 0 ? ` · Limit: ${C(c.monthlyLimit)}` : ""}</div>
               </div>
               <div style={{ display: "flex", gap: 6 }}>
-                <button onClick={() => editing === c.id ? cancel() : startEdit(c)} style={{ background: X.bd, border: `1px solid ${X.b}`, borderRadius: 6, padding: "4px 10px", color: X.b, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{editing === c.id ? "▲" : "✎"}</button>
-                <button onClick={() => rm(c.id)} style={{ background: X.rd, border: `1px solid ${X.r}`, borderRadius: 6, padding: "4px 10px", color: X.r, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>✕</button>
+                <button onClick={() => editing === c.id ? cancel() : startEdit(c)} style={{ background: X.bd, border: `1px solid ${X.b}`, borderRadius: 8, padding: "7px 14px", color: X.b, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{editing === c.id ? "▲" : "✎"}</button>
+                <button onClick={() => rm(c.id)} style={{ background: X.rd, border: `1px solid ${X.r}`, borderRadius: 8, padding: "7px 14px", color: X.r, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>✕</button>
               </div>
             </div>
           </Card>
@@ -7906,8 +7999,8 @@ function DebtSettings({ data, setData, onBack }) {
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 6 }}>
-                  <button onClick={() => editing === d.id ? cancel() : startEdit(d)} style={{ background: X.bd, border: `1px solid ${X.b}`, borderRadius: 6, padding: "4px 10px", color: X.b, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{editing === d.id ? "▲" : "✎"}</button>
-                  <button onClick={() => rm(d.id)} style={{ background: X.rd, border: `1px solid ${X.r}`, borderRadius: 6, padding: "4px 10px", color: X.r, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>✕</button>
+                  <button onClick={() => editing === d.id ? cancel() : startEdit(d)} style={{ background: X.bd, border: `1px solid ${X.b}`, borderRadius: 8, padding: "7px 14px", color: X.b, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{editing === d.id ? "▲" : "✎"}</button>
+                  <button onClick={() => rm(d.id)} style={{ background: X.rd, border: `1px solid ${X.r}`, borderRadius: 8, padding: "7px 14px", color: X.r, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>✕</button>
                 </div>
               </div>
             </Card>
