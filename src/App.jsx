@@ -7078,7 +7078,7 @@ function BillAnalysisCard({ billBreakdown, compact }) {
 }
 
 function Settings({ data, setData, isAdmin, family, mk }) {
-  const [sec, setSec] = useState(null); const [form, setForm] = useState({});
+  const [sec, setSec] = useState(null); const [form, setForm] = useState({}); const [howtoOpen, setHowtoOpen] = useState(null);
   const secs = [
     { id: "budget", l: "Aylık Bütçe", i: "💰", d: C(data.settings.monthlyBudget) },
     { id: "cards", l: "Kartlarım", i: "💳", d: (() => { const cc = (data.settings.cards || []).filter(c => c.type !== "debit").length; const dc = (data.settings.cards || []).filter(c => c.type === "debit").length; return [cc > 0 && `${cc} kredi`, dc > 0 && `${dc} banka`].filter(Boolean).join(" · ") || "Kart yok"; })() },
@@ -7308,7 +7308,6 @@ function Settings({ data, setData, isAdmin, family, mk }) {
         { q: "KK aktarımı neden önemli?", a: "Kredi kartıyla yaptığınız harcamalar bankadan otomatik çıkmaz. Aktarım işaretlediğinizde uygulama o tutarı 'ödenmiş' sayar ve blokeden düşer." },
       ]},
     ];
-    const [openIdx, setOpenIdx] = useState(null);
     return (
       <div style={{ padding: "20px 16px 90px" }}>
         <BackBtn />
@@ -7318,9 +7317,9 @@ function Settings({ data, setData, isAdmin, family, mk }) {
             <div style={{ color: X.t, fontSize: 15, fontWeight: 800, marginBottom: 8 }}>{sec2.icon} {sec2.title}</div>
             {sec2.items.map((item, qi) => {
               const key = `${si}-${qi}`;
-              const isOpen = openIdx === key;
+              const isOpen = howtoOpen === key;
               return (
-                <Card key={qi} onClick={() => setOpenIdx(isOpen ? null : key)} s={{ cursor: "pointer", marginBottom: 6, padding: "12px 14px" }}>
+                <Card key={qi} onClick={() => setHowtoOpen(isOpen ? null : key)} s={{ cursor: "pointer", marginBottom: 6, padding: "12px 14px" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <div style={{ color: X.t, fontSize: 13, fontWeight: 700, flex: 1 }}>{item.q}</div>
                     <span style={{ color: X.td, fontSize: 16, transform: isOpen ? "rotate(90deg)" : "none", transition: "transform 0.2s" }}>›</span>
