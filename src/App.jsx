@@ -257,7 +257,7 @@ function Card({ children, s, onClick }) { return <div onClick={onClick} style={{
 function Btn({ children, c = X.g, v = "filled", onClick, s, disabled }) { return <button disabled={disabled} onClick={onClick} style={{ background: v === "filled" ? c : "transparent", color: v === "filled" ? "#fff" : c, border: v === "filled" ? "none" : `2px solid ${c}`, borderRadius: 12, padding: "12px 20px", fontSize: 15, fontWeight: 700, fontFamily: ff, cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? .5 : 1, width: "100%", boxShadow: v === "filled" ? `0 2px 8px ${c}40` : "none", ...s }}>{children}</button>; }
 function Inp({ label, value, onChange, type = "text", placeholder, suffix, s }) { return (<div style={{ marginBottom: 12, ...s }}>{label && <label style={{ fontSize: 12, color: X.tm, fontWeight: 600, marginBottom: 4, display: "block", fontFamily: ff }}>{label}</label>}<div style={{ position: "relative" }}><input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} style={{ width: "100%", background: "rgba(200,220,232,0.65)", border: `1px solid rgba(0,0,0,0.08)`, borderRadius: 10, padding: "12px 14px", paddingRight: suffix ? 50 : 14, color: X.t, fontSize: 16, fontFamily: type === "number" ? fm : ff, outline: "none", boxSizing: "border-box", boxShadow: neuIn }} />{suffix && <span style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", color: X.td, fontSize: 13, fontWeight: 600 }}>{suffix}</span>}</div></div>); }
 function Sel({ label, value, onChange, options }) { return (<div style={{ marginBottom: 12 }}>{label && <label style={{ fontSize: 12, color: X.tm, fontWeight: 600, marginBottom: 4, display: "block", fontFamily: ff }}>{label}</label>}<select value={value} onChange={e => onChange(e.target.value)} style={{ width: "100%", background: "rgba(200,220,232,0.65)", border: `1px solid rgba(0,0,0,0.08)`, borderRadius: 10, padding: "12px 14px", color: X.t, fontSize: 15, fontFamily: ff, outline: "none", boxSizing: "border-box", boxShadow: neuIn }}>{options.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}</select></div>); }
-function Modal({ title, onClose, children }) { return (<div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.3)", backdropFilter: "blur(8px)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 1000 }} onClick={onClose}><div onClick={e => e.stopPropagation()} style={{ ...glassSolid, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, maxHeight: "85vh", overflow: "auto", padding: 24, boxShadow: "0 -8px 32px rgba(0,0,0,0.1)" }}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}><h3 style={{ margin: 0, color: X.t, fontSize: 18, fontFamily: ff }}>{title}</h3><button onClick={onClose} style={{ background: "none", border: "none", color: X.tm, fontSize: 22, cursor: "pointer" }}>✕</button></div>{children}</div></div>); }
+function Modal({ title, onClose, children }) { return (<div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.3)", backdropFilter: "blur(8px)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 1000 }} onClick={onClose}><div onClick={e => e.stopPropagation()} style={{ ...glassSolid, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, maxHeight: "85dvh", overflow: "auto", WebkitOverflowScrolling: "touch", padding: 24, boxShadow: "0 -8px 32px rgba(0,0,0,0.1)" }}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}><h3 style={{ margin: 0, color: X.t, fontSize: 18, fontFamily: ff }}>{title}</h3><button onClick={onClose} style={{ background: "none", border: "none", color: X.tm, fontSize: 22, cursor: "pointer" }}>✕</button></div>{children}</div></div>); }
 
 /* ═══ INFO POPUP ═══ */
 function InfoBtn({ onClick }) {
@@ -1322,7 +1322,7 @@ function EmergencyFundSettings({ data, setData, onBack }) {
   const progress = target > 0 ? Math.min((currentTotal / target) * 100, 100) : 0;
 
   return (
-    <div style={{ padding: "20px 16px 100px" }}>
+    <div style={{ padding: "20px 16px 90px", flex: 1, overflow: "auto", WebkitOverflowScrolling: "touch" }}>
       <button onClick={onBack} style={{ background: "none", border: "none", color: X.g, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff, padding: 0, marginBottom: 16 }}>← Geri</button>
       <h3 style={{ color: X.t, fontSize: 16, margin: "0 0 12px" }}>🛡️ Acil Durum Fonu</h3>
       <p style={{ color: X.td, fontSize: 12, marginBottom: 16 }}>Acil durum fonu, beklenmedik durumlarda (iş kaybı, sağlık harcaması, büyük tamirat vs.) kullanabileceğiniz güvenlik havuzudur. Hedef belirlediğinizde birikim havuzunuz bu hedefe göre ölçülür.</p>
@@ -1470,7 +1470,7 @@ function BackupSettings({ data, setData, familyId, onBack }) {
   const sizeKB = (dataSize / 1024).toFixed(1);
 
   return (
-    <div style={{ padding: "20px 16px 100px" }}>
+    <div style={{ padding: "20px 16px 90px", flex: 1, overflow: "auto", WebkitOverflowScrolling: "touch" }}>
       <button onClick={onBack} style={{ background: "none", border: "none", color: X.g, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff, padding: 0, marginBottom: 16 }}>← Geri</button>
       <h3 style={{ color: X.t, fontSize: 16, margin: "0 0 12px" }}>💾 Yedekleme</h3>
       <p style={{ color: X.td, fontSize: 12, marginBottom: 16 }}>Tüm verileriniz tarayıcınızda saklanıyor. Telefon değişikliği, tarayıcı temizliği veya veri kaybı durumunda verileriniz gider. Düzenli olarak yedek almanız şiddetle tavsiye edilir.</p>
@@ -1633,7 +1633,7 @@ function WeeklyBackupRitual({ data, setData }) {
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.3)", backdropFilter: "blur(12px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9998, padding: 16 }}>
-      <div style={{ ...glassSolid, borderRadius: 20, width: "100%", maxWidth: 440, maxHeight: "90vh", overflow: "auto", padding: 24, border: `2px solid ${X.w}`, boxShadow: "0 8px 32px rgba(0,0,0,0.12)" }}>
+      <div style={{ ...glassSolid, borderRadius: 20, width: "100%", maxWidth: 440, maxHeight: "90dvh", overflow: "auto", WebkitOverflowScrolling: "touch", padding: 24, border: `2px solid ${X.w}`, boxShadow: "0 8px 32px rgba(0,0,0,0.12)" }}>
         <div style={{ textAlign: "center", marginBottom: 20 }}>
           <div style={{ fontSize: 48, marginBottom: 8 }}>💾</div>
           <div style={{ color: X.t, fontSize: 20, fontWeight: 800, fontFamily: ff }}>Haftalık Yedek Zamanı</div>
@@ -3860,7 +3860,7 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
   }, [risk, data, c, debtEnds, mk]);
 
   return (
-    <div style={{ flex: 1, overflow: "auto", padding: "20px 16px 90px" }}>
+    <div style={{ flex: 1, overflow: "auto", padding: "20px 16px 90px", flex: 1, overflow: "auto", WebkitOverflowScrolling: "touch" }}>
       {/* AY SEÇİCİ */}
       <Card s={{ marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 16px" }}>
         <button onClick={() => setSelMk(pmk(selMk))} style={{ background: "none", border: "none", color: X.g, fontSize: 24, fontWeight: 700, cursor: "pointer", padding: "0 8px" }}>‹</button>
@@ -5512,7 +5512,7 @@ function PlanningScreen({ data, setData, mk }) {
   ];
 
   return (
-    <div style={{ flex: 1, overflow: "auto", padding: "20px 16px 90px" }}>
+    <div style={{ flex: 1, overflow: "auto", padding: "20px 16px 90px", flex: 1, overflow: "auto", WebkitOverflowScrolling: "touch" }}>
       {/* SEKME SEÇİCİ */}
       <div style={{ display: "grid", gridTemplateColumns: `repeat(${views.length}, 1fr)`, gap: 6, marginBottom: 12 }}>
         {views.map(v => (
@@ -6837,7 +6837,7 @@ function FamilyManagement({ isAdmin, family, onBack }) {
   const memberList = Object.entries(members).map(([uid2, m]) => ({ uid: uid2, ...m }));
 
   return (
-    <div style={{ padding: "20px 16px 100px" }}>
+    <div style={{ padding: "20px 16px 90px", flex: 1, overflow: "auto", WebkitOverflowScrolling: "touch" }}>
       <button onClick={onBack} style={{ background: "none", border: "none", color: X.g, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff, padding: 0, marginBottom: 16 }}>← Geri</button>
 
       {msg && <div style={{ background: msg.type === "success" ? X.gd : X.rd, border: `1px solid ${msg.type === "success" ? X.g : X.r}`, borderRadius: 10, padding: "8px 12px", marginBottom: 12, color: msg.type === "success" ? X.g : X.r, fontSize: 12, fontWeight: 600 }}>{msg.text}</div>}
@@ -7097,13 +7097,13 @@ function Settings({ data, setData, isAdmin, family, mk }) {
     { id: "logout", l: "Çıkış Yap", i: "🚪", d: auth.currentUser?.email || "" },
   ];
   const BackBtn = () => <button onClick={() => setSec(null)} style={{ background: "none", border: "none", color: X.g, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff, padding: 0, marginBottom: 16 }}>← Geri</button>;
-  if (!sec) return (<div style={{ flex: 1, overflow: "auto", padding: "20px 16px 90px" }}><h2 style={{ color: X.t, fontSize: 20, margin: "0 0 16px", fontFamily: ff }}>Ayarlar</h2><div style={{ display: "flex", flexDirection: "column", gap: 8 }}>{secs.map(s => (<Card key={s.id} onClick={() => { setSec(s.id); setForm({}); }} s={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 14 }}><span style={{ fontSize: 24 }}>{s.i}</span><div style={{ flex: 1 }}><div style={{ color: X.t, fontWeight: 700, fontSize: 15 }}>{s.l}</div><div style={{ color: X.td, fontSize: 12 }}>{s.d}</div></div><span style={{ color: X.td }}>›</span></Card>))}</div></div>);
+  if (!sec) return (<div style={{ flex: 1, overflow: "auto", padding: "20px 16px 90px", flex: 1, overflow: "auto", WebkitOverflowScrolling: "touch" }}><h2 style={{ color: X.t, fontSize: 20, margin: "0 0 16px", fontFamily: ff }}>Ayarlar</h2><div style={{ display: "flex", flexDirection: "column", gap: 8 }}>{secs.map(s => (<Card key={s.id} onClick={() => { setSec(s.id); setForm({}); }} s={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 14 }}><span style={{ fontSize: 24 }}>{s.i}</span><div style={{ flex: 1 }}><div style={{ color: X.t, fontWeight: 700, fontSize: 15 }}>{s.l}</div><div style={{ color: X.td, fontSize: 12 }}>{s.d}</div></div><span style={{ color: X.td }}>›</span></Card>))}</div></div>);
   if (sec === "budget") {
     const curMk = mk;
     const ayBasladi = data.months[curMk] && (Object.keys(data.months[curMk].fixedPaid || {}).length > 0 || (data.months[curMk].ccSingle || []).length > 0 || (data.months[curMk].accountEntries || []).length > 0);
     const budgetChanged = form.b !== undefined && parseFloat(form.b) !== data.settings.monthlyBudget;
     return (
-      <div style={{ padding: "20px 16px 90px" }}>
+      <div style={{ padding: "20px 16px 90px", flex: 1, overflow: "auto", WebkitOverflowScrolling: "touch" }}>
         <BackBtn />
         <div style={{ color: X.tm, fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Maaş Günü (Dönem Başlangıcı)</div>
         <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
@@ -7147,7 +7147,7 @@ function Settings({ data, setData, isAdmin, family, mk }) {
   if (sec === "calendar") {
     const hasPayDays = data.settings.fixedExpenses.some(e => e.paymentDay) || data.debts.some(d => d.paymentDay);
     return (
-      <div style={{ padding: "20px 16px 90px" }}>
+      <div style={{ padding: "20px 16px 90px", flex: 1, overflow: "auto", WebkitOverflowScrolling: "touch" }}>
         <BackBtn />
         <h3 style={{ color: X.t, fontSize: 16, margin: "0 0 12px" }}>📅 Takvim Hatırlatıcı</h3>
         <p style={{ color: X.td, fontSize: 12, marginBottom: 16, lineHeight: 1.6 }}>
@@ -7202,7 +7202,7 @@ function Settings({ data, setData, isAdmin, family, mk }) {
       });
     };
     return (
-      <div style={{ padding: "20px 16px 90px" }}>
+      <div style={{ padding: "20px 16px 90px", flex: 1, overflow: "auto", WebkitOverflowScrolling: "touch" }}>
         <BackBtn />
         <h3 style={{ color: X.t, fontSize: 16, margin: "0 0 6px" }}>🗑️ Sıfırlama Seçenekleri</h3>
         <p style={{ color: X.td, fontSize: 12, marginBottom: 16 }}>Seçtiğiniz veri grubunu sıfırlayabilirsiniz. Ayar ve yapılandırma verileri korunur.</p>
@@ -7252,7 +7252,7 @@ function Settings({ data, setData, isAdmin, family, mk }) {
     );
   }
   if (sec === "theme") return (
-    <div style={{ padding: "20px 16px 90px" }}>
+    <div style={{ padding: "20px 16px 90px", flex: 1, overflow: "auto", WebkitOverflowScrolling: "touch" }}>
       <BackBtn />
       <h3 style={{ color: X.t, fontSize: 16, margin: "0 0 12px" }}>🎨 Tema Seçimi</h3>
       <p style={{ color: X.td, fontSize: 12, marginBottom: 16 }}>Uygulamanın görünümünü değiştirin.</p>
@@ -7309,7 +7309,7 @@ function Settings({ data, setData, isAdmin, family, mk }) {
       ]},
     ];
     return (
-      <div style={{ padding: "20px 16px 90px" }}>
+      <div style={{ padding: "20px 16px 90px", flex: 1, overflow: "auto", WebkitOverflowScrolling: "touch" }}>
         <BackBtn />
         <h2 style={{ color: X.t, fontSize: 18, margin: "0 0 16px", fontFamily: ff }}>📖 Nasıl Kullanılır</h2>
         {sections.map((sec2, si) => (
@@ -7333,7 +7333,7 @@ function Settings({ data, setData, isAdmin, family, mk }) {
       </div>
     );
   }
-  if (sec === "logout") return (<div style={{ padding: "20px 16px 90px" }}><BackBtn /><Card s={{ textAlign: "center", padding: 24 }}><div style={{ fontSize: 36, marginBottom: 8 }}>🚪</div><div style={{ color: X.t, fontSize: 14, marginBottom: 8 }}>Giriş: <strong>{family?.name || auth.currentUser?.email}</strong></div><div style={{ color: X.tm, fontSize: 12, marginBottom: 16 }}>Çıkış yaptığınızda verileriniz bulutta güvende kalır. İsminiz ve şifrenizle tekrar giriş yapabilirsiniz.</div><Btn c={X.r} onClick={() => signOut(auth)}>Çıkış Yap</Btn></Card></div>);
+  if (sec === "logout") return (<div style={{ padding: "20px 16px 90px", flex: 1, overflow: "auto", WebkitOverflowScrolling: "touch" }}><BackBtn /><Card s={{ textAlign: "center", padding: 24 }}><div style={{ fontSize: 36, marginBottom: 8 }}>🚪</div><div style={{ color: X.t, fontSize: 14, marginBottom: 8 }}>Giriş: <strong>{family?.name || auth.currentUser?.email}</strong></div><div style={{ color: X.tm, fontSize: 12, marginBottom: 16 }}>Çıkış yaptığınızda verileriniz bulutta güvende kalır. İsminiz ve şifrenizle tekrar giriş yapabilirsiniz.</div><Btn c={X.r} onClick={() => signOut(auth)}>Çıkış Yap</Btn></Card></div>);
   return null;
 }
 function BillBudgetsSettings({ data, setData, onBack }) {
@@ -7374,7 +7374,7 @@ function BillBudgetsSettings({ data, setData, onBack }) {
   const totalBudget = list.reduce((s, bt) => s + (bt.budget || 0), 0);
 
   return (
-    <div style={{ padding: "20px 16px 90px" }}>
+    <div style={{ padding: "20px 16px 90px", flex: 1, overflow: "auto", WebkitOverflowScrolling: "touch" }}>
       <BackBtn />
       <h3 style={{ color: X.t, fontSize: 16, margin: "0 0 6px", fontFamily: ff }}>🧾 Fatura Bütçeleri</h3>
       <p style={{ color: X.td, fontSize: 12, marginBottom: 16, lineHeight: 1.5 }}>
@@ -7510,7 +7510,7 @@ function FixedSettings({ data, setData, onBack }) {
   );
 
   return (
-    <div style={{ padding: "20px 16px 90px" }}>
+    <div style={{ padding: "20px 16px 90px", flex: 1, overflow: "auto", WebkitOverflowScrolling: "touch" }}>
       <button onClick={onBack} style={{ background: "none", border: "none", color: X.g, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff, padding: 0, marginBottom: 16 }}>← Geri</button>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
         <h3 style={{ color: X.t, fontSize: 16, margin: 0 }}>🔒 Sabit Giderler</h3>
@@ -7593,7 +7593,7 @@ function VariableSettings({ data, setData, onBack }) {
   );
 
   return (
-    <div style={{ padding: "20px 16px 90px" }}>
+    <div style={{ padding: "20px 16px 90px", flex: 1, overflow: "auto", WebkitOverflowScrolling: "touch" }}>
       <button onClick={onBack} style={{ background: "none", border: "none", color: X.g, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff, padding: 0, marginBottom: 16 }}>← Geri</button>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
         <h3 style={{ color: X.t, fontSize: 16, margin: 0 }}>🔄 Harcama Kategorileri</h3>
@@ -7651,7 +7651,7 @@ function RatesSettings({ data, setData, onBack }) {
   };
 
   return (
-    <div style={{ padding: "20px 16px 90px" }}>
+    <div style={{ padding: "20px 16px 90px", flex: 1, overflow: "auto", WebkitOverflowScrolling: "touch" }}>
       <button onClick={onBack} style={{ background: "none", border: "none", color: X.g, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff, padding: 0, marginBottom: 16 }}>← Geri</button>
       <h3 style={{ color: X.t, fontSize: 16, margin: "0 0 12px" }}>💱 Döviz & Altın Kuru</h3>
       <p style={{ color: X.td, fontSize: 12, marginBottom: 16 }}>Kurlar manuel girilir. Altın için haremaltin.com sayfasını yeni sekmede açabilirsiniz.</p>
@@ -7746,7 +7746,7 @@ function CardsSettings({ data, setData, onBack }) {
   );
 
   return (
-    <div style={{ padding: "20px 16px 90px" }}>
+    <div style={{ padding: "20px 16px 90px", flex: 1, overflow: "auto", WebkitOverflowScrolling: "touch" }}>
       <button onClick={onBack} style={{ background: "none", border: "none", color: X.g, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff, padding: 0, marginBottom: 16 }}>← Geri</button>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
         <h3 style={{ color: X.t, fontSize: 16, margin: 0 }}>💳 Kartlarım</h3>
@@ -7972,7 +7972,7 @@ function DebtSettings({ data, setData, onBack, mk }) {
   ) : null;
 
   return (
-    <div style={{ padding: "20px 16px 90px" }}>
+    <div style={{ padding: "20px 16px 90px", flex: 1, overflow: "auto", WebkitOverflowScrolling: "touch" }}>
       <button onClick={onBack} style={{ background: "none", border: "none", color: X.g, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff, padding: 0, marginBottom: 16 }}>← Geri</button>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
         <h3 style={{ color: X.t, fontSize: 16, margin: 0 }}>📌 Borçlar</h3>
@@ -8081,7 +8081,7 @@ function MonthCloseRitual({ data, setData, prevMk, onClose }) {
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.3)", backdropFilter: "blur(12px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999, padding: 16 }}>
-      <div style={{ ...glassSolid, borderRadius: 20, width: "100%", maxWidth: 440, maxHeight: "90vh", overflow: "auto", padding: 24, boxShadow: "0 8px 32px rgba(0,0,0,0.12)" }}>
+      <div style={{ ...glassSolid, borderRadius: 20, width: "100%", maxWidth: 440, maxHeight: "90dvh", overflow: "auto", WebkitOverflowScrolling: "touch", padding: 24, boxShadow: "0 8px 32px rgba(0,0,0,0.12)" }}>
         <div style={{ textAlign: "center", marginBottom: 20 }}>
           <div style={{ fontSize: 40, marginBottom: 8 }}>📅</div>
           <div style={{ color: X.t, fontSize: 18, fontWeight: 800, fontFamily: ff }}>Ay Kapatma</div>
