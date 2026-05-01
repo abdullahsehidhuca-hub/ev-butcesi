@@ -21,7 +21,7 @@ const auth = getAuth(fbApp);
 const C = n => new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n);
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 const td = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; };
-const cmk = () => { const d = new Date(); if (d.getDate() < 15) d.setMonth(d.getMonth() - 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; };
+const cmk = (payDay = 15) => { const d = new Date(); if (d.getDate() < payDay) d.setMonth(d.getMonth() - 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; };
 const MTR = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
 const ml = mk => { const [y, m] = mk.split("-"); return MTR[+m - 1] + " " + y; };
 const nmk = mk => { let [y, m] = mk.split("-").map(Number); m++; if (m > 12) { m = 1; y++; } return `${y}-${String(m).padStart(2, "0")}`; };
@@ -542,7 +542,7 @@ function calcMonth(data, m, extraInst) {
     if (d.currency === "TRY") return s + d.monthlyPayment;
     if (d.currency === "USD") { const rate = data.liveRates?.USD || data.usdRates?.[m] || 0; return s + d.monthlyPayment * rate; }
     if (d.currency === "EUR") { const rate = data.liveRates?.EUR || data.eurRates?.[m] || 0; return s + d.monthlyPayment * rate; }
-    if (d.currency === "XAU") { const rate = data.liveRates?.XAU || data.goldRates?.[m] || data.goldRates?.[cmk()] || 0; return s + d.monthlyPayment * rate; }
+    if (d.currency === "XAU") { const rate = data.liveRates?.XAU || data.goldRates?.[m] || 0; return s + d.monthlyPayment * rate; }
     return s;
   }, 0);
 
@@ -702,7 +702,7 @@ function calcFlat(data, m, extraInst) {
     if (d.currency === "TRY") return s + d.monthlyPayment;
     if (d.currency === "USD") return s + d.monthlyPayment * (data.liveRates?.USD || data.usdRates?.[m] || 0);
     if (d.currency === "EUR") return s + d.monthlyPayment * (data.liveRates?.EUR || data.eurRates?.[m] || 0);
-    if (d.currency === "XAU") return s + d.monthlyPayment * (data.liveRates?.XAU || data.goldRates?.[m] || data.goldRates?.[cmk()] || 0);
+    if (d.currency === "XAU") return s + d.monthlyPayment * (data.liveRates?.XAU || data.goldRates?.[m] || 0);
     return s;
   }, 0);
   const cl = md.cardLoaded || 0;
@@ -755,7 +755,7 @@ function calcFlat(data, m, extraInst) {
 }
 
 /* ═══ YAKLAŞAN ÖDEMELER ═══ */
-function getUpcomingPayments(data, daysAhead = 3) {
+function getUpcomingPayments(data, daysAhead = 3, mk = cmk()) {
   const today = new Date();
   const todayDay = today.getDate();
   const todayMonth = today.getMonth();
@@ -817,7 +817,7 @@ function getUpcomingPayments(data, daysAhead = 3) {
     if (result) {
       const isToday = result.diff === 0;
       const isTomorrow = result.diff === 1;
-      const tlVal = debtTLValue(debt, data, cmk());
+      const tlVal = debtTLValue(debt, data, mk);
       upcoming.push({
         id: debt.id,
         type: "debt",
@@ -859,7 +859,7 @@ function generateICS(data) {
   data.debts.filter(d => d.remainingMonths > 0).forEach(debt => {
     if (!debt.paymentDay) return;
     const day = debt.paymentDay;
-    const tlVal = debtTLValue(debt, data, cmk());
+    const tlVal = debtTLValue(debt, data, mk);
     const uid2 = `debt-${debt.id}@ev-butcesi`;
     events.push(
       `BEGIN:VEVENT\nDTSTART;VALUE=DATE:${icsDate(year, now.getMonth(), day)}\nSUMMARY:📌 ${debt.name} ${C(tlVal)}\nDESCRIPTION:Borç ödemesi - ${debt.remainingMonths} ay kaldı - Ev Bütçesi\nRRULE:FREQ=MONTHLY;BYMONTHDAY=${day};COUNT=${debt.remainingMonths}\nBEGIN:VALARM\nTRIGGER:-PT12H\nACTION:DISPLAY\nDESCRIPTION:Yarın: ${debt.name} borç ödemesi\nEND:VALARM\nBEGIN:VALARM\nTRIGGER:PT0S\nACTION:DISPLAY\nDESCRIPTION:Bugün: ${debt.name} borç ödemesi\nEND:VALARM\nUID:${uid2}\nEND:VEVENT`
@@ -870,7 +870,7 @@ function generateICS(data) {
   data.installmentPlans.forEach(plan => {
     let remaining = 0;
     let cur = plan.startMonth;
-    for (let i = 0; i < plan.months; i++) { if (cur >= cmk()) remaining++; cur = nmk(cur); }
+    for (let i = 0; i < plan.months; i++) { if (cur >= (mk)) remaining++; cur = nmk(cur); }
     if (remaining <= 0) return;
     const uid2 = `inst-${plan.id}@ev-butcesi`;
     events.push(
@@ -1263,7 +1263,7 @@ function debtTLValue(debt, data, m) {
   if (debt.currency === "TRY") return debt.monthlyPayment;
   if (debt.currency === "USD") return debt.monthlyPayment * (data.liveRates?.USD || data.usdRates?.[m] || 0);
   if (debt.currency === "EUR") return debt.monthlyPayment * (data.liveRates?.EUR || data.eurRates?.[m] || 0);
-  if (debt.currency === "XAU") return debt.monthlyPayment * (data.liveRates?.XAU || data.goldRates?.[m] || data.goldRates?.[cmk()] || 0);
+  if (debt.currency === "XAU") return debt.monthlyPayment * (data.liveRates?.XAU || data.goldRates?.[m] || 0);
   return 0;
 }
 
@@ -3010,7 +3010,7 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
           }
         });
 
-        const upcoming = getUpcomingPayments(data, 3);
+        const upcoming = getUpcomingPayments(data, 3, mk);
         // Ödenen sabit giderleri ve borçları filtrele
         const filteredUpcoming = upcoming.filter(u => {
           if (u.type === "fixed" && md.fixedPaid?.[u.id]?.paid) return false;
@@ -4403,8 +4403,8 @@ HARCAMA PROFİLİ VERİLERİ:
               return `  ${ml(fm)}: sabit ${C(fFixed)} + taksit ${C(fInst)} + borç ${C(Math.round(fDebt))} = toplam zorunlu ${C(fFixed + fInst + Math.round(fDebt))}`;
             }).join("\n");
 
-            // Dönem bilgisi — 15'lik döngü
-            const periodStart = 15;
+            // Dönem bilgisi — payDay'e göre dinamik döngü
+            const periodStart = data.settings?.payDay || 15;
             const periodStartDate = new Date(today.getFullYear(), today.getMonth(), periodStart);
             if (today.getDate() < periodStart) periodStartDate.setMonth(periodStartDate.getMonth() - 1);
             const periodEndDate = new Date(periodStartDate.getFullYear(), periodStartDate.getMonth() + 1, periodStart - 1);
@@ -4498,8 +4498,8 @@ KURALLAR:
 - Market fişleri mevcut KK veya hesap hareketlerinin detayıdır — ayrı ek harcama DEĞİLDİR.
 
 ÖDEME DÖNEMİ:
-- Döngü: her ayın 15'inden takip eden ayın 14'üne
-- Kart ekstre kapanışı: her ayın 15'i
+- Döngü: her ayın ${periodStart}'inden takip eden ayın ${periodStart - 1}'ine
+- Maaş günü: ayın ${periodStart}'i
 - Mevcut dönem: ${mk} → ${periodStartDate.toLocaleDateString("tr-TR")} – ${periodEndDate.toLocaleDateString("tr-TR")}
 - Dönemin ${daysIntoPeriod}. günü, ${daysLeftInPeriod} gün kaldı (%${periodProgress})
 
@@ -7077,8 +7077,8 @@ function BillAnalysisCard({ billBreakdown, compact }) {
   );
 }
 
-function Settings({ data, setData, isAdmin, family }) {
-  const [sec, setSec] = useState(null); const [form, setForm] = useState({}); const mk = cmk();
+function Settings({ data, setData, isAdmin, family, mk }) {
+  const [sec, setSec] = useState(null); const [form, setForm] = useState({});
   const secs = [
     { id: "budget", l: "Aylık Bütçe", i: "💰", d: C(data.settings.monthlyBudget) },
     { id: "cards", l: "Kartlarım", i: "💳", d: (() => { const cc = (data.settings.cards || []).filter(c => c.type !== "debit").length; const dc = (data.settings.cards || []).filter(c => c.type === "debit").length; return [cc > 0 && `${cc} kredi`, dc > 0 && `${dc} banka`].filter(Boolean).join(" · ") || "Kart yok"; })() },
@@ -7099,13 +7099,22 @@ function Settings({ data, setData, isAdmin, family }) {
   const BackBtn = () => <button onClick={() => setSec(null)} style={{ background: "none", border: "none", color: X.g, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff, padding: 0, marginBottom: 16 }}>← Geri</button>;
   if (!sec) return (<div style={{ flex: 1, overflow: "auto", padding: "20px 16px 90px" }}><h2 style={{ color: X.t, fontSize: 20, margin: "0 0 16px", fontFamily: ff }}>Ayarlar</h2><div style={{ display: "flex", flexDirection: "column", gap: 8 }}>{secs.map(s => (<Card key={s.id} onClick={() => { setSec(s.id); setForm({}); }} s={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 14 }}><span style={{ fontSize: 24 }}>{s.i}</span><div style={{ flex: 1 }}><div style={{ color: X.t, fontWeight: 700, fontSize: 15 }}>{s.l}</div><div style={{ color: X.td, fontSize: 12 }}>{s.d}</div></div><span style={{ color: X.td }}>›</span></Card>))}</div></div>);
   if (sec === "budget") {
-    const curMk = cmk();
+    const curMk = mk;
     const ayBasladi = data.months[curMk] && (Object.keys(data.months[curMk].fixedPaid || {}).length > 0 || (data.months[curMk].ccSingle || []).length > 0 || (data.months[curMk].accountEntries || []).length > 0);
     const budgetChanged = form.b !== undefined && parseFloat(form.b) !== data.settings.monthlyBudget;
     return (
       <div style={{ padding: "20px 16px 90px" }}>
         <BackBtn />
-        <Inp label="Aylık Bütçe (₺)" type="number" value={form.b ?? data.settings.monthlyBudget} onChange={v => setForm(f => ({ ...f, b: v }))} suffix="₺" />
+        <div style={{ color: X.tm, fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Maaş Günü (Dönem Başlangıcı)</div>
+        <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+          {["1", "15", "25"].map(d2 => (
+            <button key={d2} onClick={() => setForm(f => ({ ...f, pd: d2 }))} style={{ flex: 1, background: String(form.pd ?? data.settings.payDay ?? 15) === d2 ? X.gd : "white", border: `1px solid ${String(form.pd ?? data.settings.payDay ?? 15) === d2 ? X.g : "rgba(0,0,0,0.08)"}`, borderRadius: 8, padding: "10px", fontSize: 15, fontWeight: 800, cursor: "pointer", fontFamily: ff, color: String(form.pd ?? data.settings.payDay ?? 15) === d2 ? X.g : X.td }}>{d2}</button>
+          ))}
+          <input type="number" value={!["1", "15", "25"].includes(String(form.pd ?? data.settings.payDay ?? 15)) ? (form.pd ?? data.settings.payDay ?? "") : ""} onChange={e => setForm(f => ({ ...f, pd: e.target.value }))} placeholder="Diğer" style={{ flex: 1, background: "white", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 8, padding: "10px", fontSize: 14, color: X.t, textAlign: "center", fontFamily: fm }} />
+        </div>
+        <div style={{ color: X.td, fontSize: 11, marginBottom: 12, lineHeight: 1.5 }}>Bütçe döngünüz bu günden bir sonraki maaş gününe kadardır. Örn: 15 → her ayın 15'inden 14'üne.</div>
+        <Inp label="Varsayılan Aylık Bütçe (₺)" type="number" value={form.b ?? data.settings.monthlyBudget} onChange={v => setForm(f => ({ ...f, b: v }))} suffix="₺" />
+        <div style={{ color: X.td, fontSize: 11, marginBottom: 12, lineHeight: 1.5 }}>Gelir girişi yapılmayan aylarda bu tutar kullanılır. Ay bazlı gelir girişi için Güncel Durum → Aylık Bütçe kutusuna tıklayın.</div>
         {ayBasladi && budgetChanged && (
           <div style={{ background: "rgba(180,83,9,0.12)", border: "1px solid rgba(180,83,9,0.3)", borderRadius: 10, padding: "10px 14px", marginTop: -8, marginBottom: 12 }}>
             <div style={{ color: X.w, fontSize: 13, fontWeight: 700, marginBottom: 4 }}>⚠️ Bu ay başladı</div>
@@ -7122,7 +7131,7 @@ function Settings({ data, setData, isAdmin, family }) {
           <button onClick={() => setForm(f => ({ ...f, ccm: "ekstre" }))} style={{ flex: 1, background: (form.ccm ?? data.settings.ccPaymentMode ?? "instant") === "ekstre" ? X.gd : "white", border: `1px solid ${(form.ccm ?? data.settings.ccPaymentMode ?? "instant") === "ekstre" ? X.g : "rgba(0,0,0,0.08)"}`, borderRadius: 8, padding: "8px 6px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: ff, color: (form.ccm ?? data.settings.ccPaymentMode ?? "instant") === "ekstre" ? X.g : X.td }}>Gelecek aydan</button>
         </div>
         <div style={{ color: X.td, fontSize: 11, marginBottom: 12, lineHeight: 1.5 }}>{(form.ccm ?? data.settings.ccPaymentMode ?? "instant") === "instant" ? "Kredi kartı harcamalarının karşılığı aynı ay bütçenizden düşülür." : "Kredi kartı harcamaları gelecek ayın bütçesinden düşülür (ekstre döngüsü)."}</div>
-        <Btn onClick={() => { setData(d => ({ ...d, settings: { ...d.settings, monthlyBudget: form.b !== undefined ? (parseFloat(form.b) || d.settings.monthlyBudget) : d.settings.monthlyBudget, generalCardBudget: form.gcb !== undefined ? (parseFloat(form.gcb) || 0) : (d.settings.generalCardBudget || 0), emergencyTampon: form.et !== undefined ? (parseFloat(form.et) || 0) : (d.settings.emergencyTampon || 0), ccPaymentMode: form.ccm || d.settings.ccPaymentMode || "instant" } })); setSec(null); }}>Kaydet</Btn>
+        <Btn onClick={() => { setData(d => ({ ...d, settings: { ...d.settings, payDay: form.pd !== undefined ? (parseInt(form.pd) || d.settings.payDay || 15) : (d.settings.payDay || 15), monthlyBudget: form.b !== undefined ? (parseFloat(form.b) || d.settings.monthlyBudget) : d.settings.monthlyBudget, generalCardBudget: form.gcb !== undefined ? (parseFloat(form.gcb) || 0) : (d.settings.generalCardBudget || 0), emergencyTampon: form.et !== undefined ? (parseFloat(form.et) || 0) : (d.settings.emergencyTampon || 0), ccPaymentMode: form.ccm || d.settings.ccPaymentMode || "instant" } })); setSec(null); }}>Kaydet</Btn>
       </div>
     );
   }
@@ -7175,7 +7184,6 @@ function Settings({ data, setData, isAdmin, family }) {
     );
   }
   if (sec === "reset") {
-    const mk = cmk();
     const resetItem = (label, icon, desc, action) => (
       <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderRadius: 10, background: glassSolid.background, border: `1px solid ${X.border}`, marginBottom: 8, cursor: "pointer" }} onClick={() => { if (confirm(`"${label}" sıfırlansın mı? Bu işlem geri alınamaz.`)) { action(); } }}>
         <span style={{ fontSize: 20, flexShrink: 0 }}>{icon}</span>
@@ -7769,7 +7777,7 @@ function CardsSettings({ data, setData, onBack }) {
   );
 }
 
-function DebtSettings({ data, setData, onBack }) {
+function DebtSettings({ data, setData, onBack, mk }) {
   const [editing, setEditing] = useState(null);
   const [openAcc, setOpenAcc] = useState("info");
   const [n, sn] = useState("");
@@ -7778,7 +7786,7 @@ function DebtSettings({ data, setData, onBack }) {
   const [months, setMonths] = useState("");
   const [pDay, setPDay] = useState("");
   const [pDayEnd, setPDayEnd] = useState("");
-  const [startMonth, setStartMonth] = useState(cmk());
+  const [startMonth, setStartMonth] = useState(mk);
   const [planType, setPlanType] = useState("equal");
   const [borrowDate, setBorrowDate] = useState(td());
   const [purpose, setPurpose] = useState("");
@@ -7788,7 +7796,7 @@ function DebtSettings({ data, setData, onBack }) {
 
   const startNew = () => {
     sn(""); sc("TRY"); setTotal(""); setMonths(""); setPDay(""); setPDayEnd("");
-    setStartMonth(cmk()); setPlanType("equal"); setBorrowDate(td()); setPurpose(""); setNoteText("");
+    setStartMonth(mk); setPlanType("equal"); setBorrowDate(td()); setPurpose(""); setNoteText("");
     setOpenAcc("info"); setEditing("new");
   };
 
@@ -7799,7 +7807,7 @@ function DebtSettings({ data, setData, onBack }) {
     setTotal(String(t)); setMonths(String(m2));
     setPDay(debt.paymentDay ? String(debt.paymentDay) : "");
     setPDayEnd(debt.paymentDayEnd ? String(debt.paymentDayEnd) : "");
-    setStartMonth(debt.startMonth || cmk());
+    setStartMonth(debt.startMonth || mk);
     setPlanType(debt.planType || "equal");
     setBorrowDate(debt.borrowDate || td());
     setPurpose(debt.purpose || "");
@@ -7974,7 +7982,7 @@ function DebtSettings({ data, setData, onBack }) {
       {editing === "new" && editForm}
       {activeDebts.map(d => {
         const sym = debtCurSymbol(d.currency);
-        const tlVal = debtTLValue(d, data, cmk());
+        const tlVal = debtTLValue(d, data, mk);
         const totalM = d.totalMonths || d.remainingMonths;
         const paidCount = totalM - d.remainingMonths;
         return (
@@ -8339,7 +8347,8 @@ export default function App() {
   const [loaded, setLoaded] = useState(false);
   const [tab, setTab] = useState("home");
   const [headerDetail, setHeaderDetail] = useState(null);
-  const mk = cmk();
+  const _payDay = data?.settings?.payDay || 15;
+  const mk = cmk(_payDay);
   applyTheme(data?.settings?.theme || "default");
   const _theme = THEMES[data?.settings?.theme] || THEMES.default;
 
@@ -8596,7 +8605,7 @@ export default function App() {
       {tab === "home" && <Dashboard data={data} mk={mk} gmd={gmd} setMonthField={smf} setData={setData} />}
       {tab === "report" && <AnalysisScreen data={data} setData={setData} mk={mk} />}
       {tab === "plan" && <PlanningScreen data={data} setData={setData} mk={mk} />}
-      {tab === "settings" && <Settings data={data} setData={setData} isAdmin={isAdmin} family={family} />}
+      {tab === "settings" && <Settings data={data} setData={setData} isAdmin={isAdmin} family={family} mk={mk} />}
       <TabBar tab={tab} setTab={setTab} />
       {pendingCloseMk && <MonthCloseRitual data={data} setData={setData} prevMk={pendingCloseMk} onClose={() => { }} />}
       {!pendingCloseMk && isAdmin && needsWeeklyBackup(data) && <WeeklyBackupRitual data={data} setData={setData} />}
