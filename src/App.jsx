@@ -31,7 +31,7 @@ const PM = [{ id: "account", label: "Hesaptan", icon: "🏦" }, { id: "cc", labe
 const MIN_TL_SAVINGS_PCT = 0.15;   // toplam birikimin en az %15'i TL olmalı
 
 const DD = { settings: { monthlyBudget: 0, fixedExpenses: [], variableExpenses: [], cards: [], emergencyFundTarget: null, billTypes: [], generalCardBudget: 0, emergencyTampon: 0, ccPaymentMode: "instant", onboardingCompleted: null }, months: {}, installmentPlans: [], debts: [], savingsGoals: [], completedGoals: [], plannedEvents: [], completedEvents: [], merchantMap: {}, goldRates: {}, usdRates: {}, eurRates: {}, liveRates: { USD: null, EUR: null, XAU: null, fetchedAt: null }, savings: { TRY: [], USD: [], EUR: [], XAU: [] }, lastClosedMonth: null, lastBackup: null };
-const DM = () => ({ budget: null, fixedPaid: {}, variableEntries: {}, ccSingle: [], accountEntries: [], accountTransferred: {}, cardLoaded: 0, cardEntries: [], debtPayments: {}, ccTransferred: {}, csvByCard: {}, finalSavings: null, receipts: [] });
+const DM = () => ({ budget: null, incomeEntries: [], fixedPaid: {}, variableEntries: {}, ccSingle: [], accountEntries: [], accountTransferred: {}, cardLoaded: 0, cardEntries: [], debtPayments: {}, ccTransferred: {}, csvByCard: {}, finalSavings: null, receipts: [] });
 
 const STORAGE_KEY = "ev-butce-v11";
 
@@ -520,7 +520,8 @@ function getCCSingleAvg(data, m) {
 
 function calcMonth(data, m, extraInst) {
   const md = data.months[m] || DM();
-  const baseBudget = md.budget || data.settings.monthlyBudget;
+  const incomeTotal = (md.incomeEntries || []).reduce((s, e) => s + (e.amount || 0), 0);
+  const baseBudget = incomeTotal > 0 ? incomeTotal : (md.budget || data.settings.monthlyBudget);
   let carryoverDeficit = 0;
   if (data.months[pmk(m)]) { const pr = calcFlat(data, pmk(m), extraInst); if (pr.remaining < 0) carryoverDeficit = Math.abs(pr.remaining); }
   const effectiveBudget = baseBudget - carryoverDeficit;
@@ -677,7 +678,8 @@ function calcMonth(data, m, extraInst) {
 }
 function calcFlat(data, m, extraInst) {
   const md = data.months[m] || DM();
-  const b = md.budget || data.settings.monthlyBudget;
+  const incTotal = (md.incomeEntries || []).reduce((s, e) => s + (e.amount || 0), 0);
+  const b = incTotal > 0 ? incTotal : (md.budget || data.settings.monthlyBudget);
   const ft = data.settings.fixedExpenses.reduce((s, e) => s + e.amount, 0);
   let inst = data.installmentPlans.reduce((s, p) => { let c = p.startMonth; for (let i = 0; i < p.months; i++) { if (c === m) return s + p.monthlyPayment; c = nmk(c); } return s; }, 0);
   if (extraInst) { let c = extraInst.startMonth; for (let i = 0; i < extraInst.months; i++) { if (c === m) { inst += extraInst.monthlyPayment; break; } c = nmk(c); } }
@@ -880,7 +882,12 @@ function getMonthBreakdown(data, m) {
   const mc = calcMonth(data, m, null);
   const md = data.months[m] || DM();
   const rows = [];
-  rows.push({ label: "Aylık bütçe", value: mc.effectiveBudget, color: X.g });
+  const incEntries = md.incomeEntries || [];
+  if (incEntries.length > 1) {
+    incEntries.forEach(e => rows.push({ label: `${e.name || "Gelir"}`, value: e.amount || 0, sign: "+", color: X.g }));
+  } else {
+    rows.push({ label: "Aylık bütçe", value: mc.effectiveBudget, color: X.g });
+  }
   if (mc.carryoverDeficit > 0) rows.push({ label: "Önceki aydan devir", value: mc.carryoverDeficit, sign: "−", color: X.o });
   if (mc.fixedTotal > 0) {
     rows.push({ label: `Sabit giderler (${data.settings.fixedExpenses.length} kalem)`, value: mc.fixedTotal, sign: "−" });
@@ -1617,7 +1624,47 @@ function WeeklyBackupRitual({ data, setData }) {
   );
 }
 
-function BudgetModal({ mk: m, cur, def, onSave, onClose }) { const [v, setV] = useState(String(cur || def)); return (<Modal title={`💰 ${ml(m)} Bütçesi`} onClose={onClose}><Inp label="Bu Ayın Bütçesi" type="number" value={v} onChange={setV} suffix="₺" /><Btn onClick={() => { onSave(parseFloat(v) || def); onClose(); }}>Kaydet</Btn></Modal>); }
+function BudgetModal({ mk: m, incomeEntries, defaultBudget, onSave, onClose }) {
+  const [entries, setEntries] = useState(incomeEntries.length > 0 ? incomeEntries : [{ id: uid(), name: "Maaş", amount: defaultBudget || "", date: "" }]);
+  const [newName, setNewName] = useState("");
+  const [newAmount, setNewAmount] = useState("");
+  const [newDate, setNewDate] = useState("");
+  const total = entries.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+  const addEntry = () => {
+    if (!newName || !newAmount) return;
+    setEntries(prev => [...prev, { id: uid(), name: newName, amount: parseFloat(newAmount) || 0, date: newDate }]);
+    setNewName(""); setNewAmount(""); setNewDate("");
+  };
+  const removeEntry = id => setEntries(prev => prev.filter(e => e.id !== id));
+  const updateEntry = (id, field, val) => setEntries(prev => prev.map(e => e.id === id ? { ...e, [field]: field === "amount" ? val : val } : e));
+  return (
+    <Modal title={`💰 ${ml(m)} Gelirleri`} onClose={onClose}>
+      <div style={{ color: X.tm, fontSize: 12, marginBottom: 12, lineHeight: 1.5 }}>Bu aya ait gelirlerinizi girin. Toplam, o ayın bütçesi olarak kullanılır.</div>
+      {entries.map((e, i) => (
+        <div key={e.id} style={{ background: "rgba(0,0,0,0.03)", borderRadius: 10, padding: "10px 12px", marginBottom: 8 }}>
+          <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+            <input value={e.name} onChange={ev => updateEntry(e.id, "name", ev.target.value)} placeholder="Gelir adı" style={{ flex: 1, background: "white", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 8, padding: "8px 10px", fontSize: 13, color: X.t, fontFamily: ff }} />
+            <button onClick={() => removeEntry(e.id)} style={{ background: X.rd, border: "none", borderRadius: 8, padding: "0 10px", color: X.r, fontSize: 16, cursor: "pointer" }}>×</button>
+          </div>
+          <div style={{ display: "flex", gap: 6 }}>
+            <input type="number" value={e.amount} onChange={ev => updateEntry(e.id, "amount", ev.target.value)} placeholder="Tutar" style={{ flex: 1, background: "white", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 8, padding: "8px 10px", fontSize: 13, color: X.t, fontFamily: fm }} />
+            <input type="date" value={e.date || ""} onChange={ev => updateEntry(e.id, "date", ev.target.value)} style={{ flex: 1, background: "white", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 8, padding: "8px 10px", fontSize: 13, color: X.t }} />
+          </div>
+        </div>
+      ))}
+      <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+        <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Yeni gelir adı" style={{ flex: 1, background: "white", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 8, padding: "8px 10px", fontSize: 13, color: X.t, fontFamily: ff }} />
+        <input type="number" value={newAmount} onChange={e => setNewAmount(e.target.value)} placeholder="Tutar" style={{ width: 100, background: "white", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 8, padding: "8px 10px", fontSize: 13, color: X.t, fontFamily: fm }} />
+        <button onClick={addEntry} style={{ background: X.gd, border: `1px solid ${X.g}`, borderRadius: 8, padding: "0 12px", color: X.g, fontSize: 18, fontWeight: 700, cursor: "pointer" }}>+</button>
+      </div>
+      <div style={{ background: X.gd, borderRadius: 10, padding: "10px 14px", marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span style={{ color: X.g, fontSize: 13, fontWeight: 700 }}>Toplam Bütçe</span>
+        <span style={{ color: X.g, fontSize: 20, fontWeight: 800, fontFamily: fm }}>{C(total)}</span>
+      </div>
+      <Btn onClick={() => { onSave(entries.map(e => ({ ...e, amount: parseFloat(e.amount) || 0 }))); onClose(); }} disabled={total <= 0}>Kaydet</Btn>
+    </Modal>
+  );
+}
 
 function CCInstallModal({ data, mk, cards, variableExpenses, onClose, onSave, onDeletePlan, onEditPlan, startInSim, onEventTaksit }) {
   const [a, sa] = useState(""); const [mo, smo] = useState("3"); const [n, sn] = useState("");
@@ -3284,7 +3331,7 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
       {modal === "simulate" && <CCCombinedModal data={data} mk={mk} cards={data.settings.cards || []} variableExpenses={data.settings.variableExpenses || []} ccSingleEntries={md.ccSingle || []} onClose={() => setModal(null)} onSaveSingle={handleCCSingle} onDeleteSingle={deleteCCSingle} onSaveInstall={handleInstSave} onDeletePlan={deleteInstallment} onEditPlan={editInstallment} onEventTaksit={handleEventTaksit} />}
       {modal === "cardLoad" && <CardLoadModal currentLoaded={md.cardLoaded || 0} maxTotal={c.generalCardBudget} entries={md.cardEntries || []} onClose={() => setModal(null)} onSave={handleCardLoad} onDelete={deleteCardEntry} onEdit={editCardEntry} />}
       {modal === "debtPay" && <DebtPayModal debts={data.debts} debtPayments={md.debtPayments} data={data} mk={mk} onClose={() => setModal(null)} onPay={handleDebtPay} onUndo={undoDebtPay} />}
-      {modal === "budget" && <BudgetModal mk={mk} cur={md.budget || data.settings.monthlyBudget} def={data.settings.monthlyBudget} onSave={v => setMonthField(mk, "budget", v)} onClose={() => setModal(null)} />}
+      {modal === "budget" && <BudgetModal mk={mk} incomeEntries={md.incomeEntries || []} defaultBudget={data.settings.monthlyBudget} onSave={entries => { setMonthField(mk, "incomeEntries", entries); setMonthField(mk, "budget", entries.reduce((s, e) => s + (e.amount || 0), 0)); }} onClose={() => setModal(null)} />}
       {modal === "receipt" && <ReceiptModal receipts={md.receipts || []} onClose={() => setModal(null)} onSave={handleReceiptSave} onDelete={handleReceiptDelete} />}
       {info && info === "cardLoad" && (
         <Modal title="ℹ️ Konfor Harcaması Kartı" onClose={() => setInfo(null)}>
@@ -4391,6 +4438,9 @@ KURALLAR:
 - Kart ekstre kapanışı: her ayın 15'i
 - Mevcut dönem: ${mk} → ${periodStartDate.toLocaleDateString("tr-TR")} – ${periodEndDate.toLocaleDateString("tr-TR")}
 - Dönemin ${daysIntoPeriod}. günü, ${daysLeftInPeriod} gün kaldı (%${periodProgress})
+
+GELİR YAPISI:
+${(() => { const ie = (data.months[mk] || {}).incomeEntries || []; return ie.length > 0 ? ie.map(e => `  ${e.name || "Gelir"}: ${C(e.amount)}${e.date ? " (" + e.date + ")" : ""}`).join("\n") + `\n  TOPLAM: ${C(c.effectiveBudget)}` : `  Tek gelir: ${C(c.effectiveBudget)}`; })()}
 
 BÜTÇE YAPISI (ÖNEMLİ — çift sayma yapma!):
 - Bütçe: ${C(c.effectiveBudget)} | Bankada (Y): ${C(c.remainingY)} | Bloke (B): ${C(c.groupB)} | Kullanılabilir (X): ${C(c.remainingX)}
@@ -8361,7 +8411,7 @@ export default function App() {
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, position: "relative", zIndex: 1 }}>
             {[
-              { label: "Aylık Bütçe", val: C(c.effectiveBudget), color: "white", onClick: null },
+              { label: "Aylık Bütçe", val: C(c.effectiveBudget), color: "white", onClick: showHeaderDetail },
               { label: "Bankadaki Tutar", val: C(c.remainingY || 0), color: "white", onClick: showKalanDetail },
               { label: "Bloke Edilen Tutar", val: C(c.groupB || 0), color: "#FCA5A5", onClick: showBlokeDetail },
               { label: "Bloke Sonrası Kalan Bütçe", val: C(c.remainingX || 0), color: "#6EE7B7", onClick: showKalanDetail },
