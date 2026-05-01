@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
 import * as Papa from "papaparse";
 import { initializeApp } from "firebase/app";
 import { getDatabase, ref, set, get, onValue } from "firebase/database";
-import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult } from "firebase/auth";
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, sendEmailVerification, updatePassword, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult } from "firebase/auth";
 
 // Firebase Config
 const firebaseConfig = {
@@ -51,6 +51,9 @@ async function lookupName(name) {
   return null;
 }
 async function registerName(name, email, familyId, uid2) {
+  // Aynı isim başka kullanıcıya aitse üzerine yazma — o kullanıcının isimle girişi bozulmasın
+  const existing = await lookupName(name);
+  if (existing && existing.uid && existing.uid !== uid2) return; // başkasına ait, atla
   await set(ref(rtdb, `nameIndex/${nameKey(name)}`), { email, familyId, uid: uid2 });
 }
 
@@ -6266,18 +6269,33 @@ function OnboardingWizard({ data, setData, familyName }) {
   const [cards, setCards] = useState([]);
   const [cardName, setCardName] = useState("");
   const [ccMode, setCcMode] = useState("instant");
+  const [fixedIcon, setFixedIcon] = useState("📋");
+  const [catList, setCatList] = useState([]);
+  const [catName, setCatName] = useState("");
+  const [catIcon, setCatIcon] = useState("📋");
+  const [catAmount, setCatAmount] = useState("");
 
-  const totalSteps = 7;
+  const totalSteps = 8;
   const inpS = { width: "100%", background: "white", border: "1px solid rgba(0,0,0,0.10)", borderRadius: 10, padding: "10px 12px", fontSize: 14, color: "#141008", boxSizing: "border-box", fontFamily: ff };
   const lblS = { color: "#5A5045", fontSize: 12, marginBottom: 4, fontWeight: 600, display: "block" };
   const hintS = { color: "#8B7E74", fontSize: 10, marginTop: 6, lineHeight: 1.4 };
 
+  const fixedIcons = ["🏠", "🔥", "⚡", "💧", "🌐", "📱", "🛡️", "🏢", "📚", "🏥", "🚗", "👶", "🐾", "📺", "🔧", "🛒", "💊", "🎓", "🏋️", "✈️", "👗", "🎵", "📋"];
+  const catIcons = ["🛒", "⛽", "📚", "🏥", "👗", "🍽️", "☕", "🎬", "🏋️", "✈️", "👶", "🐾", "💊", "🔧", "📱", "🚗", "🎁", "💇", "🧹", "📋"];
+
   const addFixed = () => {
     if (!fixedName || !fixedAmount) return;
-    setFixedList(l => [...l, { id: uid(), name: fixedName, amount: parseFloat(fixedAmount) || 0, paymentMethod: fixedMethod, autoPayment: false }]);
-    setFixedName(""); setFixedAmount(""); setFixedMethod("account");
+    setFixedList(l => [...l, { id: uid(), name: fixedName, icon: fixedIcon, amount: parseFloat(fixedAmount) || 0, paymentMethod: fixedMethod, autoPayment: false }]);
+    setFixedName(""); setFixedAmount(""); setFixedMethod("account"); setFixedIcon("📋");
   };
   const removeFixed = id => setFixedList(l => l.filter(x => x.id !== id));
+
+  const addCat = () => {
+    if (!catName) return;
+    setCatList(l => [...l, { id: uid(), name: catName, icon: catIcon, expectedAmount: parseFloat(catAmount) || 0, keywords: [] }]);
+    setCatName(""); setCatIcon("📋"); setCatAmount("");
+  };
+  const removeCat = id => setCatList(l => l.filter(x => x.id !== id));
 
   const addCard = () => {
     if (!cardName) return;
@@ -6295,6 +6313,7 @@ function OnboardingWizard({ data, setData, familyName }) {
         payDay: parseInt(payDay) || 15,
         ccPaymentMode: ccMode,
         fixedExpenses: [...(d.settings.fixedExpenses || []), ...fixedList],
+        variableExpenses: [...(d.settings.variableExpenses || []), ...catList],
         cards: [...(d.settings.cards || []), ...cards],
         onboardingCompleted: true
       }
@@ -6411,12 +6430,15 @@ function OnboardingWizard({ data, setData, familyName }) {
             {/* Hazır öneriler */}
             <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 10 }}>
               {suggestedFixed.filter(s => !fixedList.find(f => f.name === s.name)).map(s => (
-                <button key={s.name} onClick={() => { setFixedName(s.name); }} style={{ background: fixedName === s.name ? X.gd : "white", border: `1px solid ${fixedName === s.name ? X.g : "rgba(0,0,0,0.08)"}`, borderRadius: 8, padding: "6px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: ff, color: fixedName === s.name ? X.g : "#5A5045" }}>
+                <button key={s.name} onClick={() => { setFixedName(s.name); setFixedIcon(s.icon); }} style={{ background: fixedName === s.name ? X.gd : "white", border: `1px solid ${fixedName === s.name ? X.g : "rgba(0,0,0,0.08)"}`, borderRadius: 8, padding: "6px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: ff, color: fixedName === s.name ? X.g : "#5A5045" }}>
                   {s.icon} {s.name}
                 </button>
               ))}
             </div>
 
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 8 }}>
+              {fixedIcons.map(ic => (<button key={ic} onClick={() => setFixedIcon(ic)} style={{ fontSize: 18, padding: "4px 6px", background: fixedIcon === ic ? X.gd : "white", border: `1px solid ${fixedIcon === ic ? X.g : "rgba(0,0,0,0.08)"}`, borderRadius: 6, cursor: "pointer" }}>{ic}</button>))}
+            </div>
             <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
               <input value={fixedName} onChange={e => setFixedName(e.target.value)} placeholder="Gider adı" style={{ ...inpS, flex: 1 }} />
               <input type="number" value={fixedAmount} onChange={e => setFixedAmount(e.target.value)} placeholder="Tutar" style={{ ...inpS, flex: 0.6 }} />
@@ -6430,7 +6452,7 @@ function OnboardingWizard({ data, setData, familyName }) {
             {fixedList.length > 0 && fixedList.map(f => (
               <div key={f.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 10px", marginBottom: 4, background: "white", borderRadius: 8, border: "1px solid rgba(0,0,0,0.06)" }}>
                 <div>
-                  <span style={{ color: "#141008", fontSize: 13, fontWeight: 700 }}>{f.name}</span>
+                  <span style={{ color: "#141008", fontSize: 13, fontWeight: 700 }}>{f.icon || "📋"} {f.name}</span>
                   <span style={{ color: "#8B7E74", fontSize: 11, marginLeft: 8 }}>{f.paymentMethod === "cc" ? "💳" : "🏦"}</span>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -6448,8 +6470,58 @@ function OnboardingWizard({ data, setData, familyName }) {
           </div>
         )}
 
-        {/* ADIM 4: Kredi kartları */}
+        {/* ADIM 4: Harcama kategorileri */}
         {step === 5 && (
+          <div>
+            <div style={{ fontSize: 28, marginBottom: 8 }}>🔄</div>
+            <div style={{ color: "#141008", fontSize: 16, fontWeight: 800, marginBottom: 4 }}>Harcama kategorileri</div>
+            <div style={{ color: "#5A5045", fontSize: 12, marginBottom: 10 }}>Değişken harcamalarınızı kategorilere ayırın. AI danışman ve raporlar bu kategorileri kullanır.</div>
+
+            {/* Hazır öneriler */}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 10 }}>
+              {[
+                { name: "Gıda & Market", icon: "🛒" },
+                { name: "Akaryakıt", icon: "⛽" },
+                { name: "Eğitim", icon: "📚" },
+                { name: "Sağlık", icon: "🏥" },
+                { name: "Giyim", icon: "👗" },
+                { name: "Yeme & İçme", icon: "🍽️" },
+                { name: "Ulaşım", icon: "🚗" },
+                { name: "Eğlence", icon: "🎬" },
+                { name: "Kişisel Bakım", icon: "💇" },
+                { name: "Ev Giderleri", icon: "🔧" },
+              ].filter(s => !catList.find(c2 => c2.name === s.name)).map(s => (
+                <button key={s.name} onClick={() => { setCatList(l => [...l, { id: uid(), name: s.name, icon: s.icon, expectedAmount: 0, keywords: [] }]); }} style={{ background: "white", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 8, padding: "6px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: ff, color: "#5A5045" }}>
+                  {s.icon} {s.name}
+                </button>
+              ))}
+            </div>
+
+            <div style={{ color: "#8B7E74", fontSize: 11, marginBottom: 8 }}>Veya kendiniz ekleyin:</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 8 }}>
+              {catIcons.map(ic => (<button key={ic} onClick={() => setCatIcon(ic)} style={{ fontSize: 18, padding: "4px 6px", background: catIcon === ic ? X.gd : "white", border: `1px solid ${catIcon === ic ? X.g : "rgba(0,0,0,0.08)"}`, borderRadius: 6, cursor: "pointer" }}>{ic}</button>))}
+            </div>
+            <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+              <input value={catName} onChange={e => setCatName(e.target.value)} placeholder="Kategori adı" style={{ ...inpS, flex: 1 }} />
+              <input type="number" value={catAmount} onChange={e => setCatAmount(e.target.value)} placeholder="Tahmini tutar" style={{ ...inpS, flex: 0.6 }} />
+            </div>
+            <button onClick={addCat} disabled={!catName} style={{ width: "100%", background: catName ? X.g : "rgba(0,0,0,0.06)", border: "none", borderRadius: 10, padding: "10px", color: catName ? "white" : "#8B7E74", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: ff, marginBottom: 12 }}>+ Ekle</button>
+
+            {catList.map(c2 => (
+              <div key={c2.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 10px", marginBottom: 4, background: "white", borderRadius: 8, border: "1px solid rgba(0,0,0,0.06)" }}>
+                <span style={{ color: "#141008", fontSize: 13, fontWeight: 700 }}>{c2.icon} {c2.name}</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  {c2.expectedAmount > 0 && <span style={{ color: "#141008", fontSize: 13, fontWeight: 700, fontFamily: fm }}>{C(c2.expectedAmount)}</span>}
+                  <button onClick={() => removeCat(c2.id)} style={{ background: "none", border: "none", color: X.r, fontSize: 16, cursor: "pointer", padding: "2px 6px" }}>✕</button>
+                </div>
+              </div>
+            ))}
+            <div style={hintS}>💡 Kategorilere anahtar kelime atamayı daha sonra Ayarlar → Harcama Kategorileri'nden yapabilirsiniz.</div>
+          </div>
+        )}
+
+        {/* ADIM 5: Kredi kartları */}
+        {step === 6 && (
           <div>
             <div style={{ fontSize: 28, marginBottom: 8 }}>💳</div>
             <div style={{ color: "#141008", fontSize: 16, fontWeight: 800, marginBottom: 4 }}>Kredi kartlarınız</div>
@@ -6469,8 +6541,8 @@ function OnboardingWizard({ data, setData, familyName }) {
           </div>
         )}
 
-        {/* ADIM 5: Özet */}
-        {step === 6 && (
+        {/* ADIM 6: Özet */}
+        {step === 7 && (
           <div>
             <div style={{ fontSize: 28, marginBottom: 8 }}>✅</div>
             <div style={{ color: "#141008", fontSize: 16, fontWeight: 800, marginBottom: 4 }}>Hazırsınız!</div>
@@ -6493,6 +6565,10 @@ function OnboardingWizard({ data, setData, familyName }) {
                 <span style={{ color: "#5A5045", fontSize: 13 }}>Sabit giderler</span>
                 <span style={{ color: "#141008", fontSize: 13, fontWeight: 700 }}>{fixedList.length > 0 ? `${fixedList.length} adet · ${C(fixedList.reduce((s, f) => s + f.amount, 0))}` : "Eklenmedi"}</span>
               </div>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 16px", borderBottom: "1px solid rgba(0,0,0,0.06)" }}>
+                <span style={{ color: "#5A5045", fontSize: 13 }}>Harcama kategorileri</span>
+                <span style={{ color: "#141008", fontSize: 13, fontWeight: 700 }}>{catList.length > 0 ? `${catList.length} kategori` : "Eklenmedi"}</span>
+              </div>
               <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 16px" }}>
                 <span style={{ color: "#5A5045", fontSize: 13 }}>Kredi kartları</span>
                 <span style={{ color: "#141008", fontSize: 13, fontWeight: 700 }}>{cards.length > 0 ? `${cards.length} kart` : "Eklenmedi"}</span>
@@ -6512,14 +6588,15 @@ function OnboardingWizard({ data, setData, familyName }) {
           </div>
         )}
 
-        {/* İleri / Geri butonları */}
-        {step > 0 && step < 6 && (
-          <div style={{ display: "flex", gap: 8, marginTop: 16, paddingBottom: 16 }}>
-            <button onClick={() => setStep(s => s - 1)} style={{ flex: 0.4, background: "rgba(0,0,0,0.04)", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 10, padding: "12px", color: "#5A5045", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: ff }}>← Geri</button>
-            <button onClick={() => setStep(s => s + 1)} disabled={!canNext()} style={{ flex: 0.6, background: canNext() ? X.g : "rgba(0,0,0,0.06)", border: "none", borderRadius: 10, padding: "12px", color: canNext() ? "white" : "#8B7E74", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: ff }}>{step === 5 ? "Özete Git →" : "İleri →"}</button>
-          </div>
-        )}
       </div>
+
+      {/* İleri / Geri butonları — scroll dışında, her zaman görünür */}
+      {step > 0 && step < 7 && (
+        <div style={{ padding: "12px 20px env(safe-area-inset-bottom, 12px)", flexShrink: 0, maxWidth: 480, margin: "0 auto", width: "100%", boxSizing: "border-box", display: "flex", gap: 8 }}>
+          <button onClick={() => setStep(s => s - 1)} style={{ flex: 0.4, background: "rgba(0,0,0,0.04)", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 10, padding: "12px", color: "#5A5045", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: ff }}>← Geri</button>
+          <button onClick={() => setStep(s => s + 1)} disabled={!canNext()} style={{ flex: 0.6, background: canNext() ? X.g : "rgba(0,0,0,0.06)", border: "none", borderRadius: 10, padding: "12px", color: canNext() ? "white" : "#8B7E74", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: ff }}>{step === 6 ? "Özete Git →" : "İleri →"}</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -6647,6 +6724,7 @@ function FamilyManagement({ isAdmin, family, onBack }) {
   const [newName, setNewName] = useState("");
   const [newEmail, setNewEmail] = useState("");
   const [generatedCode, setGeneratedCode] = useState(null);
+  const [copied, setCopied] = useState(false);
   const [msg, setMsg] = useState(null);
 
   useEffect(() => {
@@ -6720,7 +6798,7 @@ function FamilyManagement({ isAdmin, family, onBack }) {
       {isAdmin && addMode && !generatedCode && (
         <Card s={{ border: `1px solid ${X.g}` }}>
           <div style={{ color: X.g, fontSize: 13, fontWeight: 700, marginBottom: 10 }}>YENİ ÜYE</div>
-          <Inp label="İsim Soyisim" value={newName} onChange={setNewName} placeholder="Örn: Kadriye Huca" />
+          <Inp label="İsim Soyisim" value={newName} onChange={setNewName} placeholder="" />
           <Inp label="E-posta" value={newEmail} onChange={setNewEmail} placeholder="ornek@gmail.com" />
           <div style={{ display: "flex", gap: 8 }}>
             <Btn onClick={handleAddMember} c={X.g} s={{ flex: 1 }}>Davet Kodu Oluştur</Btn>
@@ -6735,8 +6813,8 @@ function FamilyManagement({ isAdmin, family, onBack }) {
           <div style={{ color: X.t, fontSize: 36, fontWeight: 800, fontFamily: fm, letterSpacing: 6 }}>{generatedCode}</div>
           <div style={{ color: X.tm, fontSize: 11, marginTop: 8 }}>Bu kodu üyeyle paylaşın. Tek seferlik kullanılır.</div>
           <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-            <Btn onClick={() => navigator.clipboard?.writeText(generatedCode)} s={{ flex: 1 }}>📋 Kopyala</Btn>
-            <Btn onClick={() => { setGeneratedCode(null); setAddMode(false); setNewName(""); setNewEmail(""); }} v="outline" c={X.td} s={{ flex: 1 }}>Tamam</Btn>
+            <Btn onClick={() => { navigator.clipboard?.writeText(generatedCode); setCopied(true); }} s={{ flex: 1 }} c={copied ? X.g : undefined}>{copied ? "✓ Kopyalandı" : "📋 Kopyala"}</Btn>
+            <Btn onClick={() => { setGeneratedCode(null); setAddMode(false); setNewName(""); setNewEmail(""); setCopied(false); }} v="outline" c={X.td} s={{ flex: 1 }}>Tamam</Btn>
           </div>
         </Card>
       )}
@@ -7964,68 +8042,38 @@ function LoginScreen({ pendingInvite, setPendingInvite }) {
   const [invData, setInvData] = useState(null);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
-  const [linkData, setLinkData] = useState(null); // email link'ten dönen kullanıcı bilgisi
 
-  // Sayfa yüklendiğinde: URL'de email link var mı kontrol et
-  useEffect(() => {
-    if (isSignInWithEmailLink(auth, window.location.href)) {
-      const params = new URLSearchParams(window.location.search);
-      const urlEmail = params.get("email") || localStorage.getItem("emailForSignIn") || "";
-      const urlName = params.get("name") || "";
-      const urlType = params.get("type") || "newAdmin";
-      const urlInvCode = params.get("invCode") || "";
-
-      if (urlEmail) {
-        setEmail(urlEmail);
-        setName(urlName);
-        setLinkData({ email: urlEmail, name: urlName, type: urlType, invCode: urlInvCode });
-        setMode("setPassword");
-      } else {
-        setErr("E-posta bilgisi bulunamadı. Lütfen tekrar kayıt olun.");
-        window.history.replaceState({}, document.title, window.location.pathname);
-      }
-    }
-  }, []);
-
-  // Giriş (mevcut kullanıcılar: isim + şifre)
+  // Giriş (email + şifre)
   const handleLogin = async () => {
-    if (!name || !pass) { setErr("İsim ve şifre gerekli"); return; }
+    if (!email || !pass) { setErr("E-posta ve şifre gerekli"); return; }
     setLoading(true); setErr("");
     try {
-      const found = await lookupName(name);
-      if (found) {
-        await signInWithEmailAndPassword(auth, found.email, pass);
-      } else if (name.includes("@")) {
-        setPendingInvite({ type: "migrateName", name });
-        await signInWithEmailAndPassword(auth, name, pass);
-      } else {
-        setErr("Bu isimle kayıtlı hesap yok. İlk girişte e-postanızı kullanın.");
-      }
+      await signInWithEmailAndPassword(auth, email, pass);
     } catch (e) {
       if (e.code === "auth/wrong-password" || e.code === "auth/invalid-credential") setErr("Şifre yanlış.");
-      else if (e.code === "auth/user-not-found") setErr("Hesap bulunamadı.");
+      else if (e.code === "auth/user-not-found") setErr("Bu e-posta ile kayıtlı hesap yok.");
+      else if (e.code === "auth/invalid-email") setErr("Geçersiz e-posta adresi.");
       else setErr(e.message);
-      setPendingInvite(null);
     }
     setLoading(false);
   };
 
-  // Kayıt: email doğrulama linki gönder (şifre yok henüz)
+  // Kayıt: email + şifre → hesap oluştur → doğrulama maili gönder
   const handleRegister = async () => {
-    if (!name || !email) { setErr("İsim ve e-posta gerekli"); return; }
+    if (!name || !email || !pass) { setErr("Tüm alanları doldurun"); return; }
+    if (pass.length < 6) { setErr("Şifre en az 6 karakter olmalı"); return; }
     setLoading(true); setErr("");
     try {
-      const existing = await lookupName(name);
-      if (existing) { setErr("Bu isim zaten kayıtlı. Giriş yapın."); setLoading(false); return; }
-      const actionCodeSettings = {
-        url: `${window.location.origin}${window.location.pathname}?name=${encodeURIComponent(name)}&type=newAdmin&email=${encodeURIComponent(email)}`,
-        handleCodeInApp: true
-      };
-      await sendSignInLinkToEmail(auth, email, actionCodeSettings);
-      localStorage.setItem("emailForSignIn", email);
-      setMode("emailSent");
+      // İsim bilgisini ÖNCE kaydet (hesap oluşunca App doğrulama ekranını gösterir, ismi oradan okur)
+      localStorage.setItem("pendingRegName", name);
+      // Hesap oluştur
+      const result = await createUserWithEmailAndPassword(auth, email, pass);
+      // Doğrulama maili gönder
+      await sendEmailVerification(result.user);
     } catch (e) {
-      if (e.code === "auth/invalid-email") setErr("Geçersiz e-posta adresi.");
+      localStorage.removeItem("pendingRegName"); // hata durumunda temizle
+      if (e.code === "auth/email-already-in-use") setErr("Bu e-posta zaten kayıtlı. Giriş yapın.");
+      else if (e.code === "auth/invalid-email") setErr("Geçersiz e-posta adresi.");
       else setErr(e.message);
     }
     setLoading(false);
@@ -8050,42 +8098,11 @@ function LoginScreen({ pendingInvite, setPendingInvite }) {
     if (!pass || pass.length < 6) { setErr("Şifre en az 6 karakter olmalı"); return; }
     setLoading(true); setErr("");
     try {
-      // pendingInvite'ı ÖNCE set et — hesap oluşunca family useEffect bunu kullanacak
       setPendingInvite({ type: "invite", code: invCode, invData });
       await createUserWithEmailAndPassword(auth, invData.email, pass);
     } catch (e) {
       setPendingInvite(null);
       if (e.code === "auth/email-already-in-use") setErr("Bu e-posta zaten kayıtlı. Google ile katılmayı deneyin.");
-      else setErr(e.message);
-    }
-    setLoading(false);
-  };
-
-  // Email linkinden döndükten sonra: şifre belirle + hesap oluştur
-  const handleSetPassword = async () => {
-    if (!pass || pass.length < 6) { setErr("Şifre en az 6 karakter olmalı"); return; }
-    setLoading(true); setErr("");
-    try {
-      // 1. Email link ile giriş yap (hesap yoksa oluşturulur)
-      const result = await signInWithEmailLink(auth, linkData.email, window.location.href);
-      // 2. Şifre belirle (sonraki girişlerde kullanılacak)
-      await updatePassword(result.user, pass);
-      // 3. Aile oluştur veya katıl (doğrudan Firebase'e yaz)
-      if (linkData.type === "invite" && linkData.invCode) {
-        const inv = await lookupInvitation(linkData.invCode);
-        if (inv) {
-          await joinViaInvitation(result.user.uid, linkData.invCode, inv);
-        }
-      } else {
-        await migrateOldData(result.user.uid);
-        await createFamily(result.user.uid, result.user.email, linkData.name);
-      }
-      // 4. URL'yi temizle
-      window.history.replaceState({}, document.title, window.location.pathname);
-      localStorage.removeItem("emailForSignIn");
-    } catch (e) {
-      if (e.code === "auth/invalid-action-code") setErr("Bu doğrulama linki geçersiz veya süresi dolmuş. Lütfen tekrar kayıt olun.");
-      else if (e.code === "auth/email-already-in-use") setErr("Bu e-posta zaten kayıtlı. Giriş yapın.");
       else setErr(e.message);
     }
     setLoading(false);
@@ -8114,34 +8131,9 @@ function LoginScreen({ pendingInvite, setPendingInvite }) {
         return; // sayfa yeniden yüklenecek
       }
 
-      // Masaüstünde popup kullan
-      const result = await signInWithPopup(auth, provider);
-      const u = result.user;
-      const displayName = u.displayName || u.email.split("@")[0];
-
-      const existingFamily = await getUserFamily(u.uid);
-      if (existingFamily) { setLoading(false); return; }
-
-      if (inviteMode && invData) {
-        const freshInv = await lookupInvitation(invCode);
-        if (freshInv) await joinViaInvitation(u.uid, invCode, { ...freshInv, email: u.email });
-        localStorage.removeItem("pendingGoogleInvite");
-      } else {
-        const existingName = await lookupName(displayName);
-        if (existingName && existingName.uid !== u.uid) {
-          const newName = prompt(`"${displayName}" ismi zaten kayıtlı. Lütfen farklı bir isim girin:`);
-          if (newName && newName.trim()) {
-            await createFamily(u.uid, u.email, newName.trim());
-          } else {
-            await signOut(auth);
-            setErr("İsim belirlenmeden hesap oluşturulamaz.");
-            setLoading(false);
-            return;
-          }
-        } else {
-          await createFamily(u.uid, u.email, displayName);
-        }
-      }
+      // Masaüstünde popup kullan — aile oluşturma App seviyesinde yapılıyor
+      await signInWithPopup(auth, provider);
+      // onAuthStateChanged tetiklenir → App family useEffect Google kullanıcısına aile oluşturur
     } catch (e) {
       if (e.code === "auth/popup-closed-by-user" || e.code === "auth/cancelled-popup-request") { /* yoksay */ }
       else setErr(e.message);
@@ -8152,16 +8144,16 @@ function LoginScreen({ pendingInvite, setPendingInvite }) {
   const googleBtnStyle = { width: "100%", background: "white", border: "1px solid rgba(0,0,0,0.15)", borderRadius: 12, padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "center", gap: 10, cursor: "pointer", fontFamily: ff, fontSize: 14, fontWeight: 600, color: "#333", marginTop: 8 };
   const orDivider = (<div style={{ display: "flex", alignItems: "center", gap: 12, margin: "16px 0" }}><div style={{ flex: 1, height: 1, background: "rgba(0,0,0,0.1)" }} /><span style={{ color: X.td, fontSize: 12 }}>veya</span><div style={{ flex: 1, height: 1, background: "rgba(0,0,0,0.1)" }} /></div>);
 
-  const modeTitle = { login: "Giriş yap", register: "Yeni hesap oluştur", invite: "Davet ile katıl", emailSent: "E-posta gönderildi", setPassword: "Şifre belirleyin" };
+  const modeTitle = { login: "Giriş yap", register: "Yeni hesap oluştur", invite: "Davet ile katıl", verifyEmail: "E-posta doğrulayın" };
 
   return (
     <div style={{ background: THEMES[_tid].gradient, minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: ff, padding: 16 }}>
       <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
       <div style={{ ...glassSolid, borderRadius: 20, width: "100%", maxWidth: 380, padding: 28, boxShadow: neu }}>
         <div style={{ textAlign: "center", marginBottom: 24 }}>
-          <div style={{ fontSize: 40, marginBottom: 8 }}>{mode === "emailSent" ? "📧" : mode === "setPassword" ? "🔐" : "💰"}</div>
-          <div style={{ color: X.t, fontSize: 22, fontWeight: 800 }}>{mode === "emailSent" || mode === "setPassword" ? (modeTitle[mode]) : "EV BÜTÇESİ"}</div>
-          <div style={{ color: X.tm, fontSize: 13, marginTop: 4 }}>{mode !== "emailSent" && mode !== "setPassword" && modeTitle[mode]}</div>
+          <div style={{ fontSize: 40, marginBottom: 8 }}>{mode === "verifyEmail" ? "📧" : "💰"}</div>
+          <div style={{ color: X.t, fontSize: 22, fontWeight: 800 }}>{mode === "verifyEmail" ? modeTitle[mode] : "EV BÜTÇESİ"}</div>
+          <div style={{ color: X.tm, fontSize: 13, marginTop: 4 }}>{mode !== "verifyEmail" && modeTitle[mode]}</div>
         </div>
         {err && <div style={{ background: X.rd, border: `1px solid ${X.r}`, borderRadius: 10, padding: "8px 12px", marginBottom: 12, color: X.r, fontSize: 12, fontWeight: 600 }}>{err}</div>}
 
@@ -8171,7 +8163,7 @@ function LoginScreen({ pendingInvite, setPendingInvite }) {
             {loading ? "Giriş yapılıyor..." : "Google ile Giriş"}
           </button>
           {orDivider}
-          <Inp label="İsim Soyisim" value={name} onChange={setName} placeholder="İsim Soyisim" />
+          <Inp label="E-posta" value={email} onChange={setEmail} placeholder="ornek@gmail.com" />
           <Inp label="Şifre" type="password" value={pass} onChange={setPass} placeholder="••••••" />
           <Btn onClick={handleLogin} disabled={loading}>{loading ? "Giriş yapılıyor..." : "Giriş Yap"}</Btn>
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, marginTop: 16 }}>
@@ -8188,8 +8180,9 @@ function LoginScreen({ pendingInvite, setPendingInvite }) {
           {orDivider}
           <Inp label="İsim Soyisim" value={name} onChange={setName} placeholder="İsim Soyisim" />
           <Inp label="E-posta" value={email} onChange={setEmail} placeholder="ornek@gmail.com" />
-          <div style={{ color: X.tm, fontSize: 11, marginBottom: 12, lineHeight: 1.5 }}>Bu adrese bir doğrulama linki gönderilecek. Gerçek bir e-posta adresi girin.</div>
-          <Btn onClick={handleRegister} disabled={loading}>{loading ? "Gönderiliyor..." : "E-posta ile Kayıt Ol"}</Btn>
+          <Inp label="Şifre" type="password" value={pass} onChange={setPass} placeholder="En az 6 karakter" />
+          <div style={{ color: X.tm, fontSize: 11, marginBottom: 12, lineHeight: 1.5 }}>E-postanıza bir doğrulama maili gönderilecek. Doğrulamadan giriş yapamazsınız.</div>
+          <Btn onClick={handleRegister} disabled={loading}>{loading ? "Kayıt yapılıyor..." : "E-posta ile Kayıt Ol"}</Btn>
           <div style={{ textAlign: "center", marginTop: 16 }}>
             <button onClick={() => { setMode("login"); setErr(""); }} style={{ background: "none", border: "none", color: X.b, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: ff }}>← Giriş Yap</button>
           </div>
@@ -8220,37 +8213,23 @@ function LoginScreen({ pendingInvite, setPendingInvite }) {
           </div>
         </>)}
 
-        {mode === "emailSent" && (<>
+        {mode === "verifyEmail" && (<>
           <div style={{ textAlign: "center", padding: "8px 0" }}>
             <div style={{ color: X.t, fontSize: 14, fontWeight: 700, marginBottom: 8 }}>Doğrulama e-postası gönderildi</div>
             <div style={{ color: X.tm, fontSize: 13, lineHeight: 1.6 }}>
-              <strong style={{ color: X.t }}>{email || invData?.email}</strong> adresine bir doğrulama linki gönderdik.
+              <strong style={{ color: X.t }}>{email}</strong> adresine bir doğrulama maili gönderdik.
             </div>
             <div style={{ background: X.bd, border: `1px solid ${X.b}`, borderRadius: 10, padding: 12, marginTop: 16, textAlign: "left" }}>
               <div style={{ color: X.b, fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Yapmanız gerekenler:</div>
               <div style={{ color: X.tm, fontSize: 12, lineHeight: 1.8 }}>
                 1. E-posta kutunuzu kontrol edin<br/>
                 2. Spam/gereksiz klasörünü de kontrol edin<br/>
-                3. Gelen linke tıklayın<br/>
-                4. Şifrenizi belirleyin
+                3. Gelen maildeki linke tıklayın<br/>
+                4. Buraya dönüp giriş yapın
               </div>
             </div>
-            <div style={{ color: X.td, fontSize: 11, marginTop: 12 }}>Link 1 saat geçerlidir.</div>
           </div>
-          <div style={{ textAlign: "center", marginTop: 16 }}>
-            <button onClick={() => { setMode("login"); setErr(""); setInvData(null); }} style={{ background: "none", border: "none", color: X.b, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: ff }}>← Giriş Ekranına Dön</button>
-          </div>
-        </>)}
-
-        {mode === "setPassword" && linkData && (<>
-          <div style={{ background: X.gd, border: `1px solid ${X.g}`, borderRadius: 10, padding: 12, marginBottom: 12, textAlign: "center" }}>
-            <div style={{ color: X.g, fontSize: 13, fontWeight: 700 }}>E-posta doğrulandı</div>
-            <div style={{ color: X.t, fontSize: 18, fontWeight: 800, marginTop: 4 }}>{linkData.name}</div>
-            <div style={{ color: X.tm, fontSize: 12, marginTop: 4 }}>{linkData.email}</div>
-          </div>
-          <div style={{ color: X.tm, fontSize: 12, marginBottom: 12, textAlign: "center", lineHeight: 1.5 }}>Sonraki girişleriniz için bir şifre belirleyin.</div>
-          <Inp label="Şifrenizi belirleyin" type="password" value={pass} onChange={setPass} placeholder="En az 6 karakter" />
-          <Btn onClick={handleSetPassword} disabled={loading} c={X.g}>{loading ? "Hesap oluşturuluyor..." : "Şifreyi Belirle ve Devam Et"}</Btn>
+          <Btn onClick={() => { setMode("login"); setErr(""); }} s={{ marginTop: 16 }}>Doğruladım, Giriş Yap</Btn>
         </>)}
       </div>
     </div>
@@ -8306,12 +8285,28 @@ export default function App() {
   // Kullanıcı giriş yaptığında: aile bilgisini kontrol et veya oluştur
   useEffect(() => {
     if (!user) { setFamily(null); setFamilyLoading(false); setLoaded(false); return; }
-    if (!redirectProcessed) return; // Google redirect sonucu bekleniyor
+    if (!redirectProcessed) { setFamilyLoading(true); return; } // Redirect sonucu bekleniyor — loading göster
     setFamilyLoading(true);
 
     (async () => {
       // Önce mevcut aile kaydını kontrol et
       let f = await getUserFamily(user.uid);
+
+      // Google kullanıcısı ailesi yoksa otomatik oluştur
+      if (!f && !pendingInvite && user.providerData?.some(p => p.providerId === "google.com")) {
+        const displayName = user.displayName || user.email.split("@")[0];
+        // Davet modu kontrolü (localStorage'da saklanmış olabilir)
+        const pendingGoogleInvite = localStorage.getItem("pendingGoogleInvite");
+        if (pendingGoogleInvite) {
+          try {
+            const { code } = JSON.parse(pendingGoogleInvite);
+            const inv = await lookupInvitation(code);
+            if (inv) f = await joinViaInvitation(user.uid, code, { ...inv, email: user.email });
+          } catch {}
+          localStorage.removeItem("pendingGoogleInvite");
+        }
+        if (!f) f = await createFamily(user.uid, user.email, displayName);
+      }
 
       // Aile kaydı yoksa ve pendingInvite varsa: yeni aile oluştur veya davete katıl
       if (!f && pendingInvite) {
@@ -8374,6 +8369,27 @@ export default function App() {
 
   if (authLoading || familyLoading) return <div style={{ background: _theme.gradientShort, height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: X.g, fontFamily: ff, fontSize: 16 }}>Yükleniyor...</div>;
   if (!user) return <LoginScreen pendingInvite={pendingInvite} setPendingInvite={setPendingInvite} />;
+
+  // Email doğrulanmamış kullanıcı (Google ile girenler zaten doğrulanmış, sadece email+şifre kayıt)
+  if (user && !user.emailVerified && user.providerData?.[0]?.providerId === "password") {
+    const pendingName = localStorage.getItem("pendingRegName");
+    return (
+      <div style={{ background: _theme.gradientShort, height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: ff, padding: 20 }}>
+        <div style={{ ...glassSolid, borderRadius: 20, maxWidth: 380, width: "100%", padding: 28, boxShadow: neu, textAlign: "center" }}>
+          <div style={{ fontSize: 40, marginBottom: 8 }}>📧</div>
+          <div style={{ color: X.t, fontSize: 18, fontWeight: 800, marginBottom: 8 }}>E-postanızı doğrulayın</div>
+          <div style={{ color: X.tm, fontSize: 13, lineHeight: 1.6, marginBottom: 16 }}>
+            <strong style={{ color: X.t }}>{user.email}</strong> adresine bir doğrulama maili gönderdik. Gelen maildeki linke tıklayarak hesabınızı doğrulayın.
+          </div>
+          <div style={{ color: X.td, fontSize: 11, marginBottom: 16 }}>Spam/gereksiz klasörünü de kontrol edin.</div>
+          <button onClick={async () => { await sendEmailVerification(user); alert("Doğrulama maili tekrar gönderildi."); }} style={{ background: X.gd, border: `1px solid ${X.g}`, borderRadius: 10, padding: "10px 16px", color: X.g, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: ff, width: "100%", marginBottom: 8 }}>Tekrar Gönder</button>
+          <button onClick={async () => { await user.reload(); if (auth.currentUser.emailVerified) { if (pendingName) { const existing = await getUserFamily(user.uid); if (!existing) await createFamily(user.uid, user.email, pendingName); localStorage.removeItem("pendingRegName"); } window.location.reload(); } else { alert("E-posta henüz doğrulanmadı. Lütfen mailinizi kontrol edin."); } }} style={{ background: X.g, border: "none", borderRadius: 10, padding: "12px 16px", color: "white", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: ff, width: "100%", marginBottom: 8 }}>Doğruladım, Devam Et</button>
+          <button onClick={() => signOut(auth)} style={{ background: "none", border: "none", color: X.td, fontSize: 12, cursor: "pointer", fontFamily: ff }}>Çıkış Yap</button>
+        </div>
+      </div>
+    );
+  }
+
   if (!family) return <div style={{ background: _theme.gradientShort, height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: X.tm, fontFamily: ff, fontSize: 14, padding: 20, textAlign: "center" }}>Aile kaydı bulunamadı. Lütfen çıkış yapıp yeniden kayıt olun veya davet koduyla giriş yapın.<br/><button onClick={() => signOut(auth)} style={{ marginTop: 16, background: X.rd, border: "none", borderRadius: 8, padding: "8px 20px", color: X.r, fontWeight: 700, cursor: "pointer" }}>Çıkış Yap</button></div>;
   if (!loaded) return <div style={{ background: _theme.gradientShort, height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: X.g, fontFamily: ff, fontSize: 16 }}>Veriler yükleniyor...</div>;
 
