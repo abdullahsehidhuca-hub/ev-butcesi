@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
 import * as Papa from "papaparse";
 import { initializeApp } from "firebase/app";
 import { getDatabase, ref, set, get, onValue } from "firebase/database";
-import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword } from "firebase/auth";
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
 
 // Firebase Config
 const firebaseConfig = {
@@ -8042,6 +8042,55 @@ function LoginScreen({ pendingInvite, setPendingInvite }) {
     setLoading(false);
   };
 
+  // Google ile giriş
+  const handleGoogleSignIn = async (inviteMode = false) => {
+    setLoading(true); setErr("");
+    try {
+      const provider = new GoogleAuthProvider();
+      const result = await signInWithPopup(auth, provider);
+      const u = result.user;
+      const displayName = u.displayName || u.email.split("@")[0];
+
+      // Mevcut aile kaydı var mı kontrol et
+      const existingFamily = await getUserFamily(u.uid);
+      if (existingFamily) {
+        // Zaten kayıtlı kullanıcı — direkt giriş
+        setLoading(false);
+        return;
+      }
+
+      // Davet moduyla mı geldi?
+      if (inviteMode && invData) {
+        await joinViaInvitation(u.uid, invCode, { ...invData, email: u.email, name: invData.name });
+      } else {
+        // Yeni kullanıcı — isim kontrolü
+        const existingName = await lookupName(displayName);
+        if (existingName && existingName.uid !== u.uid) {
+          // Bu isim başkasına ait — kullanıcıdan farklı isim iste
+          const newName = prompt(`"${displayName}" ismi zaten kayıtlı. Lütfen farklı bir isim girin:`);
+          if (newName && newName.trim()) {
+            await createFamily(u.uid, u.email, newName.trim());
+          } else {
+            await signOut(auth);
+            setErr("İsim belirlenmeden hesap oluşturulamaz.");
+            setLoading(false);
+            return;
+          }
+        } else {
+          await createFamily(u.uid, u.email, displayName);
+        }
+      }
+    } catch (e) {
+      if (e.code === "auth/popup-closed-by-user") { /* kullanıcı kapattı, hata gösterme */ }
+      else if (e.code === "auth/cancelled-popup-request") { /* birden fazla popup, yoksay */ }
+      else setErr(e.message);
+    }
+    setLoading(false);
+  };
+
+  const googleBtnStyle = { width: "100%", background: "white", border: "1px solid rgba(0,0,0,0.15)", borderRadius: 12, padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "center", gap: 10, cursor: "pointer", fontFamily: ff, fontSize: 14, fontWeight: 600, color: "#333", marginTop: 8 };
+  const orDivider = (<div style={{ display: "flex", alignItems: "center", gap: 12, margin: "16px 0" }}><div style={{ flex: 1, height: 1, background: "rgba(0,0,0,0.1)" }} /><span style={{ color: X.td, fontSize: 12 }}>veya</span><div style={{ flex: 1, height: 1, background: "rgba(0,0,0,0.1)" }} /></div>);
+
   const modeTitle = { login: "Giriş yap", register: "Yeni hesap oluştur", invite: "Davet ile katıl", emailSent: "E-posta gönderildi", setPassword: "Şifre belirleyin" };
 
   return (
@@ -8056,6 +8105,11 @@ function LoginScreen({ pendingInvite, setPendingInvite }) {
         {err && <div style={{ background: X.rd, border: `1px solid ${X.r}`, borderRadius: 10, padding: "8px 12px", marginBottom: 12, color: X.r, fontSize: 12, fontWeight: 600 }}>{err}</div>}
 
         {mode === "login" && (<>
+          <button onClick={() => handleGoogleSignIn(false)} disabled={loading} style={googleBtnStyle}>
+            <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+            {loading ? "Giriş yapılıyor..." : "Google ile Giriş"}
+          </button>
+          {orDivider}
           <Inp label="İsim Soyisim" value={name} onChange={setName} placeholder="İsim Soyisim" />
           <Inp label="Şifre" type="password" value={pass} onChange={setPass} placeholder="••••••" />
           <Btn onClick={handleLogin} disabled={loading}>{loading ? "Giriş yapılıyor..." : "Giriş Yap"}</Btn>
@@ -8066,10 +8120,15 @@ function LoginScreen({ pendingInvite, setPendingInvite }) {
         </>)}
 
         {mode === "register" && (<>
+          <button onClick={() => handleGoogleSignIn(false)} disabled={loading} style={googleBtnStyle}>
+            <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+            {loading ? "Kayıt yapılıyor..." : "Google ile Kayıt Ol"}
+          </button>
+          {orDivider}
           <Inp label="İsim Soyisim" value={name} onChange={setName} placeholder="İsim Soyisim" />
           <Inp label="E-posta" value={email} onChange={setEmail} placeholder="ornek@gmail.com" />
           <div style={{ color: X.tm, fontSize: 11, marginBottom: 12, lineHeight: 1.5 }}>Bu adrese bir doğrulama linki gönderilecek. Gerçek bir e-posta adresi girin.</div>
-          <Btn onClick={handleRegister} disabled={loading}>{loading ? "Gönderiliyor..." : "Doğrulama Linki Gönder"}</Btn>
+          <Btn onClick={handleRegister} disabled={loading}>{loading ? "Gönderiliyor..." : "E-posta ile Kayıt Ol"}</Btn>
           <div style={{ textAlign: "center", marginTop: 16 }}>
             <button onClick={() => { setMode("login"); setErr(""); }} style={{ background: "none", border: "none", color: X.b, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: ff }}>← Giriş Yap</button>
           </div>
@@ -8089,8 +8148,13 @@ function LoginScreen({ pendingInvite, setPendingInvite }) {
             <div style={{ color: X.t, fontSize: 18, fontWeight: 800, marginTop: 4 }}>{invData.name}</div>
             <div style={{ color: X.tm, fontSize: 12, marginTop: 4 }}>{invData.email}</div>
           </div>
-          <div style={{ color: X.tm, fontSize: 11, marginBottom: 12, lineHeight: 1.5 }}>Yukarıdaki e-posta adresine bir doğrulama linki göndereceğiz. Bu adrese erişiminiz olmalı.</div>
-          <Btn onClick={handleInviteSendLink} disabled={loading} c={X.g}>{loading ? "Gönderiliyor..." : "Doğrulama Linki Gönder"}</Btn>
+          <button onClick={() => handleGoogleSignIn(true)} disabled={loading} style={googleBtnStyle}>
+            <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+            {loading ? "Katılınıyor..." : "Google ile Katıl"}
+          </button>
+          {orDivider}
+          <div style={{ color: X.tm, fontSize: 11, marginBottom: 12, lineHeight: 1.5 }}>{invData.email} adresine bir doğrulama linki göndereceğiz.</div>
+          <Btn onClick={handleInviteSendLink} disabled={loading} c={X.g}>{loading ? "Gönderiliyor..." : "E-posta ile Katıl"}</Btn>
           <div style={{ textAlign: "center", marginTop: 16 }}>
             <button onClick={() => { setMode("invite"); setErr(""); setInvData(null); setInvCode(""); }} style={{ background: "none", border: "none", color: X.b, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: ff }}>← Farklı kod gir</button>
           </div>
