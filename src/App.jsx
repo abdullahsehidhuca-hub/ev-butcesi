@@ -8094,39 +8094,7 @@ function LoginScreen({ pendingInvite, setPendingInvite }) {
   // Google ile giriş — mobilde redirect, masaüstünde popup
   const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
-  // Redirect dönüşünü kontrol et (sayfa yüklendiğinde)
-  useEffect(() => {
-    getRedirectResult(auth).then(async result => {
-      if (!result) return;
-      const u = result.user;
-      const displayName = u.displayName || u.email.split("@")[0];
-      const existingFamily = await getUserFamily(u.uid);
-      if (existingFamily) return; // zaten kayıtlı
-
-      // Davet modu kontrolü (localStorage'da saklanmış olabilir)
-      const pendingGoogleInvite = localStorage.getItem("pendingGoogleInvite");
-      if (pendingGoogleInvite) {
-        try {
-          const { code, invData: inv } = JSON.parse(pendingGoogleInvite);
-          const freshInv = await lookupInvitation(code);
-          if (freshInv) await joinViaInvitation(u.uid, code, { ...freshInv, email: u.email });
-        } catch {}
-        localStorage.removeItem("pendingGoogleInvite");
-      } else {
-        const existingName = await lookupName(displayName);
-        if (existingName && existingName.uid !== u.uid) {
-          const newName = prompt(`"${displayName}" ismi zaten kayıtlı. Lütfen farklı bir isim girin:`);
-          if (newName && newName.trim()) {
-            await createFamily(u.uid, u.email, newName.trim());
-          } else {
-            await signOut(auth);
-          }
-        } else {
-          await createFamily(u.uid, u.email, displayName);
-        }
-      }
-    }).catch(() => {});
-  }, []);
+  // Google redirect sonucu App bileşeninde işleniyor (LoginScreen unmount olabilir)
 
   const handleGoogleSignIn = async (inviteMode = false) => {
     setLoading(true); setErr("");
@@ -8303,14 +8271,42 @@ export default function App() {
   applyTheme(data?.settings?.theme || "default");
   const _theme = THEMES[data?.settings?.theme] || THEMES.default;
 
+  const [redirectProcessed, setRedirectProcessed] = useState(false);
+
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, u => { setUser(u); setAuthLoading(false); });
     return unsub;
   }, []);
 
+  // Google redirect sonucunu işle (App seviyesinde — LoginScreen unmount olmuş olabilir)
+  useEffect(() => {
+    getRedirectResult(auth).then(async result => {
+      if (result && result.user) {
+        const u = result.user;
+        const existingFamily = await getUserFamily(u.uid);
+        if (!existingFamily) {
+          const displayName = u.displayName || u.email.split("@")[0];
+          const pendingGoogleInvite = localStorage.getItem("pendingGoogleInvite");
+          if (pendingGoogleInvite) {
+            try {
+              const { code } = JSON.parse(pendingGoogleInvite);
+              const inv = await lookupInvitation(code);
+              if (inv) await joinViaInvitation(u.uid, code, { ...inv, email: u.email });
+            } catch {}
+            localStorage.removeItem("pendingGoogleInvite");
+          } else {
+            await createFamily(u.uid, u.email, displayName);
+          }
+        }
+      }
+      setRedirectProcessed(true);
+    }).catch(() => setRedirectProcessed(true));
+  }, []);
+
   // Kullanıcı giriş yaptığında: aile bilgisini kontrol et veya oluştur
   useEffect(() => {
     if (!user) { setFamily(null); setFamilyLoading(false); setLoaded(false); return; }
+    if (!redirectProcessed) return; // Google redirect sonucu bekleniyor
     setFamilyLoading(true);
 
     (async () => {
@@ -8337,7 +8333,7 @@ export default function App() {
       setFamily(f);
       setFamilyLoading(false);
     })();
-  }, [user, pendingInvite]);
+  }, [user, pendingInvite, redirectProcessed]);
 
   useEffect(() => {
     if (!user || !family?.familyId) { setLoaded(false); return; }
