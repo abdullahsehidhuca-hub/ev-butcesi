@@ -1088,7 +1088,7 @@ const INFO = {
   ccInstall: { title: "Kredi Kartı Taksitli", text: "Kredi kartıyla taksitli yaptığınız harcamalarınızın toplam aylık taksit yükünü gösterir. Yeni bir taksitli alışveriş eklediğinizde, ilk taksit gelecek aydan itibaren bütçenize otomatik yansır.\n\nÖrnek: 30.000 ₺ × 6 taksit alırsanız, 6 ay boyunca her ay 5.000 ₺ bütçenizden düşülür." },
   cardLoad: { title: "Konfor Harcaması Kartı", text: "Dışarıda yemek, kafe, etkinlik, kıyafet gibi konfor harcamalarınız için kullandığınız banka kartı.\n\nAyarlar'dan belirlediğiniz limit kadar bu karta yükleme yapabilirsiniz. Harcama yaptıkça kalan tutar azalır.\n\nKredi kartı yerine banka kartıyla yapılan konfor harcamaları, bütçenizde anında görünür — ekstre sürprizi olmaz." },
   debt: { title: "Borç Ödemeleri", text: "Aktif borçlarınızın bu ay ödemeniz gereken toplam tutarını gösterir. Türk Lirası, dolar veya altın bazlı borçlarınız olabilir. Dolar ve altın borçları için güncel kur kullanılır.\n\nHer borç ödemesi yaptığınızda 'Ödedim' butonuna basarak teyit edersiniz, kalan taksit sayısı azalır." },
-  simulate: { title: "Taksit Simülasyonu", text: "Yeni bir taksitli alım yapmadan önce 'şu kadar X taksitle alırsam bütçem nasıl etkilenir' sorusunu test etmek için kullanılır.\n\nTutar ve taksit sayısını girin, 'Simüle Et' deyin. Uygulama gelecek 6-8 ayın bütçenizin durumunu hem mevcut hem de bu taksitli alımla birlikte gösterir. Güvenliyse 'Onayla ve Kaydet' diyerek doğrudan kredi kartı taksitli kısmına ekleyebilirsiniz." },
+  simulate: { title: "Taksit Simülasyonu", text: "Yeni bir taksitli alım yapmadan önce 'bu taksitle bütçem nasıl etkilenir?' sorusunu test etmek için kullanılır.\n\nTutar ve taksit sayısını girin, 'Simüle Et' deyin. Uygulama gelecek 6-8 ayın bütçe durumunu hem mevcut hem de bu taksitli alımla birlikte gösterir. Güvenliyse 'Onayla ve Kaydet' diyerek doğrudan taksit planına ekleyebilirsiniz." },
   savings: { title: "Birikim", text: "Bu ay bütçeden ne kadar birikim kalacağını gösterir.\n\nKalan Bütçe = Aylık Bütçe − Sabit Giderler − Borçlar − Genel Kart Limiti − Değişken Gider Tahmini − Beklenmeyen Gider Fonu\n\nBu tutar ay boyunca sabit kalır. Ay kapandığında kalan bütçe otomatik olarak TL birikim havuzuna eklenir.\n\nAcil tampon miktarını Ayarlar → Aylık Bütçe bölümünden değiştirebilirsiniz." },
   fixed: { title: "Sabit Zorunlu Giderler", text: "Her ay sabit ve zorunlu olarak ödenen giderler. Kira, aidat, ev yardımcısı, burslar, sabit destek tutarları gibi.\n\nBu giderlerin tutarları belirli ve değişmez. Artış tarihleri tanımlanmışsa uygulama o tarih yaklaştığında uyarı verir. Her birini ödediğinizde 'Ödedim' butonuyla teyit edersiniz." },
   variable: { title: "Değişken Zorunlu Giderler", text: "Her ay ödemek zorunda olduğunuz ama tutarı değişen giderler. Elektrik, su, doğalgaz, internet, telefon, akaryakıt, yemek kartı yüklemesi gibi.\n\nHer kalem için bir 'beklenen tutar' belirlersiniz. Eğer girdiğiniz tutar beklenen tutarın %10'undan fazla aşarsa uygulama uyarı verir — böylece anormal faturaları erken yakalarsınız." },
@@ -4058,12 +4058,12 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
         const xRatioOfBudget = c.effectiveBudget > 0 ? c.remainingX / c.effectiveBudget : 0;
         const f1Status = c.remainingX < 0 ? "alarm" : xRatioOfBudget < 0.05 ? "alarm" : xRatioOfBudget < 0.15 ? "dikkat" : "guvenli";
         const f1Desc = c.remainingX < 0
-          ? `X = ${C(c.remainingX)} — bütçe açık veriyor. Bekleyen ödemeler bankadaki parayı aşıyor.`
+          ? `${C(c.remainingX)} — bütçe açık veriyor. Bekleyen ödemeler bankadaki parayı aşıyor.`
           : xRatioOfBudget < 0.05
-          ? `X = ${C(c.remainingX)} — bütçenin yalnızca %${Math.round(xRatioOfBudget*100)}'i kaldı. Kritik düşük.`
+          ? `Kullanılabilir bütçe ${C(c.remainingX)} — bütçenin yalnızca %${Math.round(xRatioOfBudget*100)}'i kaldı. Kritik düşük.`
           : xRatioOfBudget < 0.15
-          ? `X = ${C(c.remainingX)} — bütçenin %${Math.round(xRatioOfBudget*100)}'i kaldı. Manevra alanı dar.`
-          : `X = ${C(c.remainingX)} — bütçenin %${Math.round(xRatioOfBudget*100)}'i kaldı. Sağlıklı seviye.`;
+          ? `Kullanılabilir bütçe ${C(c.remainingX)} — bütçenin %${Math.round(xRatioOfBudget*100)}'i kaldı. Manevra alanı dar.`
+          : `Kullanılabilir bütçe ${C(c.remainingX)} — bütçenin %${Math.round(xRatioOfBudget*100)}'i kaldı. Sağlıklı seviye.`;
         const f1Oneri = c.remainingX < 0
           ? "Acil: hangi bekleyen ödemeleri erteleyebileceğinizi değerlendirin. Yeni harcama kesinlikle yapmayın."
           : xRatioOfBudget < 0.15
@@ -4073,12 +4073,12 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
         // F2: X < değişken kalan tahmin
         const f2Status = c.remainingX < variableBlokeKalan ? "alarm" : c.remainingX < variableBlokeKalan * 1.3 ? "dikkat" : "guvenli";
         const f2Desc = f2Status === "alarm"
-          ? `Kalan X (${C(c.remainingX)}) bu ayın kalan değişken gider tahminini (${C(variableBlokeKalan)}) karşılamıyor. Fark: ${C(variableBlokeKalan - c.remainingX)}.`
+          ? `Kullanılabilir bütçe (${C(c.remainingX)}) bu ayın kalan değişken gider tahminini (${C(variableBlokeKalan)}) karşılamıyor. Fark: ${C(variableBlokeKalan - c.remainingX)}.`
           : f2Status === "dikkat"
-          ? `X (${C(c.remainingX)}) değişken tahmine (${C(variableBlokeKalan)}) yakın. Tampon çok ince.`
-          : `X (${C(c.remainingX)}), kalan değişken tahminin (${C(variableBlokeKalan)}) ${Math.round((c.remainingX/Math.max(variableBlokeKalan,1)-1)*100)}% üzerinde. Yeterli tampon var.`;
+          ? `Kullanılabilir bütçe (${C(c.remainingX)}) değişken tahmine (${C(variableBlokeKalan)}) yakın. Tampon çok ince.`
+          : `Kullanılabilir bütçe (${C(c.remainingX)}), kalan değişken tahminin (${C(variableBlokeKalan)}) ${Math.round((c.remainingX/Math.max(variableBlokeKalan,1)-1)*100)}% üzerinde. Yeterli tampon var.`;
         const f2Oneri = f2Status === "alarm"
-          ? `Değişken giderlerde ${C(variableBlokeKalan - c.remainingX)} tasarruf yapılmalı. Market ve akaryakıt harcamalarını ertelenebilecek kadar kısın.`
+          ? `Değişken giderlerde ${C(variableBlokeKalan - c.remainingX)} tasarruf yapılmalı. Market ve akaryakıt harcamalarını kısın.`
           : f2Status === "dikkat" ? "Bu ay büyük beklenmedik harcama yapmaktan kaçının." : null;
 
         // F3: 12 ay sürdürülebilirlik — daha anlamlı bağlam
@@ -4143,7 +4143,7 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
         const f7Oneri = bRatio > 0.85
           ? "Likidite riski yüksek. Ödemeler tamamlandığında rahatlar, ama bu süreçte yeni harcama yapmayın."
           : bRatio > 0.65
-          ? "Bekleyen ödemelerin çoğu tamamlanınca X düzelecek. Sabırlı olun."
+          ? "Bekleyen ödemelerin çoğu tamamlanınca kullanılabilir bütçe düzelecek."
           : null;
 
         const factors = [
@@ -4493,7 +4493,7 @@ KURALLAR:
 - Olmayan veriyi UYDURMA
 - Geçmiş dönem yoksa karşılaştırma yapma, "ilk dönem" olduğunu belirt
 - MADDE MADDE yaz, paragraf değil — her başlık altında kısa maddeler
-- ÇİFT SAYMA YAPMA: Bloke (B) içinde olan kalemleri X'ten tekrar düşme. X zaten net rakamdır.
+- ÇİFT SAYMA YAPMA: Bloke içinde olan kalemleri kullanılabilir bütçeden tekrar düşme. Kullanılabilir bütçe zaten net rakamdır.
 - Setcard/Multinet tutarları KK tek çekim içinde zaten sayılıdır — ayrı ek harcama DEĞİLDİR.
 - Market fişleri mevcut KK veya hesap hareketlerinin detayıdır — ayrı ek harcama DEĞİLDİR.
 
@@ -4507,10 +4507,10 @@ GELİR YAPISI:
 ${(() => { const ie = (data.months[mk] || {}).incomeEntries || []; return ie.length > 0 ? ie.map(e => `  ${e.name || "Gelir"}: ${C(e.amount)}${e.date ? " (" + e.date + ")" : ""}`).join("\n") + `\n  TOPLAM: ${C(c.effectiveBudget)}` : `  Tek gelir: ${C(c.effectiveBudget)}`; })()}
 
 BÜTÇE YAPISI (ÖNEMLİ — çift sayma yapma!):
-- Bütçe: ${C(c.effectiveBudget)} | Bankada (Y): ${C(c.remainingY)} | Bloke (B): ${C(c.groupB)} | Kullanılabilir (X): ${C(c.remainingX)}
-- FORMÜL: X = Bütçe − B (bloke) − yapılan harcamalar. X zaten net kullanılabilir paradır.
-- B (bloke) şunları İÇERİR: aktarılmamış KK ödemeleri, ödenmemiş sabit giderler, taksitler, borç ödemeleri, değişken gider tahmini, beklenmeyen gider fonu. Bunlar X'ten ZATEN düşülmüştür.
-- Aktarılmamış KK ödemeleri hesaba aktarıldığında X DEĞİŞMEZ — sadece B azalır, Y azalır, net etki sıfır.
+- Bütçe: ${C(c.effectiveBudget)} | Bankadaki tutar: ${C(c.remainingY)} | Bloke: ${C(c.groupB)} | Kullanılabilir bütçe: ${C(c.remainingX)}
+- FORMÜL: Kullanılabilir bütçe = Bütçe − Bloke − yapılan harcamalar. Kullanılabilir bütçe zaten net paradır.
+- Bloke şunları İÇERİR: aktarılmamış KK ödemeleri, ödenmemiş sabit giderler, taksitler, borç ödemeleri, değişken gider tahmini, beklenmeyen gider fonu. Bunlar kullanılabilir bütçeden ZATEN düşülmüştür.
+- Aktarılmamış KK ödemeleri hesaba aktarıldığında kullanılabilir bütçe DEĞİŞMEZ — sadece bloke azalır, bankadaki tutar azalır, net etki sıfır.
 - Sabit giderler bütçenin %${fixedRatioPct}'i | Yaklaşan artış: ${upcomingIncreaseCount} kalem
 
 HARCAMA HIZI:
@@ -4529,7 +4529,7 @@ ${accEntries || "  Kayıt yok"}
 KREDİ KARTI TEK ÇEKİM:
 ${ccEntries || "  Kayıt yok"}
 
-AKTARILMAMIŞ KK (henüz hesaba geçmedi — NOT: bunlar B blokeye dahil, X'ten zaten düşülmüş):
+AKTARILMAMIŞ KK (henüz hesaba geçmedi — NOT: bunlar blokeye dahil, kullanılabilir bütçeden zaten düşülmüş):
 ${untransferredLines || "  Tümü aktarıldı"}
 ${receiptLines.length > 0 ? "\nMARKET FİŞİ (NOT: bu tutarlar KK/hesap hareketlerinde zaten sayılıdır, ayrı ek harcama DEĞİLDİR):" + receiptLines.join("\n") : "\nMARKET FİŞİ: Yok"}
 ${receiptAnalytics}
@@ -4548,7 +4548,7 @@ ${eventLines || "  Planlanmış etkinlik yok"}
 GELECEK 3 AY ZORUNLU YÜK PROJEKSİYONU:
 ${futureLoadLines}
 
-BEKLEYEN ÖDEMELER (NOT: bunlar da B blokeye dahil, X'ten zaten düşülmüş):
+BEKLEYEN ÖDEMELER (NOT: bunlar da blokeye dahil, kullanılabilir bütçeden zaten düşülmüş):
 ${data.settings.fixedExpenses.filter(e => !data.months[mk]?.fixedPaid?.[e.id]).map(e => `  ${e.name}: ${C(e.amount)} — ${e.paymentDay || "?"}. günde`).join("\n") || "  Tümü ödendi"}
 
 GÖREV — sen bir finans DANIŞMANISIN, muhasebeci değilsin. Kullanıcı sayıları zaten uygulamadan görüyor. Sen sayıları tekrarlama, YORUM ve TAVSİYE ver. Her başlık altında kısa, somut, rakamsal maddeler yaz:
@@ -4560,7 +4560,7 @@ GÖREV — sen bir finans DANIŞMANISIN, muhasebeci değilsin. Kullanıcı sayı
 
 ## Dikkat Noktaları
 - Bu dönemde gözden kaçan bir risk var mı? (örn: ay sonu yığılma, fon tükenme, kur riski)
-- Y (bankadaki para) aktarımları karşılamaya yeterli mi?
+- Bankadaki para aktarımları karşılamaya yeterli mi?
 ${goldRiskLine ? "- Altın borcu kur hareketinden nasıl etkilenir?" : ""}
 
 ## İleriye Bakış
@@ -7281,7 +7281,7 @@ function Settings({ data, setData, isAdmin, family, mk }) {
   if (sec === "howto") {
     const sections = [
       { icon: "🏠", title: "Güncel Durum", items: [
-        { q: "Bütçe özeti ne gösteriyor?", a: "Aylık bütçenizden sabit giderler, taksitler ve borçlar düşüldükten sonra kalan kullanılabilir paranızı (X) gösterir. Y bankadaki para, B bloke edilen paradır." },
+        { q: "Bütçe özeti ne gösteriyor?", a: "Aylık bütçenizden sabit giderler, taksitler ve borçlar düşüldükten sonra kalan kullanılabilir paranızı gösterir. Bankadaki tutar gerçek bakiyenizi, bloke tutar ise henüz çıkmamış kesin ödemeleri temsil eder." },
         { q: "Sabit gider ödemesini nasıl işaretlerim?", a: "Güncel Durum'da sabit giderler listesinden ödeme butonuna basın. Ödenen kalemler yeşile döner." },
         { q: "Kredi kartı harcaması nasıl giriyorum?", a: "Tek çekim için 'KK Tek Çekim', taksitli alışveriş için 'Taksit' butonunu kullanın. Harcamayı karta aktarmayı unutmayın." },
         { q: "Harcama fişi nasıl çalışıyor?", a: "📷 butonuyla fişin fotoğrafını çekin. AI otomatik analiz eder: mağaza adı, ürünler, fiyatlar ve kategoriler çıkarılır. Sonucu onaylayıp kaydedersiniz." },
@@ -7303,7 +7303,7 @@ function Settings({ data, setData, isAdmin, family, mk }) {
         { q: "Yedekleme nasıl çalışır?", a: "Verileriniz otomatik olarak her gün buluta yedeklenir (son 7 gün saklanır). Ayarlar → Yedekleme'den manuel yedek alabilir veya eski yedeğe dönebilirsiniz." },
       ]},
       { icon: "💡", title: "İpuçları", items: [
-        { q: "X, Y, B ne demek?", a: "X = kullanılabilir para (harcayabileceğiniz), Y = bankadaki toplam para, B = bloke tutar (taksit, borç, sabit giderler için ayrılmış). X = Y − B formülüyle hesaplanır." },
+        { q: "Bütçe terimleri ne anlama geliyor?", a: "Kullanılabilir bütçe: harcayabileceğiniz net para. Bankadaki tutar: hesabınızdaki gerçek bakiye. Bloke tutar: taksit, borç ve sabit giderler için ayrılmış para. Kullanılabilir bütçe = Bankadaki tutar − Bloke tutar formülüyle hesaplanır." },
         { q: "Dönem nedir?", a: "Bütçe döngünüz maaş gününden bir sonraki maaş gününe kadardır. Örneğin maaş 15'inde yatıyorsa dönem 15 Nisan – 14 Mayıs'tır." },
         { q: "KK aktarımı neden önemli?", a: "Kredi kartıyla yaptığınız harcamalar bankadan otomatik çıkmaz. Aktarım işaretlediğinizde uygulama o tutarı 'ödenmiş' sayar ve blokeden düşer." },
       ]},
