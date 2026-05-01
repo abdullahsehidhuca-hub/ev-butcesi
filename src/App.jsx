@@ -8050,9 +8050,11 @@ function LoginScreen({ pendingInvite, setPendingInvite }) {
     if (!pass || pass.length < 6) { setErr("Şifre en az 6 karakter olmalı"); return; }
     setLoading(true); setErr("");
     try {
-      const result = await createUserWithEmailAndPassword(auth, invData.email, pass);
-      await joinViaInvitation(result.user.uid, invCode, invData);
+      // pendingInvite'ı ÖNCE set et — hesap oluşunca family useEffect bunu kullanacak
+      setPendingInvite({ type: "invite", code: invCode, invData });
+      await createUserWithEmailAndPassword(auth, invData.email, pass);
     } catch (e) {
+      setPendingInvite(null);
       if (e.code === "auth/email-already-in-use") setErr("Bu e-posta zaten kayıtlı. Google ile katılmayı deneyin.");
       else setErr(e.message);
     }
@@ -8153,7 +8155,8 @@ function LoginScreen({ pendingInvite, setPendingInvite }) {
       if (existingFamily) { setLoading(false); return; }
 
       if (inviteMode && invData) {
-        await joinViaInvitation(u.uid, invCode, { ...invData, email: u.email, name: invData.name });
+        const freshInv = await lookupInvitation(invCode);
+        if (freshInv) await joinViaInvitation(u.uid, invCode, { ...freshInv, email: u.email });
         localStorage.removeItem("pendingGoogleInvite");
       } else {
         const existingName = await lookupName(displayName);
@@ -8334,7 +8337,7 @@ export default function App() {
       setFamily(f);
       setFamilyLoading(false);
     })();
-  }, [user]);
+  }, [user, pendingInvite]);
 
   useEffect(() => {
     if (!user || !family?.familyId) { setLoaded(false); return; }
