@@ -689,7 +689,7 @@ function calcMonth(data, m, extraInst) {
   const envelopeOverflow = Math.max(0, categorizedTotal - variableEstimate);
   const unpaidFixed = data.settings.fixedExpenses.filter(e => !md.fixedPaid?.[e.id]).reduce((s, e) => s + e.amount, 0);
 
-  return { effectiveBudget, baseBudget, carryoverDeficit, fixedTotal, variableTotal, ccSingleTotal, accountTotal, installmentTotal, debtTotal, cardLoaded, cardLoadMaxPerTx, cardLoadMaxTotal, cardLoadRemaining, availableForCard, totalSpent, remaining, remainingX, remainingY, savingsTarget, expectedCCSingle, ccTransferNeeded, expectedVariable, pendingVariable, variableEstimate, categorizedCC, uncategorizedCC, envelopeRemaining, envelopeOverflow, emergencyBuffer, cardUsable, generalCardBudget, bloke, groupA, groupB, groupC, unpaidFixed, unpaidFixedAcc, untransferredCC, untransferredFixedCC, untransferredAcc, cardBlokeKalan, variableBlokeKalan, transferredAcc, paidFixedAcc, transferredCC, transferredFixedCC, eventKumbaraBloke };
+  return { effectiveBudget, baseBudget, carryoverDeficit, fixedTotal, variableTotal, ccSingleTotal, accountTotal, installmentTotal, debtTotal, cardLoaded, cardLoadMaxPerTx, cardLoadMaxTotal, cardLoadRemaining, availableForCard, totalSpent, remaining, remainingX, remainingY, savingsTarget, expectedCCSingle, ccTransferNeeded, expectedVariable, pendingVariable, variableEstimate, categorizedCC, uncategorizedCC, envelopeRemaining, envelopeOverflow, emergencyBuffer, cardUsable, generalCardBudget, bloke, groupA, groupB, groupC, unpaidFixed, unpaidFixedAcc, untransferredCC, untransferredFixedCC, untransferredAcc, cardBlokeKalan, variableBlokeKalan, transferredAcc, paidFixedAcc, transferredCC, transferredFixedCC, eventKumbaraBloke, untransferredInst };
 }
 function calcFlat(data, m, extraInst) {
   const md = data.months[m] || DM();
@@ -3500,7 +3500,7 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
     const file = e.target.files?.[0]; if (!file) return;
     if (!csvCardId) { alert("Önce hangi karta ait olduğunu seçin"); return; }
     Papa.parse(file, {
-      header: true, skipEmptyLines: true, complete: r => {
+      header: true, skipEmptyLines: true, encoding: "UTF-8", error: err => { alert("Dosya okunamadı: " + (err?.message || "Bilinmeyen hata")); e.target.value = ""; }, complete: r => {
         const ves = data.settings.variableExpenses || [];
         const md = data.months[mk] || DM();
         const ccEntries = (md.ccSingle || []).filter(e2 => e2.cardId === csvCardId);
@@ -4897,7 +4897,7 @@ ${goldRiskLine ? "- Altın borcu kur hareketinden nasıl etkilenir?" : ""}
                       <Sel label="Hangi Kartın Ekstresi?" value={csvCardId} onChange={setCsvCardId} options={[{ v: "", l: "— Seçin —" }, ...cards.map(c2 => ({ v: c2.id, l: c2.name }))]} />
                       <label style={{ display: "block", textAlign: "center" }}>
                         <span style={{ display: "inline-block", background: csvCardId ? X.g : X.td, color: "#000", borderRadius: 10, padding: "12px 24px", fontSize: 14, fontWeight: 700, cursor: csvCardId ? "pointer" : "not-allowed" }}>📂 CSV Dosyası Yükle</span>
-                        <input type="file" accept=".csv" onChange={handleCSV} disabled={!csvCardId} style={{ display: "none" }} />
+                        <input type="file" accept=".csv,text/csv" onChange={handleCSV} disabled={!csvCardId} style={{ position: "absolute", width: 0, height: 0, opacity: 0, overflow: "hidden" }} />
                       </label>
                     </>
                   )}
@@ -7510,7 +7510,7 @@ function FixedSettings({ data, setData, onBack }) {
   );
 
   return (
-    <div style={{ padding: "20px 16px 90px", flex: 1, overflow: "auto", WebkitOverflowScrolling: "touch" }}>
+    <div style={{ padding: "20px 16px 90px", flex: 1, overflow: "auto", WebkitOverflowScrolling: "touch", minHeight: 0 }}>
       <button onClick={onBack} style={{ background: "none", border: "none", color: X.g, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff, padding: 0, marginBottom: 16 }}>← Geri</button>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
         <h3 style={{ color: X.t, fontSize: 16, margin: 0 }}>🔒 Sabit Giderler</h3>
@@ -7593,7 +7593,7 @@ function VariableSettings({ data, setData, onBack }) {
   );
 
   return (
-    <div style={{ padding: "20px 16px 90px", flex: 1, overflow: "auto", WebkitOverflowScrolling: "touch" }}>
+    <div style={{ padding: "20px 16px 90px", flex: 1, overflow: "auto", WebkitOverflowScrolling: "touch", minHeight: 0 }}>
       <button onClick={onBack} style={{ background: "none", border: "none", color: X.g, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff, padding: 0, marginBottom: 16 }}>← Geri</button>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
         <h3 style={{ color: X.t, fontSize: 16, margin: 0 }}>🔄 Harcama Kategorileri</h3>
@@ -8518,11 +8518,7 @@ export default function App() {
       { label: "Aktarılmamış sabit Kredi Kartı ödemeleri", value: c.untransferredFixedCC || 0, sign: "" },
       { label: "Aktarılmamış hesaptan ödemeler", value: c.untransferredAcc || 0, sign: "" },
       { label: "Borç ödemeleri", value: c.debtTotal || 0, sign: "" },
-      { label: "Taksit ödemeleri", value: c.installmentTotal || 0, sign: "" },
-      { label: "Değişken gider kalan tahmini", value: c.variableBlokeKalan || 0, sign: "" },
-      { label: "Konfor kartı kalan hakkı", value: c.cardBlokeKalan || 0, sign: "" },
-      { label: "Beklenmeyen Gider Fonu", value: c.emergencyBuffer || 0, sign: "" },
-      { label: "Etkinlik kumbara bloke", value: c.eventKumbaraBloke || 0, sign: "" },
+      { label: "Aktarılmamış taksit ödemeleri", value: c.untransferredInst || 0, sign: "" },
     ].filter(r => r.value > 0);
     setHeaderDetail({ title: "Bloke Detayı", rows, total: c.groupB || 0, totalLabel: "Toplam bloke (kesin çıkacak ödemeler)", totalColor: X.w });
   };
