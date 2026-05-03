@@ -1161,7 +1161,7 @@ function CCSingleModal({ cards, variableExpenses, onClose, onSave }) {
         <Sel label="Hangi Kart" value={cardId} onChange={setCardId} options={cards.map(c => ({ v: c.id, l: c.name }))} />
       )}
       <Inp label="Tutar" type="number" value={a} onChange={sa} suffix="₺" />
-      <Inp label="Harcama Açıklaması" value={n} onChange={sn} placeholder="Örn: Shell Çumra, File market" />
+      <Inp label="Harcama Açıklaması" value={n} onChange={sn} placeholder="Örn: Akaryakıt, Market alışverişi" />
       {(variableExpenses || []).length > 0 && (
         <Sel label="Kategori" value={categoryId} onChange={handleCategoryChange} options={[{ v: "", l: "— Otomatik / Kategorisiz —" }, ...(variableExpenses || []).map(ve => ({ v: ve.id, l: (ve.icon || "📋") + " " + ve.name }))]} />
       )}
@@ -2184,7 +2184,7 @@ function CCCombinedModal({ data, mk, cards, variableExpenses, ccSingleEntries, o
             ? <div style={{ color: X.w, fontSize: 13, marginBottom: 12, padding: 10, background: X.wd, borderRadius: 8 }}>⚠️ Önce Ayarlar → Kartlarım'dan en az bir kart eklemelisiniz.</div>
             : <Sel label="Hangi Kart" value={cardId} onChange={setCardId} options={cards.map(c => ({ v: c.id, l: c.name }))} />}
           <Inp label="Tutar" type="number" value={a} onChange={sa} suffix="₺" />
-          <Inp label="Harcama Açıklaması" value={n} onChange={sn} placeholder="Örn: Shell Çumra, File market" />
+          <Inp label="Harcama Açıklaması" value={n} onChange={sn} placeholder="Örn: Akaryakıt, Market alışverişi" />
           {(variableExpenses || []).length > 0 && (
             <Sel label="Kategori" value={categoryId} onChange={v => { setCategoryId(v); setUserChanged(true); }} options={[{ v: "", l: "— Otomatik / Kategorisiz —" }, ...(variableExpenses || []).map(ve => ({ v: ve.id, l: (ve.icon || "📋") + " " + ve.name }))]} />
           )}
@@ -6407,52 +6407,67 @@ function OnboardingWizard({ data, setData, familyName }) {
   const [fixedName, setFixedName] = useState("");
   const [fixedAmount, setFixedAmount] = useState("");
   const [fixedMethod, setFixedMethod] = useState("account");
+  const [fixedBillType, setFixedBillType] = useState(null);
+  const [fixedBillOwner, setFixedBillOwner] = useState("");
+  const [fixedBillPayDay, setFixedBillPayDay] = useState("");
   const [cards, setCards] = useState([]);
   const [cardName, setCardName] = useState("");
   const [cardType, setCardType] = useState("credit");
   const [cardLimit, setCardLimit] = useState("");
+  const [cardCutoff, setCardCutoff] = useState("");
   const [ccMode, setCcMode] = useState("instant");
   const [fixedIcon, setFixedIcon] = useState("📋");
   const [catList, setCatList] = useState([]);
   const [catName, setCatName] = useState("");
   const [catIcon, setCatIcon] = useState("📋");
   const [catAmount, setCatAmount] = useState("");
+  const [catKeywords, setCatKeywords] = useState("");
+  const [catDefaultKw, setCatDefaultKw] = useState([]);
 
   const totalSteps = 8;
   const inpS = { width: "100%", background: "white", border: "1px solid rgba(0,0,0,0.10)", borderRadius: 10, padding: "10px 12px", fontSize: 14, color: "#141008", boxSizing: "border-box", fontFamily: ff };
   const lblS = { color: "#5A5045", fontSize: 12, marginBottom: 4, fontWeight: 600, display: "block" };
-  const hintS = { color: "#5A5045", fontSize: 12, marginTop: 10, lineHeight: 1.6, background: "rgba(180,83,9,0.06)", border: "1px solid rgba(180,83,9,0.15)", borderRadius: 10, padding: "10px 12px" };
+  const hintS = { color: "#3D352E", fontSize: 14, marginTop: 10, lineHeight: 1.6, background: "rgba(180,83,9,0.15)", border: "2px solid rgba(180,83,9,0.35)", borderRadius: 12, padding: "12px 14px", fontWeight: 500 };
 
   const fixedIcons = ["🏠", "🔥", "⚡", "💧", "🌐", "📱", "🛡️", "🏢", "📚", "🏥", "🚗", "👶", "🐾", "📺", "🔧", "🛒", "💊", "🎓", "🏋️", "✈️", "👗", "🎵", "📋"];
   const catIcons = ["🛒", "⛽", "📚", "🏥", "👗", "🍽️", "☕", "🎬", "🏋️", "✈️", "👶", "🐾", "💊", "🔧", "📱", "🚗", "🎁", "💇", "🧹", "📋"];
 
+  const billSubTypes = [
+    { id: "telefon", name: "Telefon Faturası", icon: "📱" },
+    { id: "internet", name: "İnternet", icon: "🌐" },
+    { id: "dijital", name: "Dijital Abonelik", icon: "📺" },
+  ];
   const addFixed = () => {
-    if (!fixedName || !fixedAmount) return;
-    setFixedList(l => [...l, { id: uid(), name: fixedName, icon: fixedIcon, amount: parseFloat(fixedAmount) || 0, paymentMethod: fixedMethod, autoPayment: false }]);
-    setFixedName(""); setFixedAmount(""); setFixedMethod("account"); setFixedIcon("📋");
+    const name = fixedBillType ? (fixedBillOwner.trim() ? `${fixedBillOwner.trim()} ${fixedBillType.name}` : fixedBillType.name) : fixedName;
+    if (!name || !fixedAmount) return;
+    const icon = fixedBillType ? fixedBillType.icon : fixedIcon;
+    setFixedList(l => [...l, { id: uid(), name, icon, amount: parseFloat(fixedAmount) || 0, paymentMethod: fixedMethod, autoPayment: false, ...(fixedBillType ? { billType: fixedBillType.id } : {}), ...(fixedBillPayDay ? { paymentDay: parseInt(fixedBillPayDay) } : {}) }]);
+    setFixedName(""); setFixedAmount(""); setFixedMethod("account"); setFixedIcon("📋"); setFixedBillType(null); setFixedBillOwner(""); setFixedBillPayDay("");
   };
   const removeFixed = id => setFixedList(l => l.filter(x => x.id !== id));
 
   const addCat = () => {
     if (!catName) return;
-    setCatList(l => [...l, { id: uid(), name: catName, icon: catIcon, expectedAmount: parseFloat(catAmount) || 0, keywords: [] }]);
-    setCatName(""); setCatIcon("📋"); setCatAmount("");
+    const kws = catKeywords.trim() ? catKeywords.split(",").map(k => k.trim()).filter(k => k.length > 0) : [...catDefaultKw];
+    setCatList(l => [...l, { id: uid(), name: catName, icon: catIcon, expectedAmount: parseFloat(catAmount) || 0, keywords: kws }]);
+    setCatName(""); setCatIcon("📋"); setCatAmount(""); setCatKeywords(""); setCatDefaultKw([]);
   };
   const removeCat = id => setCatList(l => l.filter(x => x.id !== id));
 
   const addCard = () => {
     if (!cardName) return;
-    setCards(c => [...c, { id: uid(), name: cardName, type: cardType, monthlyLimit: cardType === "debit" ? (parseFloat(cardLimit) || 0) : 0 }]);
-    setCardName(""); setCardType("credit"); setCardLimit("");
+    setCards(c => [...c, { id: uid(), name: cardName, type: cardType, monthlyLimit: cardType === "debit" ? (parseFloat(cardLimit) || 0) : 0, ...(cardType === "credit" && cardCutoff ? { cutoffDay: parseInt(cardCutoff) } : {}) }]);
+    setCardName(""); setCardType("credit"); setCardLimit(""); setCardCutoff("");
   };
   const removeCard = id => setCards(c => c.filter(x => x.id !== id));
 
+  const parseBudget = v => parseFloat(String(v).replace(/\./g, "").replace(",", ".")) || 0;
   const finish = () => {
     setData(d => ({
       ...d,
       settings: {
         ...d.settings,
-        monthlyBudget: parseFloat(budget) || 0,
+        monthlyBudget: parseBudget(budget),
         payDay: parseInt(payDay) || 15,
         ccPaymentMode: ccMode,
         fixedExpenses: [...(d.settings.fixedExpenses || []), ...fixedList],
@@ -6464,19 +6479,17 @@ function OnboardingWizard({ data, setData, familyName }) {
   };
 
   const canNext = () => {
-    if (step === 3) return parseFloat(budget) > 0;
+    if (step === 3) return parseBudget(budget) > 0;
     return true;
   };
 
   const suggestedFixed = [
     { name: "Kira", icon: "🏠" },
     { name: "Aidat", icon: "🏢" },
-    { name: "İnternet", icon: "🌐" },
-    { name: "Telefon Hattı", icon: "📱" },
-    { name: "Sigorta", icon: "🛡️" },
     { name: "Eğitim Taksidi", icon: "🎓" },
+    { name: "Burs Yardımı", icon: "📚" },
+    { name: "Sadaka Payı", icon: "🤲" },
     { name: "Spor Salonu", icon: "🏋️" },
-    { name: "Abonelik", icon: "📺" },
   ];
 
   return (
@@ -6511,15 +6524,14 @@ function OnboardingWizard({ data, setData, familyName }) {
             <div style={{ fontSize: 28, marginBottom: 8 }}>📅</div>
             <div style={{ color: "#141008", fontSize: 16, fontWeight: 800, marginBottom: 4 }}>Maaş gününüz</div>
             <div style={{ color: "#3D352E", fontSize: 13, marginBottom: 12, lineHeight: 1.5 }}>Maaşınız her ayın kaçında yatıyor? Bütçe döngünüz bu güne göre hesaplanır.</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginBottom: 10 }}>
-              {["1", "15", "25"].map(d => (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6, marginBottom: 10 }}>
+              {["1", "5", "10", "15", "20", "25", "30"].map(d => (
                 <button key={d} onClick={() => setPayDay(d)} style={{ background: payDay === d ? X.g : "white", border: `2px solid ${payDay === d ? X.g : "rgba(0,0,0,0.08)"}`, borderRadius: 10, padding: "10px", color: payDay === d ? "white" : "#141008", fontSize: 16, fontWeight: 800, cursor: "pointer", fontFamily: ff }}>
                   {d}
                 </button>
               ))}
+              <input type="number" value={!["1", "5", "10", "15", "20", "25", "30"].includes(payDay) ? payDay : ""} onChange={e => setPayDay(e.target.value)} placeholder="Diğer" style={{ ...inpS, textAlign: "center", fontWeight: 800, fontSize: 16, padding: "10px 6px" }} />
             </div>
-            <label style={lblS}>Farklı bir gün</label>
-            <input type="number" value={!["1", "15", "25"].includes(payDay) ? payDay : ""} onChange={e => setPayDay(e.target.value)} placeholder="Örn: 10" style={{ ...inpS, marginBottom: 8 }} />
             <div style={hintS}>💡 Bunu daha sonra Ayarlar → Aylık Bütçe'den değiştirebilirsiniz.</div>
           </div>
         )}
@@ -6532,19 +6544,19 @@ function OnboardingWizard({ data, setData, familyName }) {
             <div style={{ color: "#3D352E", fontSize: 13, marginBottom: 12, lineHeight: 1.5 }}>Kredi kartı harcamalarınızın karşılığını ne zaman ödüyorsunuz?</div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 10 }}>
-              <button onClick={() => setCcMode("instant")} style={{ background: ccMode === "instant" ? X.gd : "white", border: `2px solid ${ccMode === "instant" ? X.g : "rgba(0,0,0,0.08)"}`, borderRadius: 12, padding: "12px 14px", textAlign: "left", cursor: "pointer" }}>
-                <div style={{ color: ccMode === "instant" ? X.g : "#141008", fontSize: 13, fontWeight: 700, marginBottom: 2 }}>Bu ayın bütçesinden karşılıyorum</div>
-                <div style={{ color: "#8B7E74", fontSize: 11, lineHeight: 1.4 }}>Kredi kartı harcamamın karşılığını aynı ay bütçemden ayırıp kredi kartı hesabına aktarıyorum</div>
+              <button onClick={() => setCcMode("instant")} style={{ background: ccMode === "instant" ? X.gd : "white", border: `2px solid ${ccMode === "instant" ? X.g : "rgba(0,0,0,0.12)"}`, borderRadius: 12, padding: "14px 16px", textAlign: "left", cursor: "pointer" }}>
+                <div style={{ color: ccMode === "instant" ? X.g : "#141008", fontSize: 14, fontWeight: 800, marginBottom: 4 }}>Bu ayın bütçesinden karşılıyorum</div>
+                <div style={{ color: ccMode === "instant" ? "#0F766E" : "#3D352E", fontSize: 13, lineHeight: 1.5 }}>Kredi kartı harcamamın karşılığını aynı ay bütçemden ayırıp kredi kartı hesabına aktarıyorum</div>
               </button>
-              <button onClick={() => setCcMode("ekstre")} style={{ background: ccMode === "ekstre" ? X.gd : "white", border: `2px solid ${ccMode === "ekstre" ? X.g : "rgba(0,0,0,0.08)"}`, borderRadius: 12, padding: "12px 14px", textAlign: "left", cursor: "pointer" }}>
-                <div style={{ color: ccMode === "ekstre" ? X.g : "#141008", fontSize: 13, fontWeight: 700, marginBottom: 2 }}>Gelecek ay maaşımdan ödüyorum</div>
-                <div style={{ color: "#8B7E74", fontSize: 11, lineHeight: 1.4 }}>Bu ay kredi kartıyla yaptığım harcamalar gelecek ay maaşımdan kesilir (ekstre döngüsü)</div>
+              <button onClick={() => setCcMode("ekstre")} style={{ background: ccMode === "ekstre" ? X.gd : "white", border: `2px solid ${ccMode === "ekstre" ? X.g : "rgba(0,0,0,0.12)"}`, borderRadius: 12, padding: "14px 16px", textAlign: "left", cursor: "pointer" }}>
+                <div style={{ color: ccMode === "ekstre" ? X.g : "#141008", fontSize: 14, fontWeight: 800, marginBottom: 4 }}>Gelecek ay maaşımdan ödüyorum</div>
+                <div style={{ color: ccMode === "ekstre" ? "#0F766E" : "#3D352E", fontSize: 13, lineHeight: 1.5 }}>Bu ay kredi kartıyla yaptığım harcamalar gelecek ay maaşımdan kesilir (ekstre döngüsü)</div>
               </button>
             </div>
             {ccMode === "ekstre" && (
-              <div style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: 10, padding: "10px 12px", marginBottom: 8 }}>
-                <div style={{ color: "#B45309", fontSize: 11, fontWeight: 700, marginBottom: 4 }}>💡 Önemli tavsiye</div>
-                <div style={{ color: "#8B7E74", fontSize: 11, lineHeight: 1.5 }}>Dışarıda yemek, kafe, etkinlik, atölye gibi konfor harcamalarınızı banka hesap kartınızla (konfor harcaması kartı) yapın. Bu sizi ekstre döneminde bilinmezlikten korur — ne kadar harcadığınızı anında görürsünüz.</div>
+              <div style={{ background: "rgba(245,158,11,0.15)", border: "2px solid rgba(245,158,11,0.4)", borderRadius: 12, padding: "14px 16px", marginBottom: 8 }}>
+                <div style={{ color: "#92400e", fontSize: 14, fontWeight: 800, marginBottom: 6 }}>💡 Önemli tavsiye</div>
+                <div style={{ color: "#3D352E", fontSize: 14, lineHeight: 1.6, fontWeight: 500 }}>Dışarıda yemek, kafe, etkinlik, atölye gibi konfor harcamalarınızı <strong>banka hesap kartınızla</strong> (konfor harcaması kartı) yapın. Bu sizi ekstre döneminde bilinmezlikten korur — ne kadar harcadığınızı anında görürsünüz.</div>
               </div>
             )}
             <div style={hintS}>💡 Bunu daha sonra Ayarlar → Aylık Bütçe'den değiştirebilirsiniz.</div>
@@ -6557,8 +6569,8 @@ function OnboardingWizard({ data, setData, familyName }) {
             <div style={{ fontSize: 28, marginBottom: 8 }}>💰</div>
             <div style={{ color: "#141008", fontSize: 16, fontWeight: 800, marginBottom: 4 }}>Aylık bütçeniz</div>
             <div style={{ color: "#3D352E", fontSize: 13, marginBottom: 12, lineHeight: 1.5 }}>Evinize her ay giren toplam net gelir nedir? Maaş, ek gelir, kira geliri dahil.</div>
-            <input type="number" value={budget} onChange={e => setBudget(e.target.value)} placeholder="Örn: 80000" style={{ ...inpS, fontSize: 20, textAlign: "center", fontWeight: 700, fontFamily: fm, marginBottom: 6 }} />
-            {parseFloat(budget) > 0 && <div style={{ textAlign: "center", color: X.g, fontSize: 14, fontWeight: 700, fontFamily: fm }}>{C(parseFloat(budget))}</div>}
+            <input type="text" inputMode="numeric" value={budget} onChange={e => { const v = e.target.value.replace(/[^\d.]/g, ""); setBudget(v); }} placeholder="Örn: 25000" style={{ ...inpS, fontSize: 20, textAlign: "center", fontWeight: 700, fontFamily: fm, marginBottom: 6 }} />
+            {parseBudget(budget) > 0 && <div style={{ textAlign: "center", color: X.g, fontSize: 14, fontWeight: 700, fontFamily: fm }}>{C(parseBudget(budget))}</div>}
             <div style={hintS}>💡 Bunu daha sonra Ayarlar → Aylık Bütçe'den değiştirebilirsiniz.</div>
           </div>
         )}
@@ -6569,28 +6581,58 @@ function OnboardingWizard({ data, setData, familyName }) {
             <div style={{ fontSize: 28, marginBottom: 8 }}>🔒</div>
             <div style={{ color: "#141008", fontSize: 16, fontWeight: 800, marginBottom: 4 }}>Sabit giderleriniz</div>
             <div style={{ color: "#3D352E", fontSize: 13, marginBottom: 10, lineHeight: 1.5 }}>Her ay <strong>aynı tutarda</strong> ödediğiniz giderleri ekleyin. (Kira, aidat, eğitim taksidi gibi)</div>
+            <div style={{ background: "rgba(29,78,216,0.12)", border: "2px solid rgba(29,78,216,0.3)", borderRadius: 12, padding: "12px 14px", marginBottom: 12 }}>
+              <div style={{ color: "#1e40af", fontSize: 14, fontWeight: 600, lineHeight: 1.5 }}>⚡ Elektrik, su, doğalgaz gibi <strong>tutarı her ay değişen faturalar</strong> burada girilmez — sonraki adımda ayrıca tanımlayacaksınız.</div>
+            </div>
 
-            {/* Hazır öneriler */}
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 10 }}>
+            {/* Hazır öneriler + Faturalar */}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 6 }}>
               {suggestedFixed.filter(s => !fixedList.find(f => f.name === s.name)).map(s => (
-                <button key={s.name} onClick={() => { setFixedName(s.name); setFixedIcon(s.icon); }} style={{ background: fixedName === s.name ? X.gd : "white", border: `1px solid ${fixedName === s.name ? X.g : "rgba(0,0,0,0.08)"}`, borderRadius: 8, padding: "6px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: ff, color: fixedName === s.name ? X.g : "#5A5045" }}>
+                <button key={s.name} onClick={() => { setFixedName(s.name); setFixedIcon(s.icon); setFixedBillType(null); setFixedBillOwner(""); }} style={{ background: fixedName === s.name && !fixedBillType ? X.gd : "white", border: `1px solid ${fixedName === s.name && !fixedBillType ? X.g : "rgba(0,0,0,0.08)"}`, borderRadius: 8, padding: "6px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: ff, color: fixedName === s.name && !fixedBillType ? X.g : "#5A5045" }}>
                   {s.icon} {s.name}
                 </button>
               ))}
+              <button onClick={() => { setFixedBillType(fixedBillType ? null : billSubTypes[0]); setFixedName(""); setFixedBillOwner(""); }} style={{ background: fixedBillType ? X.gd : "white", border: `1px solid ${fixedBillType ? X.g : "rgba(0,0,0,0.08)"}`, borderRadius: 8, padding: "6px 10px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: ff, color: fixedBillType ? X.g : "#5A5045" }}>
+                🧾 Faturalar
+              </button>
             </div>
 
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 8 }}>
-              {fixedIcons.map(ic => (<button key={ic} onClick={() => setFixedIcon(ic)} style={{ fontSize: 18, padding: "4px 6px", background: fixedIcon === ic ? X.gd : "white", border: `1px solid ${fixedIcon === ic ? X.g : "rgba(0,0,0,0.08)"}`, borderRadius: 6, cursor: "pointer" }}>{ic}</button>))}
-            </div>
-            <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-              <input value={fixedName} onChange={e => setFixedName(e.target.value)} placeholder="Gider adı" style={{ ...inpS, flex: 1 }} />
-              <input type="number" value={fixedAmount} onChange={e => setFixedAmount(e.target.value)} placeholder="Tutar" style={{ ...inpS, flex: 0.6 }} />
-            </div>
+            {/* Fatura alt kategorileri */}
+            {fixedBillType && (
+              <div style={{ background: "rgba(15,118,110,0.04)", border: "1px solid rgba(15,118,110,0.15)", borderRadius: 10, padding: "10px", marginBottom: 10 }}>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 8 }}>
+                  {billSubTypes.map(bt => (
+                    <button key={bt.id} onClick={() => setFixedBillType(bt)} style={{ background: fixedBillType.id === bt.id ? X.gd : "white", border: `1px solid ${fixedBillType.id === bt.id ? X.g : "rgba(0,0,0,0.08)"}`, borderRadius: 8, padding: "6px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: ff, color: fixedBillType.id === bt.id ? X.g : "#5A5045" }}>
+                      {bt.icon} {bt.name}
+                    </button>
+                  ))}
+                </div>
+                <label style={lblS}>Fatura türü <span style={{ fontWeight: 400, color: "#8B7E74" }}>(ön tanımlı olmayan fatura türü ekleyebilirsiniz)</span></label>
+                <input value={fixedBillType.name} onChange={e => setFixedBillType({ ...fixedBillType, id: "custom", name: e.target.value, icon: "🧾" })} placeholder="Sabit tutarlı fatura türü giriniz" style={{ ...inpS, marginBottom: 8 }} />
+                <label style={lblS}>Fatura detayı</label>
+                <input value={fixedBillOwner} onChange={e => setFixedBillOwner(e.target.value)} placeholder="Kime ait, hangi hat, hangi adres?" style={{ ...inpS, marginBottom: 6 }} />
+                <div style={{ color: X.tm, fontSize: 12, marginBottom: 8 }}>Gider adı: <strong style={{ color: X.g }}>{fixedBillOwner.trim() ? `${fixedBillOwner.trim()} ${fixedBillType.name}` : fixedBillType.name}</strong></div>
+                <label style={lblS}>Son ödeme günü <span style={{ fontWeight: 400, color: "#8B7E74" }}>(opsiyonel)</span></label>
+                <input type="number" value={fixedBillPayDay} onChange={e => setFixedBillPayDay(e.target.value)} placeholder="Ayın kaçı? Örn: 17" style={{ ...inpS }} />
+              </div>
+            )}
+
+            {/* Normal gider formu (fatura değilse) */}
+            {!fixedBillType && (
+              <>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 8 }}>
+                  {fixedIcons.map(ic => (<button key={ic} onClick={() => setFixedIcon(ic)} style={{ fontSize: 18, padding: "4px 6px", background: fixedIcon === ic ? X.gd : "white", border: `1px solid ${fixedIcon === ic ? X.g : "rgba(0,0,0,0.08)"}`, borderRadius: 6, cursor: "pointer" }}>{ic}</button>))}
+                </div>
+                <input value={fixedName} onChange={e => setFixedName(e.target.value)} placeholder="Gider adı" style={{ ...inpS, marginBottom: 8 }} />
+              </>
+            )}
+
+            <input type="number" value={fixedAmount} onChange={e => setFixedAmount(e.target.value)} placeholder="Tutar" style={{ ...inpS, marginBottom: 8 }} />
             <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
               <button onClick={() => setFixedMethod("account")} style={{ flex: 1, background: fixedMethod === "account" ? X.gd : "white", border: `1px solid ${fixedMethod === "account" ? X.g : "rgba(0,0,0,0.08)"}`, borderRadius: 8, padding: "8px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: ff, color: fixedMethod === "account" ? X.g : "#5A5045" }}>🏦 Hesaptan</button>
               <button onClick={() => setFixedMethod("cc")} style={{ flex: 1, background: fixedMethod === "cc" ? X.gd : "white", border: `1px solid ${fixedMethod === "cc" ? X.g : "rgba(0,0,0,0.08)"}`, borderRadius: 8, padding: "8px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: ff, color: fixedMethod === "cc" ? X.g : "#5A5045" }}>💳 Kredi Kartı</button>
             </div>
-            <button onClick={addFixed} disabled={!fixedName || !fixedAmount} style={{ width: "100%", background: fixedName && fixedAmount ? X.g : "rgba(0,0,0,0.06)", border: "none", borderRadius: 10, padding: "10px", color: fixedName && fixedAmount ? "white" : "#8B7E74", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: ff, marginBottom: 12 }}>+ Ekle</button>
+            <button onClick={addFixed} disabled={!(fixedBillType || fixedName) || !fixedAmount} style={{ width: "100%", background: (fixedBillType || fixedName) && fixedAmount ? X.g : "rgba(0,0,0,0.06)", border: "none", borderRadius: 10, padding: "10px", color: (fixedBillType || fixedName) && fixedAmount ? "white" : "#8B7E74", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: ff, marginBottom: 12 }}>+ Ekle</button>
 
             {fixedList.length > 0 && fixedList.map(f => (
               <div key={f.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 10px", marginBottom: 4, background: "white", borderRadius: 8, border: "1px solid rgba(0,0,0,0.06)" }}>
@@ -6609,7 +6651,7 @@ function OnboardingWizard({ data, setData, familyName }) {
                 Toplam: {C(fixedList.reduce((s, f) => s + f.amount, 0))}
               </div>
             )}
-            <div style={hintS}>💡 Tutarı her ay değişen faturalar (elektrik, su, doğalgaz) sabit gider değildir — onları Ayarlar → Fatura Bütçeleri'nden tahmini olarak tanımlayabilirsiniz.</div>
+            <div style={hintS}>💡 Sabit giderleri daha sonra Ayarlar → Sabit Giderler'den düzenleyebilirsiniz.</div>
           </div>
         )}
 
@@ -6623,19 +6665,19 @@ function OnboardingWizard({ data, setData, familyName }) {
             {/* Hazır öneriler */}
             <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 10 }}>
               {[
-                { name: "Gıda & Market", icon: "🛒" },
-                { name: "Akaryakıt", icon: "⛽" },
-                { name: "Faturalar", icon: "⚡" },
-                { name: "Eğitim", icon: "📚" },
-                { name: "Sağlık", icon: "🏥" },
-                { name: "Giyim", icon: "👗" },
-                { name: "Yeme & İçme", icon: "🍽️" },
-                { name: "Ulaşım", icon: "🚗" },
-                { name: "Eğlence", icon: "🎬" },
-                { name: "Kişisel Bakım", icon: "💇" },
-                { name: "Ev Giderleri", icon: "🔧" },
+                { name: "Gıda & Market", icon: "🛒", kw: ["market", "gıda", "bakkal", "manav", "kasap"] },
+                { name: "Akaryakıt", icon: "⛽", kw: ["benzin", "dizel", "yakıt", "akaryakıt", "lpg"] },
+                { name: "Faturalar", icon: "⚡", kw: ["elektrik", "su", "doğalgaz", "fatura"] },
+                { name: "Eğitim", icon: "📚", kw: ["okul", "kurs", "kitap", "kırtasiye", "eğitim"] },
+                { name: "Sağlık", icon: "🏥", kw: ["eczane", "ilaç", "doktor", "hastane", "sağlık"] },
+                { name: "Giyim", icon: "👗", kw: ["giyim", "ayakkabı", "kıyafet", "tekstil"] },
+                { name: "Yeme & İçme", icon: "🍽️", kw: ["restoran", "kafe", "yemek", "kahve"] },
+                { name: "Ulaşım", icon: "🚗", kw: ["otobüs", "taksi", "otopark", "köprü", "ulaşım"] },
+                { name: "Eğlence", icon: "🎬", kw: ["sinema", "tiyatro", "konser", "etkinlik"] },
+                { name: "Kişisel Bakım", icon: "💇", kw: ["kuaför", "berber", "kozmetik", "bakım"] },
+                { name: "Ev Giderleri", icon: "🔧", kw: ["tadilat", "tamir", "temizlik", "mobilya"] },
               ].filter(s => !catList.find(c2 => c2.name === s.name)).map(s => (
-                <button key={s.name} onClick={() => { setCatList(l => [...l, { id: uid(), name: s.name, icon: s.icon, expectedAmount: 0, keywords: [] }]); }} style={{ background: "white", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 8, padding: "6px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: ff, color: "#5A5045" }}>
+                <button key={s.name} onClick={() => { setCatName(s.name); setCatIcon(s.icon); setCatKeywords(""); setCatDefaultKw(s.kw); }} style={{ background: catName === s.name ? X.gd : "white", border: `1px solid ${catName === s.name ? X.g : "rgba(0,0,0,0.08)"}`, borderRadius: 8, padding: "6px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: ff, color: catName === s.name ? X.g : "#5A5045" }}>
                   {s.icon} {s.name}
                 </button>
               ))}
@@ -6649,18 +6691,22 @@ function OnboardingWizard({ data, setData, familyName }) {
               <input value={catName} onChange={e => setCatName(e.target.value)} placeholder="Kategori adı" style={{ ...inpS, flex: 1 }} />
               <input type="number" value={catAmount} onChange={e => setCatAmount(e.target.value)} placeholder="Tahmini tutar" style={{ ...inpS, flex: 0.6 }} />
             </div>
+            <input value={catKeywords} onChange={e => setCatKeywords(e.target.value)} placeholder={catDefaultKw.length > 0 ? catDefaultKw.join(", ") : "Anahtar kelimeler (virgülle ayırın)"} style={{ ...inpS, marginBottom: 8 }} />
             <button onClick={addCat} disabled={!catName} style={{ width: "100%", background: catName ? X.g : "rgba(0,0,0,0.06)", border: "none", borderRadius: 10, padding: "10px", color: catName ? "white" : "#8B7E74", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: ff, marginBottom: 12 }}>+ Ekle</button>
 
             {catList.map(c2 => (
-              <div key={c2.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 10px", marginBottom: 4, background: "white", borderRadius: 8, border: "1px solid rgba(0,0,0,0.06)" }}>
-                <span style={{ color: "#141008", fontSize: 13, fontWeight: 700 }}>{c2.icon} {c2.name}</span>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  {c2.expectedAmount > 0 && <span style={{ color: "#141008", fontSize: 13, fontWeight: 700, fontFamily: fm }}>{C(c2.expectedAmount)}</span>}
-                  <button onClick={() => removeCat(c2.id)} style={{ background: "none", border: "none", color: X.r, fontSize: 16, cursor: "pointer", padding: "2px 6px" }}>✕</button>
+              <div key={c2.id} style={{ padding: "8px 10px", marginBottom: 4, background: "white", borderRadius: 8, border: "1px solid rgba(0,0,0,0.06)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ color: "#141008", fontSize: 13, fontWeight: 700 }}>{c2.icon} {c2.name}</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    {c2.expectedAmount > 0 && <span style={{ color: "#141008", fontSize: 13, fontWeight: 700, fontFamily: fm }}>{C(c2.expectedAmount)}</span>}
+                    <button onClick={() => removeCat(c2.id)} style={{ background: "none", border: "none", color: X.r, fontSize: 16, cursor: "pointer", padding: "2px 6px" }}>✕</button>
+                  </div>
                 </div>
+                {c2.keywords?.length > 0 && <div style={{ color: "#8B7E74", fontSize: 10, marginTop: 2 }}>{c2.keywords.join(", ")}</div>}
               </div>
             ))}
-            <div style={hintS}>💡 Kategorilere anahtar kelime atamayı daha sonra Ayarlar → Harcama Kategorileri'nden yapabilirsiniz.</div>
+            <div style={hintS}>💡 Anahtar kelimeler sayesinde harcama girdiğinizde kategori otomatik eşleşir. Daha sonra Ayarlar → Harcama Kategorileri'nden düzenleyebilirsiniz.</div>
           </div>
         )}
 
@@ -6681,6 +6727,9 @@ function OnboardingWizard({ data, setData, familyName }) {
             {cardType === "debit" && (
               <input type="number" value={cardLimit} onChange={e => setCardLimit(e.target.value)} placeholder="Aylık harcama limiti (opsiyonel)" style={{ ...inpS, marginBottom: 8 }} />
             )}
+            {cardType === "credit" && (
+              <input type="number" value={cardCutoff} onChange={e => setCardCutoff(e.target.value)} placeholder="Ekstre kesim günü (opsiyonel, örn: 28)" style={{ ...inpS, marginBottom: 8 }} />
+            )}
 
             <button onClick={addCard} disabled={!cardName} style={{ width: "100%", background: cardName ? X.g : "rgba(0,0,0,0.06)", border: "none", borderRadius: 10, padding: "10px", color: cardName ? "white" : "#8B7E74", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: ff, marginBottom: 12 }}>+ Ekle</button>
 
@@ -6688,7 +6737,7 @@ function OnboardingWizard({ data, setData, familyName }) {
               <div key={c2.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 12px", marginBottom: 4, background: "white", borderRadius: 8, border: "1px solid rgba(0,0,0,0.06)" }}>
                 <span style={{ color: "#141008", fontSize: 13, fontWeight: 700 }}>{c2.type === "debit" ? "🏦" : "💳"} {c2.name}</span>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <span style={{ color: "#8B7E74", fontSize: 11 }}>{c2.type === "debit" ? "Banka" : "Kredi"}{c2.monthlyLimit > 0 ? ` · ${C(c2.monthlyLimit)}` : ""}</span>
+                  <span style={{ color: "#8B7E74", fontSize: 11 }}>{c2.type === "debit" ? "Banka" : "Kredi"}{c2.monthlyLimit > 0 ? ` · ${C(c2.monthlyLimit)}` : ""}{c2.cutoffDay ? ` · Ekstre: ${c2.cutoffDay}'i` : ""}</span>
                   <button onClick={() => removeCard(c2.id)} style={{ background: "none", border: "none", color: X.r, fontSize: 16, cursor: "pointer", padding: "2px 6px" }}>✕</button>
                 </div>
               </div>
@@ -6742,7 +6791,9 @@ function OnboardingWizard({ data, setData, familyName }) {
               </div>
             )}
 
-            <div style={{ color: "#8B7E74", fontSize: 10, lineHeight: 1.4, marginBottom: 12 }}>Tüm bilgileri daha sonra Ayarlar'dan değiştirebilirsiniz. Değişken giderler, borçlar ve birikim gibi detayları uygulamayı kullanırken ekleyebilirsiniz.</div>
+            <div style={{ background: "rgba(15,118,110,0.08)", border: "2px solid rgba(15,118,110,0.2)", borderRadius: 12, padding: "12px 14px", marginBottom: 12 }}>
+              <div style={{ color: "#0F766E", fontSize: 13, fontWeight: 600, lineHeight: 1.6 }}>Tüm bilgileri daha sonra <strong>Ayarlar</strong>'dan değiştirebilirsiniz. Değişken giderler, borçlar ve birikim gibi detayları uygulamayı kullanırken ekleyebilirsiniz.</div>
+            </div>
 
             <button onClick={finish} style={{ width: "100%", background: X.g, border: "none", borderRadius: 12, padding: "14px", color: "white", fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: ff, marginBottom: 20 }}>Bütçemi Oluştur</button>
           </div>
@@ -7186,11 +7237,11 @@ function Settings({ data, setData, isAdmin, family, mk }) {
       <div style={{ padding: "20px 16px 90px", flex: 1, overflow: "auto", WebkitOverflowScrolling: "touch" }}>
         <BackBtn />
         <div style={{ color: X.tm, fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Maaş Günü (Dönem Başlangıcı)</div>
-        <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
-          {["1", "15", "25"].map(d2 => (
-            <button key={d2} onClick={() => setForm(f => ({ ...f, pd: d2 }))} style={{ flex: 1, background: String(form.pd ?? data.settings.payDay ?? 15) === d2 ? X.gd : "white", border: `1px solid ${String(form.pd ?? data.settings.payDay ?? 15) === d2 ? X.g : "rgba(0,0,0,0.08)"}`, borderRadius: 8, padding: "10px", fontSize: 15, fontWeight: 800, cursor: "pointer", fontFamily: ff, color: String(form.pd ?? data.settings.payDay ?? 15) === d2 ? X.g : X.td }}>{d2}</button>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6, marginBottom: 12 }}>
+          {["1", "5", "10", "15", "20", "25", "30"].map(d2 => (
+            <button key={d2} onClick={() => setForm(f => ({ ...f, pd: d2 }))} style={{ background: String(form.pd ?? data.settings.payDay ?? 15) === d2 ? X.gd : "white", border: `1px solid ${String(form.pd ?? data.settings.payDay ?? 15) === d2 ? X.g : "rgba(0,0,0,0.08)"}`, borderRadius: 8, padding: "10px", fontSize: 15, fontWeight: 800, cursor: "pointer", fontFamily: ff, color: String(form.pd ?? data.settings.payDay ?? 15) === d2 ? X.g : X.td }}>{d2}</button>
           ))}
-          <input type="number" value={!["1", "15", "25"].includes(String(form.pd ?? data.settings.payDay ?? 15)) ? (form.pd ?? data.settings.payDay ?? "") : ""} onChange={e => setForm(f => ({ ...f, pd: e.target.value }))} placeholder="Diğer" style={{ flex: 1, background: "white", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 8, padding: "10px", fontSize: 14, color: X.t, textAlign: "center", fontFamily: fm }} />
+          <input type="number" value={!["1", "5", "10", "15", "20", "25", "30"].includes(String(form.pd ?? data.settings.payDay ?? 15)) ? (form.pd ?? data.settings.payDay ?? "") : ""} onChange={e => setForm(f => ({ ...f, pd: e.target.value }))} placeholder="Diğer" style={{ background: "white", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 8, padding: "10px", fontSize: 14, color: X.t, textAlign: "center", fontFamily: fm }} />
         </div>
         <div style={{ color: X.td, fontSize: 11, marginBottom: 12, lineHeight: 1.5 }}>Bütçe döngünüz bu günden bir sonraki maaş gününe kadardır. Örn: 15 → her ayın 15'inden 14'üne.</div>
         <Inp label="Varsayılan Aylık Bütçe (₺)" type="number" value={form.b ?? data.settings.monthlyBudget} onChange={v => setForm(f => ({ ...f, b: v }))} suffix="₺" />
@@ -7541,17 +7592,18 @@ function FixedSettings({ data, setData, onBack }) {
   const [editing, setEditing] = useState(null);
   const [n, sn] = useState(""); const [a, sa] = useState(""); const [m, sm] = useState("account"); const [d, sd] = useState(""); const [cardId, setCardId] = useState("");
   const [pDay, setPDay] = useState(""); const [pDayEnd, setPDayEnd] = useState(""); const [autoPay, setAutoPay] = useState(false);
+  const [billType, setBillType] = useState("");
   const cards = data.settings.cards || [];
 
-  const startNew = () => { sn(""); sa(""); sm("account"); sd(""); setCardId(cards[0]?.id || ""); setPDay(""); setPDayEnd(""); setAutoPay(false); setEditing("new"); };
-  const startEdit = exp => { sn(exp.name); sa(String(exp.amount)); sm(exp.paymentMethod || "account"); sd(exp.increaseDate || ""); setCardId(exp.cardId || cards[0]?.id || ""); setPDay(exp.paymentDay ? String(exp.paymentDay) : ""); setPDayEnd(exp.paymentDayEnd ? String(exp.paymentDayEnd) : ""); setAutoPay(exp.autoPayment || false); setEditing(exp.id); };
-  const cancel = () => { setEditing(null); sn(""); sa(""); sm("account"); sd(""); setCardId(""); setPDay(""); setPDayEnd(""); setAutoPay(false); };
+  const startNew = () => { sn(""); sa(""); sm("account"); sd(""); setCardId(cards[0]?.id || ""); setPDay(""); setPDayEnd(""); setAutoPay(false); setBillType(""); setEditing("new"); };
+  const startEdit = exp => { sn(exp.name); sa(String(exp.amount)); sm(exp.paymentMethod || "account"); sd(exp.increaseDate || ""); setCardId(exp.cardId || cards[0]?.id || ""); setPDay(exp.paymentDay ? String(exp.paymentDay) : ""); setPDayEnd(exp.paymentDayEnd ? String(exp.paymentDayEnd) : ""); setAutoPay(exp.autoPayment || false); setBillType(exp.billType || ""); setEditing(exp.id); };
+  const cancel = () => { setEditing(null); sn(""); sa(""); sm("account"); sd(""); setCardId(""); setPDay(""); setPDayEnd(""); setAutoPay(false); setBillType(""); };
 
   const save = () => {
     if (!n || !a) return;
     setData(dd => {
       const list = [...dd.settings.fixedExpenses];
-      const newItem = { name: n, amount: parseFloat(a), paymentMethod: m, increaseDate: d || null, cardId: m === "cc" ? cardId : null, paymentDay: parseInt(pDay) || null, paymentDayEnd: parseInt(pDayEnd) || null, autoPayment: autoPay };
+      const newItem = { name: n, amount: parseFloat(a), paymentMethod: m, increaseDate: d || null, cardId: m === "cc" ? cardId : null, paymentDay: parseInt(pDay) || null, paymentDayEnd: parseInt(pDayEnd) || null, autoPayment: autoPay, billType: billType || null };
       if (editing === "new") {
         list.push({ id: uid(), ...newItem });
       } else {
@@ -7573,6 +7625,7 @@ function FixedSettings({ data, setData, onBack }) {
       <Sel label="Ödeme" value={m} onChange={sm} options={PM.map(p => ({ v: p.id, l: p.icon + " " + p.label }))} />
       {m === "cc" && cards.length > 0 && <Sel label="Hangi Kart" value={cardId} onChange={setCardId} options={cards.map(c => ({ v: c.id, l: c.name }))} />}
       {m === "cc" && cards.length === 0 && <div style={{ color: X.w, fontSize: 12, marginBottom: 8 }}>⚠️ Önce Ayarlar → Kartlarım'dan kart ekleyin</div>}
+      <Sel label="Fatura Türü" value={billType} onChange={setBillType} options={[{ v: "", l: "— Fatura değil —" }, { v: "telefon", l: "📱 Telefon Faturası" }, { v: "internet", l: "🌐 İnternet" }, { v: "dijital", l: "📺 Dijital Abonelik" }, { v: "custom", l: "🧾 Diğer Fatura" }]} />
       <Inp label="Artış Tarihi" type="month" value={d} onChange={sd} />
       <div style={{ display: "flex", gap: 8 }}>
         <div style={{ flex: 1 }}><Inp label="Ödeme Günü" type="number" value={pDay} onChange={setPDay} placeholder="Örn: 17" /></div>
@@ -7606,7 +7659,7 @@ function FixedSettings({ data, setData, onBack }) {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ color: X.t, fontWeight: 700 }}>{exp.name}</div>
-                  <div style={{ color: X.tm, fontSize: 12 }}>{C(exp.amount)} • {exp.paymentMethod === "cc" ? "💳" + (cardName ? " " + cardName : "") : "🏦"}{exp.paymentDay ? ` • ${exp.paymentDay}${exp.paymentDayEnd ? "-" + exp.paymentDayEnd : ""}'inde` : ""}{exp.autoPayment ? " • ⚡oto" : ""}{exp.increaseDate ? " • 📈" + exp.increaseDate : ""}</div>
+                  <div style={{ color: X.tm, fontSize: 12 }}>{C(exp.amount)} • {exp.paymentMethod === "cc" ? "💳" + (cardName ? " " + cardName : "") : "🏦"}{exp.billType ? ` • 🧾${exp.billType}` : ""}{exp.paymentDay ? ` • ${exp.paymentDay}${exp.paymentDayEnd ? "-" + exp.paymentDayEnd : ""}'inde` : ""}{exp.autoPayment ? " • ⚡oto" : ""}{exp.increaseDate ? " • 📈" + exp.increaseDate : ""}</div>
                 </div>
                 <div style={{ display: "flex", gap: 6 }}>
                   <button onClick={() => editing === exp.id ? cancel() : startEdit(exp)} style={{ background: X.bd, border: `1px solid ${X.b}`, borderRadius: 8, padding: "7px 14px", color: X.b, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{editing === exp.id ? "▲" : "✎"}</button>
@@ -7662,7 +7715,7 @@ function VariableSettings({ data, setData, onBack }) {
       <Inp label="Beklenen Aylık Tutar" type="number" value={ex} onChange={se} suffix="₺" placeholder="Opsiyonel" />
       <div style={{ marginBottom: 12 }}>
         <label style={{ fontSize: 12, color: X.tm, fontWeight: 600, marginBottom: 4, display: "block" }}>Anahtar Kelimeler (virgülle ayırın)</label>
-        <textarea value={kw} onChange={e => setKw(e.target.value)} placeholder="shell, opet, bp, dizel, benzin, yakıt, akaryakıt" style={{ width: "100%", background: "rgba(200,220,232,0.65)", border: `1px solid ${X.border}`, borderRadius: 10, padding: "12px 14px", color: X.t, fontSize: 14, fontFamily: ff, outline: "none", boxSizing: "border-box", minHeight: 60, resize: "vertical" }} />
+        <textarea value={kw} onChange={e => setKw(e.target.value)} placeholder="dizel, benzin, yakıt, akaryakıt, lpg" style={{ width: "100%", background: "rgba(200,220,232,0.65)", border: `1px solid ${X.border}`, borderRadius: 10, padding: "12px 14px", color: X.t, fontSize: 14, fontFamily: ff, outline: "none", boxSizing: "border-box", minHeight: 60, resize: "vertical" }} />
         <div style={{ color: X.td, fontSize: 10, marginTop: 4 }}>Bu kelimelerden biri harcamanın açıklaması veya işyeri adında geçerse bu kategoriye otomatik atanır.</div>
       </div>
       <div style={{ display: "flex", gap: 8 }}>
@@ -7778,21 +7831,22 @@ function CardsSettings({ data, setData, onBack }) {
   const [n, sn] = useState("");
   const [tp, setTp] = useState("credit");
   const [lmt, setLmt] = useState("");
+  const [cutoff, setCutoff] = useState("");
   const cards = data.settings.cards || [];
 
-  const startNew = () => { sn(""); setTp("credit"); setLmt(""); setEditing("new"); };
-  const startEdit = c => { sn(c.name); setTp(c.type || "credit"); setLmt(c.monthlyLimit ? String(c.monthlyLimit) : ""); setEditing(c.id); };
-  const cancel = () => { setEditing(null); sn(""); setTp("credit"); setLmt(""); };
+  const startNew = () => { sn(""); setTp("credit"); setLmt(""); setCutoff(""); setEditing("new"); };
+  const startEdit = c => { sn(c.name); setTp(c.type || "credit"); setLmt(c.monthlyLimit ? String(c.monthlyLimit) : ""); setCutoff(c.cutoffDay ? String(c.cutoffDay) : ""); setEditing(c.id); };
+  const cancel = () => { setEditing(null); sn(""); setTp("credit"); setLmt(""); setCutoff(""); };
 
   const save = () => {
     if (!n) return;
     setData(d => {
       const list = [...(d.settings.cards || [])];
       if (editing === "new") {
-        list.push({ id: uid(), name: n, type: tp, monthlyLimit: tp === "debit" ? (parseFloat(lmt) || 0) : 0 });
+        list.push({ id: uid(), name: n, type: tp, monthlyLimit: tp === "debit" ? (parseFloat(lmt) || 0) : 0, cutoffDay: tp === "credit" && cutoff ? parseInt(cutoff) : null });
       } else {
         const idx = list.findIndex(x => x.id === editing);
-        if (idx >= 0) list[idx] = { ...list[idx], name: n, type: tp, monthlyLimit: tp === "debit" ? (parseFloat(lmt) || 0) : 0 };
+        if (idx >= 0) list[idx] = { ...list[idx], name: n, type: tp, monthlyLimit: tp === "debit" ? (parseFloat(lmt) || 0) : 0, cutoffDay: tp === "credit" && cutoff ? parseInt(cutoff) : null };
       }
       return { ...d, settings: { ...d.settings, cards: list } };
     });
@@ -7816,6 +7870,7 @@ function CardsSettings({ data, setData, onBack }) {
         </div>
       </div>
       {tp === "debit" && <Inp label="Aylık Harcama Limiti (opsiyonel)" type="number" value={lmt} onChange={setLmt} suffix="₺" placeholder="0 = limitsiz" />}
+      {tp === "credit" && <Inp label="Ekstre Kesim Günü (opsiyonel)" type="number" value={cutoff} onChange={setCutoff} placeholder="Örn: 28" />}
       {tp === "credit" && <div style={{ color: X.td, fontSize: 11, marginBottom: 12, lineHeight: 1.5 }}>Kredi kartı harcamaları hesaba aktarılması gerekir.</div>}
       {tp === "debit" && <div style={{ color: X.td, fontSize: 11, marginBottom: 12, lineHeight: 1.5 }}>Banka kartı harcamaları doğrudan bakiyeden düşer, aktarma gerekmez.</div>}
       <div style={{ display: "flex", gap: 8 }}>
@@ -7841,7 +7896,7 @@ function CardsSettings({ data, setData, onBack }) {
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div style={{ flex: 1 }}>
                 <div style={{ color: X.t, fontWeight: 700 }}>{c.type === "debit" ? "🏦" : "💳"} {c.name}</div>
-                <div style={{ color: X.td, fontSize: 11, marginTop: 2 }}>{c.type === "debit" ? "Banka Kartı" : "Kredi Kartı"}{c.type === "debit" && c.monthlyLimit > 0 ? ` · Limit: ${C(c.monthlyLimit)}` : ""}</div>
+                <div style={{ color: X.td, fontSize: 11, marginTop: 2 }}>{c.type === "debit" ? "Banka Kartı" : "Kredi Kartı"}{c.type === "debit" && c.monthlyLimit > 0 ? ` · Limit: ${C(c.monthlyLimit)}` : ""}{c.cutoffDay ? ` · Ekstre: ${c.cutoffDay}'i` : ""}</div>
               </div>
               <div style={{ display: "flex", gap: 6 }}>
                 <button onClick={() => editing === c.id ? cancel() : startEdit(c)} style={{ background: X.bd, border: `1px solid ${X.b}`, borderRadius: 8, padding: "7px 14px", color: X.b, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{editing === c.id ? "▲" : "✎"}</button>
