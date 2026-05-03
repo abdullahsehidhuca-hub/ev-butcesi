@@ -57,15 +57,27 @@ async function registerName(name, email, familyId, uid2) {
   await set(ref(rtdb, `nameIndex/${nameKey(name)}`), { email, familyId, uid: uid2 });
 }
 
-// Aile oluştur (ilk kullanıcı = yönetici)
-async function createFamily(uid2, email, name) {
+// Aile oluştur (ilk kullanıcı = yönetici) — retry destekli
+async function createFamily(uid2, email, name, retries = 3) {
   const familyId = uid2;
   const code = genCode();
-  await set(ref(rtdb, `families/${familyId}/admin`), uid2);
-  await set(ref(rtdb, `families/${familyId}/members/${uid2}`), { name, email, role: "admin", joinedAt: new Date().toISOString() });
-  await set(ref(rtdb, `userFamilies/${uid2}`), { familyId, code, role: "admin", name });
-  await registerName(name, email, familyId, uid2);
-  return { familyId, code, role: "admin", name };
+  const result = { familyId, code, role: "admin", name };
+  for (let i = 0; i < retries; i++) {
+    try {
+      await set(ref(rtdb, `families/${familyId}/admin`), uid2);
+      await set(ref(rtdb, `families/${familyId}/members/${uid2}`), { name, email, role: "admin", joinedAt: new Date().toISOString() });
+      await set(ref(rtdb, `userFamilies/${uid2}`), result);
+      try { await registerName(name, email, familyId, uid2); } catch {}
+      // Doğrulama: userFamilies yazıldı mı?
+      const check = await getUserFamily(uid2, 1);
+      if (check) return check;
+      return result;
+    } catch (e) {
+      console.warn(`createFamily deneme ${i + 1}/${retries} başarısız:`, e.message);
+      if (i < retries - 1) await new Promise(r => setTimeout(r, 1500 * (i + 1)));
+    }
+  }
+  return null;
 }
 
 // Davet oluştur (admin tarafından)
@@ -104,11 +116,17 @@ async function resetMemberAccess(familyId, memberUid, memberName, memberEmail) {
   return await createInvitation(familyId, memberName, memberEmail);
 }
 
-async function getUserFamily(uid2) {
-  try {
-    const snap = await get(ref(rtdb, `userFamilies/${uid2}`));
-    if (snap.exists()) return snap.val();
-  } catch {}
+async function getUserFamily(uid2, retries = 3) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const snap = await get(ref(rtdb, `userFamilies/${uid2}`));
+      if (snap.exists()) return snap.val();
+      return null; // veri yok ama bağlantı başarılı
+    } catch (e) {
+      console.warn(`getUserFamily deneme ${i + 1}/${retries} başarısız:`, e.message);
+      if (i < retries - 1) await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+    }
+  }
   return null;
 }
 
@@ -8242,8 +8260,8 @@ function LoginScreen({ pendingInvite, setPendingInvite }) {
       localStorage.setItem("pendingRegName", name);
       // Hesap oluştur
       const result = await createUserWithEmailAndPassword(auth, email, pass);
-      // Doğrulama maili gönder
-      await sendEmailVerification(result.user);
+      // Doğrulama maili gönder (başarısız olursa hesap yine de oluşur — tekrar gönder ekranında denenecek)
+      try { await sendEmailVerification(result.user); } catch (mailErr) { console.warn("İlk doğrulama maili gönderilemedi:", mailErr.message); }
     } catch (e) {
       localStorage.removeItem("pendingRegName"); // hata durumunda temizle
       if (e.code === "auth/email-already-in-use") setErr("Bu e-posta zaten kayıtlı. Giriş yapın.");
@@ -8446,10 +8464,10 @@ export default function App() {
               const { code } = JSON.parse(pendingGoogleInvite);
               const inv = await lookupInvitation(code);
               if (inv) await joinViaInvitation(u.uid, code, { ...inv, email: u.email });
-            } catch {}
+            } catch (e) { console.warn("Redirect davet hatası:", e.message); }
             localStorage.removeItem("pendingGoogleInvite");
           } else {
-            await createFamily(u.uid, u.email, displayName);
+            try { await createFamily(u.uid, u.email, displayName); } catch (e) { console.warn("Redirect aile oluşturma hatası:", e.message); }
           }
         }
       }
@@ -8460,49 +8478,55 @@ export default function App() {
   // Kullanıcı giriş yaptığında: aile bilgisini kontrol et veya oluştur
   useEffect(() => {
     if (!user) { setFamily(null); setFamilyLoading(false); setLoaded(false); return; }
-    if (!redirectProcessed) { setFamilyLoading(true); return; } // Redirect sonucu bekleniyor — loading göster
+    if (!redirectProcessed) { setFamilyLoading(true); return; }
     setFamilyLoading(true);
 
+    let cancelled = false;
     (async () => {
-      // Önce mevcut aile kaydını kontrol et
-      let f = await getUserFamily(user.uid);
+      try {
+        let f = await getUserFamily(user.uid);
 
-      // Google kullanıcısı ailesi yoksa otomatik oluştur
-      if (!f && !pendingInvite && user.providerData?.some(p => p.providerId === "google.com")) {
-        const displayName = user.displayName || user.email.split("@")[0];
-        // Davet modu kontrolü (localStorage'da saklanmış olabilir)
-        const pendingGoogleInvite = localStorage.getItem("pendingGoogleInvite");
-        if (pendingGoogleInvite) {
-          try {
-            const { code } = JSON.parse(pendingGoogleInvite);
-            const inv = await lookupInvitation(code);
-            if (inv) f = await joinViaInvitation(user.uid, code, { ...inv, email: user.email });
-          } catch {}
-          localStorage.removeItem("pendingGoogleInvite");
-        }
-        if (!f) f = await createFamily(user.uid, user.email, displayName);
-      }
-
-      // Aile kaydı yoksa ve pendingInvite varsa: yeni aile oluştur veya davete katıl
-      if (!f && pendingInvite) {
-        if (pendingInvite.type === "newAdmin") {
-          await migrateOldData(user.uid);
-          f = await createFamily(user.uid, user.email, pendingInvite.name);
-        } else if (pendingInvite.type === "invite") {
-          f = await joinViaInvitation(user.uid, pendingInvite.code, pendingInvite.invData);
-        } else if (pendingInvite.type === "migrateName") {
-          const displayName = prompt("Giriş adınızı belirleyin (İsim Soyisim):");
-          if (displayName && displayName.trim()) {
-            await migrateOldData(user.uid);
-            f = await createFamily(user.uid, user.email, displayName.trim());
+        // Google kullanıcısı ailesi yoksa otomatik oluştur
+        if (!f && !pendingInvite && user.providerData?.some(p => p.providerId === "google.com")) {
+          const displayName = user.displayName || user.email.split("@")[0];
+          const pendingGoogleInvite = localStorage.getItem("pendingGoogleInvite");
+          if (pendingGoogleInvite) {
+            try {
+              const { code } = JSON.parse(pendingGoogleInvite);
+              const inv = await lookupInvitation(code);
+              if (inv) f = await joinViaInvitation(user.uid, code, { ...inv, email: user.email });
+            } catch (e) { console.warn("Davet katılım hatası:", e.message); }
+            localStorage.removeItem("pendingGoogleInvite");
           }
+          if (!f) f = await createFamily(user.uid, user.email, displayName);
         }
-        setPendingInvite(null);
-      }
 
-      setFamily(f);
-      setFamilyLoading(false);
+        // pendingInvite varsa
+        if (!f && pendingInvite) {
+          try {
+            if (pendingInvite.type === "newAdmin") {
+              await migrateOldData(user.uid);
+              f = await createFamily(user.uid, user.email, pendingInvite.name);
+            } else if (pendingInvite.type === "invite") {
+              f = await joinViaInvitation(user.uid, pendingInvite.code, pendingInvite.invData);
+            } else if (pendingInvite.type === "migrateName") {
+              const displayName = prompt("Giriş adınızı belirleyin (İsim Soyisim):");
+              if (displayName && displayName.trim()) {
+                await migrateOldData(user.uid);
+                f = await createFamily(user.uid, user.email, displayName.trim());
+              }
+            }
+          } catch (e) { console.warn("Davet/kayıt hatası:", e.message); }
+          setPendingInvite(null);
+        }
+
+        if (!cancelled) { setFamily(f); setFamilyLoading(false); }
+      } catch (e) {
+        console.warn("Aile kaydı oluşturma hatası:", e.message);
+        if (!cancelled) { setFamily(null); setFamilyLoading(false); }
+      }
     })();
+    return () => { cancelled = true; };
   }, [user, pendingInvite, redirectProcessed]);
 
   useEffect(() => {
@@ -8527,6 +8551,28 @@ export default function App() {
   }, [user, family]);
 
   useEffect(() => { if (loaded && family?.familyId) saveDB(data, family.familyId); }, [data, loaded, family]);
+
+  // Aile kaydı yoksa: sessiz retry ile otomatik oluştur
+  useEffect(() => {
+    if (user && !family && !familyLoading && redirectProcessed) {
+      const retryTimer = setTimeout(async () => {
+        try {
+          let f = await getUserFamily(user.uid);
+          if (!f && user.providerData?.some(p => p.providerId === "google.com")) {
+            const displayName = user.displayName || user.email.split("@")[0];
+            f = await createFamily(user.uid, user.email, displayName);
+          }
+          if (!f && user.emailVerified) {
+            const pendingName = localStorage.getItem("pendingRegName") || user.displayName || user.email.split("@")[0];
+            f = await createFamily(user.uid, user.email, pendingName);
+            localStorage.removeItem("pendingRegName");
+          }
+          if (f) setFamily(f);
+        } catch (e) { console.warn("Aile kaydı retry:", e.message); }
+      }, 2000);
+      return () => clearTimeout(retryTimer);
+    }
+  }, [user, family, familyLoading, redirectProcessed]);
 
   const isAdmin = family?.role === "admin";
   const gmd = useCallback(m => data.months[m] || DM(), [data.months]);
@@ -8557,15 +8603,24 @@ export default function App() {
             <strong style={{ color: X.t }}>{user.email}</strong> adresine bir doğrulama maili gönderdik. Gelen maildeki linke tıklayarak hesabınızı doğrulayın.
           </div>
           <div style={{ color: X.td, fontSize: 11, marginBottom: 16 }}>Spam/gereksiz klasörünü de kontrol edin.</div>
-          <button onClick={async () => { await sendEmailVerification(user); alert("Doğrulama maili tekrar gönderildi."); }} style={{ background: X.gd, border: `1px solid ${X.g}`, borderRadius: 10, padding: "10px 16px", color: X.g, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: ff, width: "100%", marginBottom: 8 }}>Tekrar Gönder</button>
-          <button onClick={async () => { await user.reload(); if (auth.currentUser.emailVerified) { if (pendingName) { const existing = await getUserFamily(user.uid); if (!existing) await createFamily(user.uid, user.email, pendingName); localStorage.removeItem("pendingRegName"); } window.location.reload(); } else { alert("E-posta henüz doğrulanmadı. Lütfen mailinizi kontrol edin."); } }} style={{ background: X.g, border: "none", borderRadius: 10, padding: "12px 16px", color: "white", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: ff, width: "100%", marginBottom: 8 }}>Doğruladım, Devam Et</button>
+          <button onClick={async () => { try { await sendEmailVerification(user); alert("Doğrulama maili tekrar gönderildi. Spam klasörünü de kontrol edin."); } catch (e) { if (e.code === "auth/too-many-requests") alert("Çok fazla istek gönderildi. Lütfen 1-2 dakika bekleyip tekrar deneyin."); else alert("Mail gönderilemedi. Lütfen biraz bekleyip tekrar deneyin."); } }} style={{ background: X.gd, border: `1px solid ${X.g}`, borderRadius: 10, padding: "10px 16px", color: X.g, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: ff, width: "100%", marginBottom: 8 }}>Tekrar Gönder</button>
+          <button onClick={async () => { try { await user.reload(); if (auth.currentUser.emailVerified) { if (pendingName) { try { const existing = await getUserFamily(user.uid); if (!existing) await createFamily(user.uid, user.email, pendingName); } catch (e2) { console.warn("Aile oluşturma hatası:", e2.message); } localStorage.removeItem("pendingRegName"); } window.location.reload(); } else { alert("E-posta henüz doğrulanmadı. Lütfen mailinizi kontrol edin."); } } catch (e) { alert("Bağlantı hatası. Lütfen tekrar deneyin."); } }} style={{ background: X.g, border: "none", borderRadius: 10, padding: "12px 16px", color: "white", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: ff, width: "100%", marginBottom: 8 }}>Doğruladım, Devam Et</button>
           <button onClick={() => signOut(auth)} style={{ background: "none", border: "none", color: X.td, fontSize: 12, cursor: "pointer", fontFamily: ff }}>Çıkış Yap</button>
         </div>
       </div>
     );
   }
 
-  if (!family) return <div style={{ background: _theme.gradientShort, height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: X.tm, fontFamily: ff, fontSize: 14, padding: 20, textAlign: "center" }}>Aile kaydı bulunamadı. Lütfen çıkış yapıp yeniden kayıt olun veya davet koduyla giriş yapın.<br/><button onClick={() => signOut(auth)} style={{ marginTop: 16, background: X.rd, border: "none", borderRadius: 8, padding: "8px 20px", color: X.r, fontWeight: 700, cursor: "pointer" }}>Çıkış Yap</button></div>;
+  if (!family) return (
+    <div style={{ background: _theme.gradientShort, height: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: ff, padding: 20, textAlign: "center", gap: 16 }}>
+      <div style={{ fontSize: 32 }}>🏠</div>
+      <div style={{ color: X.t, fontSize: 16, fontWeight: 700 }}>Hesabınız hazırlanıyor...</div>
+      <div style={{ color: X.tm, fontSize: 12, lineHeight: 1.5 }}>Lütfen bekleyin, bu işlem birkaç saniye sürebilir.</div>
+      <div style={{ width: 40, height: 40, border: `3px solid ${X.gd}`, borderTop: `3px solid ${X.g}`, borderRadius: "50%", animation: "spin 1s linear infinite" }} />
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <button onClick={() => signOut(auth)} style={{ marginTop: 20, background: "none", border: "none", color: X.td, fontSize: 11, cursor: "pointer", fontFamily: ff }}>Sorun mu yaşıyorsunuz? Çıkış yapıp tekrar deneyin</button>
+    </div>
+  );
   if (!loaded) return <div style={{ background: _theme.gradientShort, height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: X.g, fontFamily: ff, fontSize: 16 }}>Veriler yükleniyor...</div>;
 
   // Onboarding: yeni kullanıcı kontrolü
