@@ -3515,6 +3515,7 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
   const [csvSub, setCsvSub] = useState("analysis"); // analysis | category
   const [selMk, setSelMk] = useState(initialMk);
   const [csvCardId, setCsvCardId] = useState("");
+  const [csvTargetMk, setCsvTargetMk] = useState(initialMk);
   const [expandedAsset, setExpandedAsset] = useState(null);
   const [savingsModal, setSavingsModal] = useState(null); // { type: "buy"|"sell", asset }
   const [aiText, setAiText] = useState("");
@@ -3575,10 +3576,11 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
   const handleCSV = e => {
     const file = e.target.files?.[0]; if (!file) return;
     if (!csvCardId) { alert("Önce hangi karta ait olduğunu seçin"); return; }
+    const targetMk = csvTargetMk || mk;
     Papa.parse(file, {
       header: true, skipEmptyLines: true, encoding: "UTF-8", error: err => { alert("Dosya okunamadı: " + (err?.message || "Bilinmeyen hata")); e.target.value = ""; }, complete: r => {
         const ves = data.settings.variableExpenses || [];
-        const md = data.months[mk] || DM();
+        const md = data.months[targetMk] || DM();
         const ccEntries = (md.ccSingle || []).filter(e2 => e2.cardId === csvCardId);
 
         // CSV satırlarını parse et
@@ -3681,7 +3683,7 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
 
         setData(d => {
           const ms = { ...d.months };
-          const md2 = { ...(ms[mk] || DM()) };
+          const md2 = { ...(ms[targetMk] || DM()) };
           const csvByCard = { ...(md2.csvByCard || {}) };
           csvByCard[csvCardId] = {
             transactions: enriched,
@@ -3694,7 +3696,7 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
             }
           };
           md2.csvByCard = csvByCard;
-          ms[mk] = md2;
+          ms[targetMk] = md2;
           return { ...d, months: ms, merchantMap: newMerchantMap };
         });
         e.target.value = "";
@@ -3702,8 +3704,8 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
     });
   };
 
-  // Combine all card CSVs for current month - new structure
-  const allCsvData = data.months[mk]?.csvByCard || {};
+  // Combine all card CSVs for target month (ekstre dönem seçimine göre)
+  const allCsvData = data.months[csvTargetMk || mk]?.csvByCard || {};
   const csvCats = useMemo(() => {
     const ves = data.settings.variableExpenses || [];
     const merged = {};
@@ -4970,11 +4972,13 @@ ${goldRiskLine ? "- Altın borcu kur hareketinden nasıl etkilenir?" : ""}
                     <div style={{ color: X.w, fontSize: 13, padding: 10, background: X.wd, borderRadius: 8 }}>⚠️ Önce Ayarlar → Kartlarım'dan kart ekleyin.</div>
                   ) : (
                     <>
+                      <Sel label="Hangi Dönemin Ekstresi?" value={csvTargetMk} onChange={setCsvTargetMk} options={[mk, pmk(mk), pmk(pmk(mk))].map(m2 => ({ v: m2, l: ml(m2) }))} />
                       <Sel label="Hangi Kartın Ekstresi?" value={csvCardId} onChange={setCsvCardId} options={[{ v: "", l: "— Seçin —" }, ...cards.map(c2 => ({ v: c2.id, l: c2.name }))]} />
-                      <label style={{ display: "block", textAlign: "center" }}>
-                        <span style={{ display: "inline-block", background: csvCardId ? X.g : X.td, color: "#000", borderRadius: 10, padding: "12px 24px", fontSize: 14, fontWeight: 700, cursor: csvCardId ? "pointer" : "not-allowed" }}>📂 CSV Dosyası Yükle</span>
-                        <input type="file" accept=".csv,text/csv" onChange={handleCSV} disabled={!csvCardId} style={{ position: "absolute", width: 0, height: 0, opacity: 0, overflow: "hidden" }} />
+                      <label style={{ display: "block", textAlign: "center", position: "relative", overflow: "hidden" }}>
+                        <span style={{ display: "inline-block", background: csvCardId ? X.g : X.td, color: csvCardId ? "#fff" : "#999", borderRadius: 10, padding: "12px 24px", fontSize: 14, fontWeight: 700, cursor: csvCardId ? "pointer" : "not-allowed" }}>📂 CSV Dosyası Yükle</span>
+                        <input type="file" accept=".csv,.CSV,text/csv,application/vnd.ms-excel" onChange={handleCSV} disabled={!csvCardId} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer" }} />
                       </label>
+                      {!csvCardId && <div style={{ color: X.td, fontSize: 11, textAlign: "center", marginTop: 4 }}>Önce kart seçin</div>}
                     </>
                   )}
                   {Object.keys(allCsvData).length > 0 && <div style={{ marginTop: 12, fontSize: 11, color: X.td }}>Yüklenen: {Object.keys(allCsvData).map(cid => cards.find(c2 => c2.id === cid)?.name || "?").join(", ")}</div>}
