@@ -274,9 +274,9 @@ function DetailModal({ title, rows, total, totalLabel, totalColor, note, onClose
     <Modal title={title} onClose={onClose}>
       <div style={{ borderRadius: 10, padding: "12px 14px", background: "rgba(160,190,200,0.35)" }}>
         {rows.map((row, i) => (
-          <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderBottom: i < rows.length - 1 ? "1px solid rgba(0,0,0,0.05)" : "none", fontSize: 13 }}>
-            <span style={{ color: row.color || X.tm, flex: 1, paddingRight: 8 }}>{row.sign === "−" ? "− " : ""}{row.label}{row.sub ? ` (${row.sub})` : ""}</span>
-            <span style={{ color: row.color || X.tm, fontFamily: fm, fontWeight: 700, flexShrink: 0 }}>{row.sign === "−" ? "−" : ""}{typeof row.value === "number" ? C(row.value) : row.value}</span>
+          <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderBottom: i < rows.length - 1 ? "1px solid rgba(0,0,0,0.05)" : "none", fontSize: 13, ...(row.info ? { background: "rgba(29,78,216,0.05)", borderRadius: 6, padding: "6px 8px", marginTop: 4, border: "1px dashed rgba(29,78,216,0.2)" } : {}) }}>
+            <span style={{ color: row.color || X.tm, flex: 1, paddingRight: 8, ...(row.info ? { fontSize: 11, fontStyle: "italic" } : {}) }}>{row.sign === "−" ? "− " : ""}{row.label}{row.sub ? ` (${row.sub})` : ""}</span>
+            <span style={{ color: row.color || X.tm, fontFamily: fm, fontWeight: 700, flexShrink: 0, ...(row.info ? { fontSize: 11 } : {}) }}>{row.sign === "−" ? "−" : ""}{typeof row.value === "number" ? C(row.value) : row.value}</span>
           </div>
         ))}
         {total !== undefined && (
@@ -943,6 +943,13 @@ function getMonthBreakdown(data, m) {
   // Zarf taşması
   if (mc.envelopeOverflow > 0) {
     rows.push({ label: "Kategori taşması", value: mc.envelopeOverflow, sign: "−", color: X.r });
+  }
+  // Ekstre modu: bu ayın KK harcamaları bilgi satırı
+  if (data.settings.ccPaymentMode === "ekstre") {
+    const currentCCTotal = (md.ccSingle || []).reduce((s, e) => s + e.amount, 0);
+    if (currentCCTotal > 0) {
+      rows.push({ label: `Bu ayki KK harcamaları (${ml(nmk(m))} bütçesine yansıyacak)`, value: currentCCTotal, sign: "", color: X.td, info: true });
+    }
   }
   return { rows, mc };
 }
@@ -3208,6 +3215,57 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
                 const sourceId = item.key.split("-").slice(1).join("-");
                 return <ItemRow key={item.key} label={item.label} sub={item.sub} value={item.amount} color={transferred ? X.g : X.t} toggle={!!transferred} toggleOn={() => handleCCTransfer(item.key)} toggleOff={() => undoCCTransfer(item.key)} toggleLabelOn="Aktarıldı" toggleLabelOff="Aktar" onEdit={isSingle ? () => editCCSingle(sourceId) : isInst ? () => editInstallment(sourceId) : null} onDelete={isSingle ? () => deleteCCSingle(sourceId) : isInst ? () => deleteInstallment(sourceId) : null} />;
               })}
+              {/* Ekstre modu: bu ay kaydedilen KK harcamaları bilgi bölümü */}
+              {isEkstreMode && (() => {
+                const cards2 = data.settings.cards || [];
+                const debitIds2 = new Set(cards2.filter(c2 => c2.type === "debit").map(c2 => c2.id));
+                const currentCCEntries = (md.ccSingle || []).filter(e => !debitIds2.has(e.cardId));
+                const currentInstEntries = data.installmentPlans.filter(p => {
+                  if (debitIds2.has(p.cardId)) return false;
+                  let cur = p.startMonth;
+                  for (let i = 0; i < p.months; i++) { if (cur === mk) return true; cur = nmk(cur); }
+                  return false;
+                });
+                const allCurrentCC = [
+                  ...currentCCEntries.map(e => ({ label: e.note || e.merchantName || "Tek çekim", amount: e.amount, cardId: e.cardId || cards2[0]?.id, date: e.date })),
+                  ...currentInstEntries.map(p => ({ label: p.note || "Taksit", amount: p.monthlyPayment, cardId: p.cardId || cards2[0]?.id, date: "" })),
+                ];
+                if (allCurrentCC.length === 0) return null;
+                const byCard2 = {};
+                allCurrentCC.forEach(e => {
+                  const cid = e.cardId || "unknown";
+                  if (!byCard2[cid]) byCard2[cid] = { name: cards2.find(c2 => c2.id === cid)?.name || "Bilinmeyen", items: [], total: 0 };
+                  byCard2[cid].items.push(e);
+                  byCard2[cid].total += e.amount;
+                });
+                const cardGroups = Object.values(byCard2).sort((a, b) => b.total - a.total);
+                const grandTotal = allCurrentCC.reduce((s, e) => s + e.amount, 0);
+                return (
+                  <div style={{ marginTop: 16, borderTop: `1px dashed ${X.border}`, paddingTop: 14 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                      <div style={{ color: X.tm, fontSize: 10, fontWeight: 800, letterSpacing: "0.07em", textTransform: "uppercase" }}>Bu Ay Kaydedilen</div>
+                      <span style={{ color: X.td, fontSize: 13, fontWeight: 800, fontFamily: fm }}>{C(grandTotal)}</span>
+                    </div>
+                    <div style={{ background: "rgba(180,83,9,0.06)", border: "1px solid rgba(180,83,9,0.15)", borderRadius: 8, padding: "8px 12px", marginBottom: 10 }}>
+                      <div style={{ color: X.w, fontSize: 11, lineHeight: 1.5 }}>Bu harcamalar {ml(nmk(mk))} bütçenize yansıyacak ve o dönemde aktarılacak.</div>
+                    </div>
+                    {cardGroups.map(cg => (
+                      <div key={cg.name} style={{ marginBottom: 10 }}>
+                        <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6 }}>
+                          <span style={{ color: X.td, fontSize: 12, fontWeight: 700 }}>💳 {cg.name}</span>
+                          <span style={{ color: X.td, fontSize: 12, fontWeight: 800, fontFamily: fm }}>{C(cg.total)}</span>
+                        </div>
+                        {cg.items.map((item2, idx) => (
+                          <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 0 4px 20px" }}>
+                            <span style={{ color: X.td, fontSize: 12 }}>{item2.label}{item2.date ? ` • ${item2.date}` : ""}</span>
+                            <span style={{ color: X.td, fontSize: 12, fontFamily: fm }}>{C(item2.amount)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
           );
 
@@ -8120,6 +8178,22 @@ function MonthCloseRitual({ data, setData, prevMk, onClose }) {
             <div style={{ color: X.tm, fontSize: 11 }}>{motivation}</div>
           </Card>
         )}
+
+        {data.settings.ccPaymentMode === "ekstre" && (() => {
+          const prevMd2 = data.months[prevMk] || DM();
+          const cards = data.settings.cards || [];
+          const debitIds3 = new Set(cards.filter(c2 => c2.type === "debit").map(c2 => c2.id));
+          const ccEntries = (prevMd2.ccSingle || []).filter(e => !debitIds3.has(e.cardId));
+          const ccFixedTotal = data.settings.fixedExpenses.filter(e => e.paymentMethod === "cc" && !debitIds3.has(e.cardId || cards[0]?.id)).reduce((s, e) => s + e.amount, 0);
+          const ccTotal = ccEntries.reduce((s, e) => s + e.amount, 0) + ccFixedTotal;
+          if (ccTotal <= 0) return null;
+          return (
+            <Card s={{ marginBottom: 12, background: "rgba(29,78,216,0.06)", border: "1px solid rgba(29,78,216,0.15)" }}>
+              <div style={{ color: X.b, fontSize: 12, fontWeight: 700, marginBottom: 4 }}>📋 {ml(prevMk)} KK Harcamaları</div>
+              <div style={{ color: X.tm, fontSize: 11, lineHeight: 1.5 }}>Bu dönemin kredi kartı harcamaları ({C(ccTotal)}) {ml(newMk)} bütçenize yansıyacak ve o dönemde aktarılacak.</div>
+            </Card>
+          );
+        })()}
 
         <Card s={{ marginBottom: 16 }}>
           <div style={{ color: X.tm, fontSize: 12, fontWeight: 700, marginBottom: 10 }}>YENİ AY BÜTÇESİ ({ml(newMk)})</div>
