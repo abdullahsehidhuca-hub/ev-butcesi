@@ -555,14 +555,17 @@ function calcMonth(data, m, extraInst) {
   let installmentTotal = data.installmentPlans.reduce((s, p) => { let c = p.startMonth; for (let i = 0; i < p.months; i++) { if (c === m) return s + p.monthlyPayment; c = nmk(c); } return s; }, 0);
   if (extraInst) { let c = extraInst.startMonth; for (let i = 0; i < extraInst.months; i++) { if (c === m) { installmentTotal += extraInst.monthlyPayment; break; } c = nmk(c); } }
 
-  // Borçlar
-  const debtTotal = data.debts.filter(d => d.remainingMonths > 0).reduce((s, d) => {
-    if (d.currency === "TRY") return s + d.monthlyPayment;
-    if (d.currency === "USD") { const rate = data.liveRates?.USD || data.usdRates?.[m] || 0; return s + d.monthlyPayment * rate; }
-    if (d.currency === "EUR") { const rate = data.liveRates?.EUR || data.eurRates?.[m] || 0; return s + d.monthlyPayment * rate; }
-    if (d.currency === "XAU") { const rate = data.liveRates?.XAU || data.goldRates?.[m] || 0; return s + d.monthlyPayment * rate; }
-    return s;
-  }, 0);
+  // Borçlar — ödenmemiş olanlar blokede, ödenenler groupA'ya eklenir
+  const debtTLCalc = d => {
+    if (d.currency === "TRY") return d.monthlyPayment;
+    if (d.currency === "USD") return d.monthlyPayment * (data.liveRates?.USD || data.usdRates?.[m] || 0);
+    if (d.currency === "EUR") return d.monthlyPayment * (data.liveRates?.EUR || data.eurRates?.[m] || 0);
+    if (d.currency === "XAU") return d.monthlyPayment * (data.liveRates?.XAU || data.goldRates?.[m] || 0);
+    return 0;
+  };
+  const activeDebts = data.debts.filter(d => d.remainingMonths > 0 || md.debtPayments?.[d.id]?.paid);
+  const debtTotal = activeDebts.filter(d => !md.debtPayments?.[d.id]?.paid).reduce((s, d) => s + debtTLCalc(d), 0);
+  const paidDebtTotal = activeDebts.filter(d => md.debtPayments?.[d.id]?.paid).reduce((s, d) => s + debtTLCalc(d), 0);
 
   // Konfor harcaması kartı (sabit bütçe)
   const generalCardBudget = data.settings.generalCardBudget || 0;
@@ -648,7 +651,7 @@ function calcMonth(data, m, extraInst) {
   const transferredAcc = (md.accountEntries || []).filter(e => md.accountTransferred?.[e.id]?.transferred).reduce((s, e) => s + e.amount, 0);
   // Banka kartı harcamaları (debitCardEntries) doğrudan bakiyeden düşer
   const debitCardSpent = (md.debitCardEntries || []).reduce((s, e) => s + (e.amount || 0), 0);
-  const groupA = paidFixedAcc + transferredCC + transferredFixedCC + cardLoaded + transferredAcc + totalTransferredInst + debitCardSpent;
+  const groupA = paidFixedAcc + transferredCC + transferredFixedCC + cardLoaded + transferredAcc + totalTransferredInst + debitCardSpent + paidDebtTotal;
 
   // === B GRUBU: Kesin çıkacak ama henüz çıkmamış ===
   const unpaidFixedAcc = data.settings.fixedExpenses.filter(e => e.paymentMethod === "account" && !md.fixedPaid?.[e.id]).reduce((s, e) => s + e.amount, 0);
@@ -707,7 +710,7 @@ function calcMonth(data, m, extraInst) {
   const envelopeOverflow = Math.max(0, categorizedTotal - variableEstimate);
   const unpaidFixed = data.settings.fixedExpenses.filter(e => !md.fixedPaid?.[e.id]).reduce((s, e) => s + e.amount, 0);
 
-  return { effectiveBudget, baseBudget, carryoverDeficit, fixedTotal, variableTotal, ccSingleTotal, accountTotal, installmentTotal, debtTotal, cardLoaded, cardLoadMaxPerTx, cardLoadMaxTotal, cardLoadRemaining, availableForCard, totalSpent, remaining, remainingX, remainingY, savingsTarget, expectedCCSingle, ccTransferNeeded, expectedVariable, pendingVariable, variableEstimate, categorizedCC, uncategorizedCC, envelopeRemaining, envelopeOverflow, emergencyBuffer, cardUsable, generalCardBudget, bloke, groupA, groupB, groupC, unpaidFixed, unpaidFixedAcc, untransferredCC, untransferredFixedCC, untransferredAcc, cardBlokeKalan, variableBlokeKalan, transferredAcc, paidFixedAcc, transferredCC, transferredFixedCC, eventKumbaraBloke, untransferredInst };
+  return { effectiveBudget, baseBudget, carryoverDeficit, fixedTotal, variableTotal, ccSingleTotal, accountTotal, installmentTotal, debtTotal, paidDebtTotal, cardLoaded, cardLoadMaxPerTx, cardLoadMaxTotal, cardLoadRemaining, availableForCard, totalSpent, remaining, remainingX, remainingY, savingsTarget, expectedCCSingle, ccTransferNeeded, expectedVariable, pendingVariable, variableEstimate, categorizedCC, uncategorizedCC, envelopeRemaining, envelopeOverflow, emergencyBuffer, cardUsable, generalCardBudget, bloke, groupA, groupB, groupC, unpaidFixed, unpaidFixedAcc, untransferredCC, untransferredFixedCC, untransferredAcc, cardBlokeKalan, variableBlokeKalan, transferredAcc, paidFixedAcc, transferredCC, transferredFixedCC, eventKumbaraBloke, untransferredInst };
 }
 function calcFlat(data, m, extraInst) {
   const md = data.months[m] || DM();
@@ -8718,6 +8721,7 @@ export default function App() {
       { label: "Aktarılan Kredi Kartı harcamaları", value: (c.transferredCC || 0) + (c.transferredFixedCC || 0), sign: "−" },
       { label: "Aktarılan hesaptan ödemeler", value: c.transferredAcc || 0, sign: "−" },
       { label: "Konfor kartı yükleme", value: c.cardLoaded || 0, sign: "−" },
+      { label: "Ödenen borçlar", value: c.paidDebtTotal || 0, sign: "−" },
     ].filter((r, i) => i === 0 || r.value > 0);
     setHeaderDetail({ title: "Kalan Bütçe Detayı", rows, total: c.remainingY || 0, totalLabel: `Bankadaki Reel Tutar: ${C(c.remainingY||0)}  |  Bloke Sonrası Kalan: ${C(c.remainingX||0)}`, totalColor: (c.remainingX||0) >= 0 ? X.g : X.r });
   };
