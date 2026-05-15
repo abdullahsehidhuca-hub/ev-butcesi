@@ -776,7 +776,7 @@ function calcFlat(data, m, extraInst) {
 }
 
 /* ═══ YAKLAŞAN ÖDEMELER ═══ */
-function getUpcomingPayments(data, daysAhead = 3, mk = cmk()) {
+function getUpcomingPayments(data, daysAhead = 3, mk = cmk(data?.settings?.payDay || 15)) {
   const today = new Date();
   const todayDay = today.getDate();
   const todayMonth = today.getMonth();
@@ -863,6 +863,8 @@ function generateICS(data) {
   const events = [];
   const now = new Date();
   const year = now.getFullYear();
+  const pd = data.settings?.payDay || 15;
+  const currentMk = cmk(pd);
 
   const icsDate = (y, m, d) => `${y}${String(m+1).padStart(2,"0")}${String(d).padStart(2,"0")}`;
 
@@ -880,22 +882,22 @@ function generateICS(data) {
   data.debts.filter(d => d.remainingMonths > 0).forEach(debt => {
     if (!debt.paymentDay) return;
     const day = debt.paymentDay;
-    const tlVal = debtTLValue(debt, data, mk);
+    const tlVal = debtTLValue(debt, data, currentMk);
     const uid2 = `debt-${debt.id}@ev-butcesi`;
     events.push(
       `BEGIN:VEVENT\nDTSTART;VALUE=DATE:${icsDate(year, now.getMonth(), day)}\nSUMMARY:📌 ${debt.name} ${C(tlVal)}\nDESCRIPTION:Borç ödemesi - ${debt.remainingMonths} ay kaldı - Ev Bütçesi\nRRULE:FREQ=MONTHLY;BYMONTHDAY=${day};COUNT=${debt.remainingMonths}\nBEGIN:VALARM\nTRIGGER:-PT12H\nACTION:DISPLAY\nDESCRIPTION:Yarın: ${debt.name} borç ödemesi\nEND:VALARM\nBEGIN:VALARM\nTRIGGER:PT0S\nACTION:DISPLAY\nDESCRIPTION:Bugün: ${debt.name} borç ödemesi\nEND:VALARM\nUID:${uid2}\nEND:VEVENT`
     );
   });
 
-  // Taksitler → kalan ay kadar tekrarlayan etkinlik (15'inde varsayılan)
+  // Taksitler → kalan ay kadar tekrarlayan etkinlik (payDay'e göre)
   data.installmentPlans.forEach(plan => {
     let remaining = 0;
     let cur = plan.startMonth;
-    for (let i = 0; i < plan.months; i++) { if (cur >= (mk)) remaining++; cur = nmk(cur); }
+    for (let i = 0; i < plan.months; i++) { if (cur >= currentMk) remaining++; cur = nmk(cur); }
     if (remaining <= 0) return;
     const uid2 = `inst-${plan.id}@ev-butcesi`;
     events.push(
-      `BEGIN:VEVENT\nDTSTART;VALUE=DATE:${icsDate(year, now.getMonth(), 15)}\nSUMMARY:📅 Taksit: ${plan.note || "Taksitli harcama"} ${C(plan.monthlyPayment)}\nDESCRIPTION:${plan.months} taksit - ${remaining} ay kaldı - Ev Bütçesi\nRRULE:FREQ=MONTHLY;BYMONTHDAY=15;COUNT=${remaining}\nBEGIN:VALARM\nTRIGGER:-PT12H\nACTION:DISPLAY\nDESCRIPTION:Yarın: ${plan.note || "Taksit"} ${C(plan.monthlyPayment)}\nEND:VALARM\nUID:${uid2}\nEND:VEVENT`
+      `BEGIN:VEVENT\nDTSTART;VALUE=DATE:${icsDate(year, now.getMonth(), pd)}\nSUMMARY:📅 Taksit: ${plan.note || "Taksitli harcama"} ${C(plan.monthlyPayment)}\nDESCRIPTION:${plan.months} taksit - ${remaining} ay kaldı - Ev Bütçesi\nRRULE:FREQ=MONTHLY;BYMONTHDAY=${pd};COUNT=${remaining}\nBEGIN:VALARM\nTRIGGER:-PT12H\nACTION:DISPLAY\nDESCRIPTION:Yarın: ${plan.note || "Taksit"} ${C(plan.monthlyPayment)}\nEND:VALARM\nUID:${uid2}\nEND:VEVENT`
     );
   });
 
@@ -2893,16 +2895,18 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
   const handleFixedPay = expId => { setMonthField(mk, "fixedPaid", { ...md.fixedPaid, [expId]: { paid: true, date: td() } }); };
   const handleFixedUnpay = expId => { const fp = { ...md.fixedPaid }; delete fp[expId]; setMonthField(mk, "fixedPaid", fp); };
 
+  // Eski otomatik işaretleme verilerini temizle (bir kerelik migrasyon)
   useEffect(() => {
-    const autoExps = (data.settings.fixedExpenses || []).filter(e => e.autoPayment);
-    if (autoExps.length === 0) return;
+    const autoIds = new Set((data.settings.fixedExpenses || []).filter(e => e.autoPayment).map(e => e.id));
     const current = md.fixedPaid || {};
-    const needsMark = autoExps.filter(e => !current[e.id]);
-    if (needsMark.length === 0) return;
-    const updated = { ...current };
-    needsMark.forEach(e => { updated[e.id] = { paid: true, date: mk + "-01" }; });
-    setMonthField(mk, "fixedPaid", updated);
+    const autoMarkedDate = mk + "-01";
+    const toRemove = Object.keys(current).filter(id => autoIds.has(id) && current[id]?.date === autoMarkedDate);
+    if (toRemove.length === 0) return;
+    const cleaned = { ...current };
+    toRemove.forEach(id => delete cleaned[id]);
+    setMonthField(mk, "fixedPaid", cleaned);
   }, [mk]);
+
   const handleCCSingle = entry => { setMonthField(mk, "ccSingle", [...(md.ccSingle || []), entry]); flash("✓ Tek çekim kaydedildi"); };
   const deleteCCSingle = id => { setMonthField(mk, "ccSingle", (md.ccSingle || []).filter(e => e.id !== id)); };
   const editCCSingle = id => {
@@ -5342,6 +5346,9 @@ function PlanningScreen({ data, setData, mk }) {
   const [gTransferAmt, setGTransferAmt] = useState("");
   const [gTransferFrom, setGTransferFrom] = useState("savings");
 
+  // Taksit kapasitesi detay
+  const [instCapDetail, setInstCapDetail] = useState(false);
+
   // Planlı Etkinlik form state
   const [evEditing, setEvEditing] = useState(null);
   const [evName, setEvName] = useState("");
@@ -6254,11 +6261,11 @@ function PlanningScreen({ data, setData, mk }) {
         return (
           <>
             {/* Genel taksit hakkı bilgisi */}
-            <Card s={{ marginBottom: 12, background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.2)" }}>
+            <Card s={{ marginBottom: 12, background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.2)", cursor: "pointer" }} onClick={() => setInstCapDetail(true)}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div>
                   <div style={{ color: X.p, fontSize: 13, fontWeight: 700 }}>📊 Aylık Taksit Kapasitesi</div>
-                  <div style={{ color: X.td, fontSize: 10, marginTop: 2 }}>Bütçenizin %12'si · max {C(maxInstLimit)}</div>
+                  <div style={{ color: X.td, fontSize: 10, marginTop: 2 }}>Bütçenizin %12'si · max {C(maxInstLimit)} · detay için tıkla</div>
                 </div>
                 <div style={{ textAlign: "right" }}>
                   <div style={{ color: remainingInstHak > 0 ? X.g : X.r, fontSize: 18, fontWeight: 800, fontFamily: fm }}>{C(remainingInstHak)}</div>
@@ -6269,6 +6276,29 @@ function PlanningScreen({ data, setData, mk }) {
                 <div style={{ height: "100%", borderRadius: 3, background: currentInstTotal <= maxInstLimit ? X.p : X.r, width: `${Math.min(100, (currentInstTotal / maxInstLimit) * 100)}%`, transition: "width 0.4s" }} />
               </div>
             </Card>
+
+            {instCapDetail && (() => {
+              const activeInsts = data.installmentPlans.filter(p => {
+                let c2 = p.startMonth;
+                for (let i = 0; i < p.months; i++) { if (c2 === mk) return true; c2 = nmk(c2); }
+                return false;
+              });
+              const rows = activeInsts.map(p => {
+                let paidCount = 0; let c2 = p.startMonth;
+                for (let i = 0; i < p.months; i++) { if (c2 < mk) paidCount++; else break; c2 = nmk(c2); }
+                return { label: p.note || "Taksit", sub: `${paidCount + 1}/${p.months} ay`, value: p.monthlyPayment, color: X.t };
+              });
+              rows.push({ label: "Toplam aylık taksit yükü", value: currentInstTotal, color: X.p, sign: "" });
+              return <DetailModal
+                title="📊 Aylık Taksit Kapasitesi"
+                rows={rows}
+                total={remainingInstHak}
+                totalLabel="Kalan kapasite"
+                totalColor={remainingInstHak > 0 ? X.g : X.r}
+                note={`Aylık bütçenizin (${C(budget)}) en fazla %12'si taksit ödemelerine ayrılabilir. Bu oran, sabit giderler ve değişken harcamalar dışında kalan bütçenizin sağlıklı kalmasını sağlar. Limit: ${C(maxInstLimit)}/ay. Mevcut yük: ${C(currentInstTotal)}/ay (${budget > 0 ? Math.round((currentInstTotal / budget) * 100) : 0}%).`}
+                onClose={() => setInstCapDetail(false)}
+              />;
+            })()}
 
             {/* Yeni etkinlik butonu */}
             {!evEditing && (
@@ -7242,9 +7272,9 @@ function Settings({ data, setData, isAdmin, family, mk }) {
         <div style={{ color: X.tm, fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Maaş Günü (Dönem Başlangıcı)</div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6, marginBottom: 12 }}>
           {["1", "5", "10", "15", "20", "25", "30"].map(d2 => (
-            <button key={d2} onClick={() => setForm(f => ({ ...f, pd: d2 }))} style={{ background: String(form.pd ?? data.settings.payDay ?? 15) === d2 ? X.gd : "white", border: `1px solid ${String(form.pd ?? data.settings.payDay ?? 15) === d2 ? X.g : "rgba(0,0,0,0.08)"}`, borderRadius: 8, padding: "10px", fontSize: 15, fontWeight: 800, cursor: "pointer", fontFamily: ff, color: String(form.pd ?? data.settings.payDay ?? 15) === d2 ? X.g : X.td }}>{d2}</button>
+            <button key={d2} onClick={() => setForm(f => ({ ...f, pd: d2, pdCustom: false }))} style={{ background: String(form.pd ?? data.settings.payDay ?? 15) === d2 && !form.pdCustom ? X.gd : "white", border: `1px solid ${String(form.pd ?? data.settings.payDay ?? 15) === d2 && !form.pdCustom ? X.g : "rgba(0,0,0,0.08)"}`, borderRadius: 8, padding: "10px", fontSize: 15, fontWeight: 800, cursor: "pointer", fontFamily: ff, color: String(form.pd ?? data.settings.payDay ?? 15) === d2 && !form.pdCustom ? X.g : X.td }}>{d2}</button>
           ))}
-          <input type="number" value={!["1", "5", "10", "15", "20", "25", "30"].includes(String(form.pd ?? data.settings.payDay ?? 15)) ? (form.pd ?? data.settings.payDay ?? "") : ""} onChange={e => setForm(f => ({ ...f, pd: e.target.value }))} placeholder="Diğer" style={{ background: "white", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 8, padding: "10px", fontSize: 14, color: X.t, textAlign: "center", fontFamily: fm }} />
+          <input type="number" value={form.pdCustom ? (form.pd ?? "") : (!["1", "5", "10", "15", "20", "25", "30"].includes(String(form.pd ?? data.settings.payDay ?? 15)) ? (form.pd ?? data.settings.payDay ?? "") : "")} onChange={e => setForm(f => ({ ...f, pd: e.target.value, pdCustom: true }))} placeholder="Diğer" style={{ background: form.pdCustom ? "rgba(22,163,74,0.08)" : "white", border: `1px solid ${form.pdCustom ? X.g : "rgba(0,0,0,0.08)"}`, borderRadius: 8, padding: "10px", fontSize: 14, color: X.t, textAlign: "center", fontFamily: fm }} />
         </div>
         <div style={{ color: X.td, fontSize: 11, marginBottom: 12, lineHeight: 1.5 }}>Bütçe döngünüz bu günden bir sonraki maaş gününe kadardır. Örn: 15 → her ayın 15'inden 14'üne.</div>
         <Inp label="Varsayılan Aylık Bütçe (₺)" type="number" value={form.b ?? data.settings.monthlyBudget} onChange={v => setForm(f => ({ ...f, b: v }))} suffix="₺" />
@@ -8163,7 +8193,10 @@ function MonthCloseRitual({ data, setData, prevMk, onClose }) {
   const riskInfo = getRiskInfo(risk.score);
   const newMk = nmk(prevMk);
   const [newBudget, setNewBudget] = useState(String(prev.baseBudget));
-  const hasSurplus = prev.remaining > 0;
+  const [bankVerified, setBankVerified] = useState(false);
+  const [realBankInput, setRealBankInput] = useState("");
+  const actualRemaining = realBankInput !== "" ? parseFloat(realBankInput) || 0 : prev.remaining;
+  const hasSurplus = actualRemaining > 0;
 
   const motivation = hasSurplus
     ? risk.score < 30 ? "Tebrikler! Bütçenizi iyi yönettiniz ve birikim yaptınız." : "Birikim yaptınız, ancak risk skoru dikkat gerektiriyor."
@@ -8196,15 +8229,14 @@ function MonthCloseRitual({ data, setData, prevMk, onClose }) {
 
       if (hasSurplus) {
         const list = [...(newSavings.TRY || [])];
-        // Ayın son günü tarihi
         list.push({
           id: uid(),
           type: "buy",
-          amount: prev.remaining,
+          amount: actualRemaining,
           unitPrice: 1,
           date: lastDay,
           source: "monthly_close",
-          note: `${ml(prevMk)} ayından otomatik`
+          note: `${ml(prevMk)} ayından ${realBankInput !== "" ? "banka doğrulamalı" : "otomatik"}`
         });
         newSavings.TRY = list;
       }
@@ -8246,17 +8278,44 @@ function MonthCloseRitual({ data, setData, prevMk, onClose }) {
           </div>
         </Card>
 
-        {hasSurplus ? (
-          <Card s={{ marginBottom: 12, background: "rgba(15,118,110,0.35)", border: "1px solid rgba(15,118,110,0.30)" }}>
-            <div style={{ color: X.g, fontSize: 13, fontWeight: 700, marginBottom: 4 }}>💰 TL Birikiminize Eklendi</div>
-            <div style={{ color: X.t, fontSize: 20, fontWeight: 800, fontFamily: fm }}>+{C(prev.remaining)}</div>
-            <div style={{ color: X.tm, fontSize: 11, marginTop: 4 }}>{motivation}</div>
+        {/* Banka bakiyesi doğrulama */}
+        {prev.remaining > 0 && !bankVerified && (
+          <Card s={{ marginBottom: 12, background: "rgba(29,78,216,0.08)", border: "1px solid rgba(29,78,216,0.2)" }}>
+            <div style={{ color: X.b, fontSize: 13, fontWeight: 700, marginBottom: 8 }}>🏦 Banka Bakiyesi Doğrulama</div>
+            <div style={{ color: X.tm, fontSize: 12, lineHeight: 1.6, marginBottom: 12 }}>
+              Ay sonu itibarıyla uygulamada görünen bankadaki tutar <span style={{ fontWeight: 800, color: X.t, fontFamily: fm }}>{C(prev.remaining)}</span>'dir. Banka hesabınızı kontrol ederek bu tutarı güncelleyebilirsiniz.
+            </div>
+            <div style={{ marginBottom: 12 }}>
+              <input type="number" value={realBankInput} onChange={e => setRealBankInput(e.target.value)} placeholder={`Gerçek banka bakiyesi (₺)`} style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid rgba(29,78,216,0.3)", background: "rgba(255,255,255,0.8)", fontSize: 15, fontFamily: fm, fontWeight: 700, color: X.t, boxSizing: "border-box" }} />
+            </div>
+            {realBankInput !== "" && parseFloat(realBankInput) !== prev.remaining && (
+              <div style={{ color: X.tm, fontSize: 11, marginBottom: 10, lineHeight: 1.5 }}>
+                Fark: <span style={{ fontWeight: 700, color: (parseFloat(realBankInput) || 0) > prev.remaining ? X.g : X.w, fontFamily: fm }}>{C(Math.abs((parseFloat(realBankInput) || 0) - prev.remaining))}</span> {(parseFloat(realBankInput) || 0) > prev.remaining ? "fazla" : "eksik"}
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 8 }}>
+              <Btn onClick={() => setBankVerified(true)} c={X.b} s={{ flex: 1 }} disabled={realBankInput !== "" && !(parseFloat(realBankInput) >= 0)}>
+                {realBankInput !== "" ? "Güncelle ve Devam Et" : "Güncelle"}
+              </Btn>
+              <Btn onClick={() => { setRealBankInput(""); setBankVerified(true); }} v="outline" c={X.td} s={{ flex: 1 }}>Mevcut Tutarla Devam Et</Btn>
+            </div>
           </Card>
-        ) : (
-          <Card s={{ marginBottom: 12, background: X.od, border: `1px solid ${X.o}` }}>
-            <div style={{ color: X.o, fontSize: 13, fontWeight: 700, marginBottom: 4 }}>⚠️ Bu Ay Birikim Yok</div>
-            <div style={{ color: X.tm, fontSize: 11 }}>{motivation}</div>
-          </Card>
+        )}
+
+        {(bankVerified || prev.remaining <= 0) && (
+          hasSurplus ? (
+            <Card s={{ marginBottom: 12, background: "rgba(15,118,110,0.35)", border: "1px solid rgba(15,118,110,0.30)" }}>
+              <div style={{ color: X.g, fontSize: 13, fontWeight: 700, marginBottom: 4 }}>💰 TL Birikiminize Eklendi</div>
+              <div style={{ color: X.t, fontSize: 20, fontWeight: 800, fontFamily: fm }}>+{C(actualRemaining)}</div>
+              {realBankInput !== "" && <div style={{ color: X.tm, fontSize: 11, marginTop: 2 }}>Banka doğrulaması ile güncellendi (uygulama hesabı: {C(prev.remaining)})</div>}
+              <div style={{ color: X.tm, fontSize: 11, marginTop: 4 }}>{motivation}</div>
+            </Card>
+          ) : (
+            <Card s={{ marginBottom: 12, background: X.od, border: `1px solid ${X.o}` }}>
+              <div style={{ color: X.o, fontSize: 13, fontWeight: 700, marginBottom: 4 }}>⚠️ Bu Ay Birikim Yok</div>
+              <div style={{ color: X.tm, fontSize: 11 }}>{motivation}</div>
+            </Card>
+          )
         )}
 
         {data.settings.ccPaymentMode === "ekstre" && (() => {
@@ -8275,12 +8334,16 @@ function MonthCloseRitual({ data, setData, prevMk, onClose }) {
           );
         })()}
 
-        <Card s={{ marginBottom: 16 }}>
-          <div style={{ color: X.tm, fontSize: 12, fontWeight: 700, marginBottom: 10 }}>YENİ AY BÜTÇESİ ({ml(newMk)})</div>
-          <Inp label="Bu ay için bütçeniz" type="number" value={newBudget} onChange={setNewBudget} suffix="₺" />
-        </Card>
+        {(bankVerified || prev.remaining <= 0) && (
+          <>
+            <Card s={{ marginBottom: 16 }}>
+              <div style={{ color: X.tm, fontSize: 12, fontWeight: 700, marginBottom: 10 }}>YENİ AY BÜTÇESİ ({ml(newMk)})</div>
+              <Inp label="Bu ay için bütçeniz" type="number" value={newBudget} onChange={setNewBudget} suffix="₺" />
+            </Card>
 
-        <Btn onClick={finalize} c={X.g}>✓ Kapat ve Yeni Ayı Başlat</Btn>
+            <Btn onClick={finalize} c={X.g}>✓ Kapat ve Yeni Ayı Başlat</Btn>
+          </>
+        )}
       </div>
     </div>
   );
