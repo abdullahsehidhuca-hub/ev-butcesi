@@ -2667,7 +2667,7 @@ function ReceiptModal({ receipts, onClose, onSave, onDelete }) {
           {/* ÖDEME YÖNTEMİ */}
           <div style={{ color: X.tm, fontSize: 10, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 8 }}>Ödeme Yöntemi</div>
           <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
-            {[{ v: "cc", l: "💳 Kredi Kartı" }, { v: "setcard", l: "🍽️ Setcard" }, { v: "multinet", l: "🏪 Multinet" }].map(opt => (
+            {[{ v: "cc", l: "💳 Kredi Kartı" }, { v: "mealcard", l: "🍽️ Yemek Kartları" }, { v: "comfort", l: "☕ Konfor Harcaması" }].map(opt => (
               <button key={opt.v} onClick={() => setPaymentMethod(opt.v)} style={{ padding: "7px 12px", borderRadius: 20, border: `1.5px solid ${paymentMethod === opt.v ? X.g : "rgba(0,0,0,0.1)"}`, background: paymentMethod === opt.v ? X.g : "white", color: paymentMethod === opt.v ? "white" : X.tm, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: ff, whiteSpace: "nowrap" }}>{opt.l}</button>
             ))}
           </div>
@@ -2702,13 +2702,13 @@ function ReceiptModal({ receipts, onClose, onSave, onDelete }) {
             </div>
             {/* Ödeme yöntemi badge */}
             <div style={{ display: "inline-block", background: X.gd, border: `1px solid ${X.g}40`, borderRadius: 6, padding: "2px 8px", fontSize: 10, fontWeight: 700, color: X.g }}>
-              {{ cc: "💳 Kredi Kartı", setcard: "🍽️ Setcard", multinet: "🏪 Multinet" }[paymentMethod] || "💳"}
+              {{ cc: "💳 Kredi Kartı", mealcard: "🍽️ Yemek Kartları", comfort: "☕ Konfor Harcaması" }[paymentMethod] || "💳"}
             </div>
           </div>
 
-          {/* Setcard/Multinet uyumu kontrolü */}
-          {(paymentMethod === "setcard" || paymentMethod === "multinet") && (() => {
-            const cardName = paymentMethod === "setcard" ? "Setcard" : "Multinet";
+          {/* Yemek kartı uyumu kontrolü */}
+          {paymentMethod === "mealcard" && (() => {
+            const cardName = "Yemek Kartı";
             // Mağaza uygunluk kontrolü
             const storeName = (result.store || "").toLowerCase();
             const nonFoodStores = ["mado", "restoran", "restaurant", "cafe", "kafe", "fast food", "burger", "pizza", "döner", "kebap", "pastane", "patisserie", "starbucks", "mcdonalds", "kfc", "subway", "dominos", "popeyes"];
@@ -2746,7 +2746,7 @@ function ReceiptModal({ receipts, onClose, onSave, onDelete }) {
           <div style={{ maxHeight: 300, overflow: "auto", marginBottom: 12 }}>
             {(result.items || []).map((it, idx) => {
               const unsuitableCats = ["atıştırmalık", "içecek", "diğer"];
-              const isUnsuitable = (paymentMethod === "setcard" || paymentMethod === "multinet") && unsuitableCats.includes(it.category);
+              const isUnsuitable = paymentMethod === "mealcard" && unsuitableCats.includes(it.category);
               return (
               <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid rgba(0,0,0,0.05)", background: isUnsuitable ? "rgba(220,38,38,0.04)" : "transparent", borderRadius: isUnsuitable ? 4 : 0 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -4558,8 +4558,77 @@ HARCAMA PROFİLİ VERİLERİ:
             const firstHalfTxCount = allTxDates2.filter(d => new Date(d) <= periodMidDay).length;
             const firstHalfPct = allTxDates2.length > 0 ? Math.round((firstHalfTxCount / allTxDates2.length) * 100) : 0;
 
-            // Setcard/Multinet kullanım
-            const setcardTotal = (md2.ccSingle || []).filter(e => (e.note||"").toLowerCase().includes("setcard") || (e.note||"").toLowerCase().includes("multinet")).reduce((s,e) => s + e.amount, 0);
+            // Yemek kartı kullanım (Setcard + Multinet)
+            const mealcardTotal = (md2.receipts || []).filter(r => r.paymentMethod === "mealcard").reduce((s, r) => s + (r.totalAmount || 0), 0);
+            const mealcardCount = (md2.receipts || []).filter(r => r.paymentMethod === "mealcard").length;
+
+            // Konfor harcaması
+            const comfortTotal = (md2.receipts || []).filter(r => r.paymentMethod === "comfort").reduce((s, r) => s + (r.totalAmount || 0), 0);
+            const comfortCount = (md2.receipts || []).filter(r => r.paymentMethod === "comfort").length;
+
+            // Kart bazlı harcama dağılımı
+            const cardSpending = {};
+            (data.settings.cards || []).forEach(card => {
+              const ccAmt = (md2.ccSingle || []).filter(e => e.cardId === card.id).reduce((s, e) => s + e.amount, 0);
+              const instAmt = data.installmentPlans.reduce((s, p) => {
+                if (p.cardId !== card.id) return s;
+                let cur = p.startMonth; for (let i = 0; i < p.months; i++) { if (cur === mk) return s + p.monthlyPayment; cur = nmk(cur); } return s;
+              }, 0);
+              const fixedAmt = data.settings.fixedExpenses.filter(e => e.paymentMethod === "cc" && e.cardId === card.id).reduce((s, e) => s + e.amount, 0);
+              if (ccAmt + instAmt + fixedAmt > 0) cardSpending[card.name] = { single: ccAmt, installment: instAmt, fixed: fixedAmt, total: ccAmt + instAmt + fixedAmt };
+            });
+            const cardSpendingLines = Object.entries(cardSpending).map(([name, v]) => `  ${name}: tek çekim ${C(v.single)} + taksit ${C(v.installment)} + sabit ${C(v.fixed)} = toplam ${C(v.total)}`).join("\n");
+
+            // Taksit detay takvimi
+            const installmentDetails = data.installmentPlans.filter(p => {
+              let cur = p.startMonth; for (let i = 0; i < p.months; i++) { if (cur === mk || cur === nmk(mk) || cur === nmk(nmk(mk))) return true; cur = nmk(cur); } return false;
+            }).map(p => {
+              let cur = p.startMonth, currentIdx = 0;
+              for (let i = 0; i < p.months; i++) { if (cur === mk) { currentIdx = i + 1; break; } cur = nmk(cur); }
+              let endMonth = p.startMonth; for (let i = 0; i < p.months - 1; i++) endMonth = nmk(endMonth);
+              const remainingMonths = p.months - currentIdx;
+              return `  ${p.note || "Taksit"}: ${C(p.monthlyPayment)}/ay, ${currentIdx}/${p.months}. taksit, ${remainingMonths} ay kaldı, bitiş: ${ml(endMonth)}`;
+            }).join("\n");
+
+            // Mevcut birikim bakiyeleri
+            const savingsBalances = ["TRY", "USD", "EUR", "XAU"].map(asset => {
+              const txs = data.savings[asset] || [];
+              const balance = txs.reduce((s, tx) => s + (tx.type === "buy" ? tx.amount : -tx.amount), 0);
+              if (balance <= 0) return null;
+              const rate = asset === "TRY" ? 1 : (data.liveRates?.[asset] || 0);
+              const tlValue = Math.round(balance * rate);
+              const symbol = { TRY: "₺", USD: "$", EUR: "€", XAU: "gr" }[asset];
+              return { asset, balance: Math.round(balance * 100) / 100, symbol, tlValue };
+            }).filter(Boolean);
+            const totalPortfolioTL = savingsBalances.reduce((s, b) => s + b.tlValue, 0);
+            const savingsLines = savingsBalances.map(b => `  ${b.asset}: ${b.balance} ${b.symbol} = ${C(b.tlValue)} TL`).join("\n");
+
+            // Geçmiş dönem detaylı döküm
+            const pastDetailLines = pastPeriods.map(p => {
+              const pmd = data.months[p.mk] || DM();
+              const pmc = calcMonth(data, p.mk, null);
+              const budgetDiff = pmc.remainingX;
+              const status = budgetDiff > 0 ? `+${C(budgetDiff)} tasarruf` : `${C(Math.abs(budgetDiff))} açık`;
+              const catBreak = ves.map(ve => `${ve.name}:${C(p.cats[ve.id]||0)}`).join(", ");
+              const receiptCount = (pmd.receipts || []).length;
+              const ccCount = (pmd.ccSingle || []).length;
+              const accCount = (pmd.accountEntries || []).length;
+              return `  ${p.label}: bütçe=${C(pmc.effectiveBudget)}, harcama=${C(pmc.totalSpent)}, kalan=${C(pmc.remainingX)} (${status})\n    KK: ${ccCount} işlem, hesap: ${accCount} işlem, fiş: ${receiptCount} adet\n    Kategoriler: ${catBreak}`;
+            }).join("\n");
+
+            // Bütçe aşım/tasarruf geçmişi
+            const budgetHistory = pastPeriods.map(p => {
+              const pmc = calcMonth(data, p.mk, null);
+              return { label: p.label, diff: pmc.remainingX, budget: pmc.effectiveBudget };
+            });
+            const avgSavings = budgetHistory.length > 0 ? Math.round(budgetHistory.reduce((s, b) => s + b.diff, 0) / budgetHistory.length) : 0;
+            const budgetHistoryLine = budgetHistory.length > 0 ? `  Ortalama dönem sonu: ${avgSavings > 0 ? "+" : ""}${C(avgSavings)} | ${budgetHistory.filter(b => b.diff > 0).length}/${budgetHistory.length} dönem bütçe altında kaldı` : "  Geçmiş veri yok";
+
+            // Ödeme takvimi (sabit gider ödeme günleri)
+            const paymentCalendar = data.settings.fixedExpenses.map(e => {
+              const paid = md2.fixedPaid?.[e.id];
+              return `  ${e.paymentDay || "?"}. gün: ${e.name} ${C(e.amount)} (${e.paymentMethod === "cc" ? "KK" : "hesap"})${e.autoPayment ? " [otomatik]" : ""}${paid ? " ✓ ödendi" : " ⏳ bekliyor"}`;
+            }).sort().join("\n");
 
             // Altın borcu kur riski
             const goldDebt = data.debts.find(d2 => d2.currency === "XAU" && d2.remainingMonths > 0);
@@ -4579,7 +4648,8 @@ KURALLAR:
 - Geçmiş dönem yoksa karşılaştırma yapma, "ilk dönem" olduğunu belirt
 - MADDE MADDE yaz, paragraf değil — her başlık altında kısa maddeler
 - ÇİFT SAYMA YAPMA: Bloke içinde olan kalemleri kullanılabilir bütçeden tekrar düşme. Kullanılabilir bütçe zaten net rakamdır.
-- Setcard/Multinet tutarları KK tek çekim içinde zaten sayılıdır — ayrı ek harcama DEĞİLDİR.
+- Yemek kartı (Setcard/Multinet) harcamaları KK tek çekim dışıdır, ayrı gösterilir.
+- Konfor harcamaları (kafe, restoran vb.) ayrı kategoride gösterilir.
 - Market fişleri mevcut KK veya hesap hareketlerinin detayıdır — ayrı ek harcama DEĞİLDİR.
 
 ÖDEME DÖNEMİ:
@@ -4603,26 +4673,47 @@ HARCAMA HIZI:
 - Dönem sonu tahmini: ${C(Math.round((categorizedTotal/daysIntoPeriod)*periodDays))} (bütçe: ${C(variableEstimate)})
 - Kategorisiz: ${C(uncategorized)} | Beklenmeyen Fon: %${fundUsedPct} kullanıldı, ${C(fundRemaining)} kaldı
 - Harcama yığılması: işlemlerin %${firstHalfPct}'i dönemin ilk yarısında
-${setcardTotal > 0 ? `- Setcard/Multinet bu dönem: ${C(setcardTotal)}` : ""}
+${mealcardTotal > 0 ? `- Yemek kartı (Setcard/Multinet) bu dönem: ${C(mealcardTotal)} (${mealcardCount} fiş)` : ""}
+${comfortTotal > 0 ? `- Konfor harcaması (kafe/restoran vb.) bu dönem: ${C(comfortTotal)} (${comfortCount} fiş)` : ""}
 
 KATEGORİ (bu dönem${hasPastData ? " vs geçmiş" : " — ilk dönem"}):
 ${catDeltaLines}
 
+KART BAZLI HARCAMA DAĞILIMI:
+${cardSpendingLines || "  Kart verisi yok"}
+
 HESAPTAN ÖDEMELER:
-${accEntries || "  Kayıt yok"}
+${(md2.accountEntries || []).map(e =>
+  `  ${e.date || "-"} | ${e.note || "Ödeme"} | ${C(e.amount)}${e.categoryId ? ` [${ves.find(v=>v.id===e.categoryId)?.name||"?"}]` : " [kategorisiz]"}`
+).join("\n") || "  Kayıt yok"}
 
 KREDİ KARTI TEK ÇEKİM:
 ${ccEntries || "  Kayıt yok"}
 
 AKTARILMAMIŞ KK (henüz hesaba geçmedi — NOT: bunlar blokeye dahil, kullanılabilir bütçeden zaten düşülmüş):
 ${untransferredLines || "  Tümü aktarıldı"}
+
+TAKSİT DETAY TAKVİMİ:
+${installmentDetails || "  Aktif taksit yok"}
 ${receiptLines.length > 0 ? "\nMARKET FİŞİ (NOT: bu tutarlar KK/hesap hareketlerinde zaten sayılıdır, ayrı ek harcama DEĞİLDİR):" + receiptLines.join("\n") : "\nMARKET FİŞİ: Yok"}
 ${receiptAnalytics}
 ${csvLines.length > 0 ? "\nEKSTRE:" + csvLines.join("\n") : ""}
-${pastPeriods.length > 0 ? "\nGEÇMİŞ DÖNEMLER:\n" + pastPeriods.map(p => `  ${p.label}: harcama=${C(p.totalSpent)}, X=${C(p.remainingX)}`).join("\n") : "\nGEÇMİŞ: İlk dönem, veri yok"}
+
+ÖDEME TAKVİMİ (sabit gider ödeme günleri):
+${paymentCalendar || "  Sabit gider yok"}
+
+GEÇMİŞ DÖNEMLER (DETAYLI):
+${pastDetailLines || "  İlk dönem, veri yok"}
+
+BÜTÇE GEÇMİŞİ:
+${budgetHistoryLine}
 
 BORÇLAR:
-${goldRiskLine ? goldRiskLine : (debtLines || "  Aktif borç yok")}
+${goldRiskLine ? goldRiskLine + "\n" : ""}${debtLines || "  Aktif borç yok"}
+
+BİRİKİM PORTFÖYÜ:
+${savingsLines || "  Birikim yok"}
+${totalPortfolioTL > 0 ? `  TOPLAM PORTFÖY: ${C(totalPortfolioTL)} TL` : ""}
 
 BİRİKİM HEDEFLERİ:
 ${goalLines || "  Tanımlanmamış"}
@@ -4636,45 +4727,88 @@ ${futureLoadLines}
 BEKLEYEN ÖDEMELER (NOT: bunlar da blokeye dahil, kullanılabilir bütçeden zaten düşülmüş):
 ${data.settings.fixedExpenses.filter(e => !data.months[mk]?.fixedPaid?.[e.id]).map(e => `  ${e.name}: ${C(e.amount)} — ${e.paymentDay || "?"}. günde`).join("\n") || "  Tümü ödendi"}
 
-GÖREV — sen bir finans DANIŞMANISIN, muhasebeci değilsin. Kullanıcı sayıları zaten uygulamadan görüyor. Sen sayıları tekrarlama, YORUM ve TAVSİYE ver. Her başlık altında kısa, somut, rakamsal maddeler yaz:
+GÖREV — sen bir finans DANIŞMANISIN, muhasebeci değilsin. Kullanıcı sayıları zaten uygulamadan görüyor. Sen sayıları tekrarlama, VERİLERİN ARKASINDAKİ HİKAYEYİ anlat. Her başlık altında kısa, somut, rakamsal maddeler yaz:
 
 ## Ne Yapmalıyım?
 - Kalan ${daysLeftInPeriod} günde somut olarak ne yapılmalı? Günlük harcama hedefi ne olmalı?
 - Hangi kategoride frene basılmalı, hangisi normal seyrinde?
 - Ertelenebilecek veya iptal edilebilecek bir harcama görüyor musun?
+- Önümüzdeki günlerde beklenen büyük çıkış var mı? (sabit gider, taksit, borç) Varsa hangi gün ve nasıl hazırlanmalı?
 
-## Dikkat Noktaları
-- Bu dönemde gözden kaçan bir risk var mı? (örn: ay sonu yığılma, fon tükenme, kur riski)
-- Bankadaki para aktarımları karşılamaya yeterli mi?
-${goldRiskLine ? "- Altın borcu kur hareketinden nasıl etkilenir?" : ""}
+## Para Ne Zaman Biter?
+- Bu harcama hızında bütçe kaç gün sonra tükenir? Net tarih ver.
+- İyi giderse (harcama %20 azalırsa): ay sonunda elde ne kalır?
+- Kötü giderse (aynı hız + beklenmeyen gider): ay sonunda durum ne olur?
+- En olası senaryo: ay sonunda tahmini kalan tutar ve birikime aktarılabilecek miktar.
 
-## İleriye Bakış
+## Önümüzdeki Günlerde Ne Çıkacak?
+- Ödeme takvimine bak: önümüzdeki 7-10 günde hangi ödemeler çıkacak, toplam ne kadar?
+- Bankadaki tutar bu çıkışları karşılıyor mu? Para sıkışacak gün var mı?
+- Birden fazla büyük ödeme aynı haftaya denk geliyorsa uyar, öncelik sıralaması öner.
+
+## Dikkat Edilmesi Gerekenler
+- Bu dönemde gözden kaçan bir risk var mı? (ay sonu yığılma, fon tükenme, kur riski)
+- Herhangi bir kategoride geçmişe göre belirgin artış var mı? Sebebi ne olabilir?
+- Bu hızla devam ederse dönem sonunda bütçe aşılır mı? Kaç TL açık oluşur?
+- Kart bazlı yoğunlaşma var mı? Tek bir kartta aşırı yük riski?
+${goldRiskLine ? "- Altın borcu kur hareketinden nasıl etkilenir? Kur senaryosu ver (mevcut/yüksek/düşük)." : ""}
+
+## Geçmişle Karşılaştırma
+${hasPastData ? `- Harcama trendi yükseliyor mu, düşüyor mu, yerinde mi?
+- Hangi kategorilerde sürekli artış var? Fiyatlar mı arttı yoksa daha çok mu harcıyoruz?
+- Bütçe disiplini iyileşiyor mu kötüleşiyor mu? Geçmiş dönem kapanışlarından somut gösterge ver.
+- Kişisel sepet enflasyonu: fiş verilerinden aynı ürünlerdeki fiyat artışını hesapla.
+- Gelir artışı harcama artışını karşılıyor mu?` : "- İlk dönem — karşılaştırma verisi yok, ama mevcut harcama dağılımından çıkarım yap ve sonraki dönem için baz çizgisi belirle."}
+
+## Fatura ve Abonelik Kontrolü
+- Sabit giderlerin bütçeye oranı sağlıklı mı? (%50 üstü uyarı, %60 üstü alarm)
+- Faturalarda anormal artış var mı? (bir faturada ani yükseliş, mevsimsel değişim)
+- İptal edilebilir veya düşürülebilir abonelik/üyelik var mı?
+- Paket değişikliği (internet, telefon, sigorta) ile tasarruf fırsatı?
+- Otomatik ödeme ayarlı olmayan ama olması gereken kalemler var mı?
+
+## Dönemsel Hatırlatma
+- İçinde bulunduğumuz dönem veya gelecek 2 ay için mevsimsel harcama riski var mı?
+  (Ramazan, bayram, okul açılışı, yaz tatili, kış yakıt gideri, yılbaşı vb.)
+- Bu dönemlere nasıl hazırlanılmalı? Şimdiden ayrılması gereken tutar?
+
+## Önümüzdeki 3 Ay
 - Gelecek 3 ayın zorunlu yükünü değerlendir — rahatlatıcı mı, sıkıştırıcı mı?
 - Planlı etkinlik varsa: kumbara biriktirme hızı yeterli mi? Ayarlama gerekiyor mu?
 - Birikim hedeflerine ulaşma hızı — mevcut tempoda ne zaman tamamlanır?
-- ${hasPastData ? "Geçmiş dönemlerle kıyasla iyileşme veya kötüleşme var mı?" : "İlk dönem — karşılaştırma yok, ama mevcut veriden çıkarım yap."}
+- Taksit veya borç bitince bütçede ne kadar alan açılacak? Bu alanı nasıl değerlendirmeli?
 
-## Birikim Fırsatı
-- Bu dönem sonunda tahmini ne kadar birikim yapılabilir? (X üzerinden, alt-üst senaryo)
+## Birikim Değerlendirmesi
+- Bu dönem sonunda tahmini ne kadar birikim yapılabilir? (iyi/kötü senaryo)
+- Mevcut birikim dağılımı (TL/döviz/altın) dengeli mi? Ayarlama önerir misin?
 - Somut bir tasarruf fırsatı var mı? (bir kategoride bütçe altı kalma, erken ödeme avantajı vb.)
+- Acil durum fonu yeterli mi? Kaç aylık gideri karşılar?
 
-## Alışveriş Yönlendirmesi
+## Market ve Alışveriş
 - Market fiş verisi yoksa bu bölümü atla
-- FİYAT DEĞİŞİM: Aynı marka+ürün fiyat artışı varsa uyar. Kişisel sepet enflasyonunu yorumla.
+- FİYAT DEĞİŞİMİ: Aynı ürünün fiyatı artmış mı? Kişisel sepet enflasyonunu hesapla.
 - MAĞAZA KARŞILAŞTIRMASI: Aynı ürün farklı mağazalarda farklı fiyattaysa ucuz olana yönlendir.
 - SIK ALINAN ÜRÜNLER: 3+ kez alınan ürünler için somut tavsiye ver:
-  • Daha büyük ambalaj/toplu alım tasarruf sağlar mı?
-  • İnternet siparişi (Getir, Trendyol, Migros Sanal) daha ucuz olabilir mi?
-  • Mağaza markası (market kendi markası) alternatifi var mı?
-- HARCAMA PROFİLİ: Alışveriş sıklığı ve zamanlama alışkanlığından davranışsal çıkarım yap. Örn: "Sık küçük alışveriş yapılıyor, haftalık toplu alışverişe geçilse fiş başına tasarruf mümkün" veya "Hafta sonu yığılması var, hafta içi fırsatları kaçırılıyor"
+  • Toplu alım veya büyük boy alarak tasarruf edilebilir mi? Tahmini aylık tasarruf tutarı ver.
+  • Market markası alternatifi var mı? Fiyat farkı tahmini ver.
+- YEMEK KARTI: Yemek kartıyla yapılan alışverişlerin dağılımı. Market alışverişinde yemek kartı kullanımı verimli mi?
+- DIŞARI HARCAMASI: Kafe, restoran, dışarıda yeme harcamaları bütçeyi nasıl etkiliyor? Azaltma potansiyeli?
+- ALIŞVERİŞ ALIŞKANLIĞI: Alışveriş sıklığı ve zamanlamasından davranışsal çıkarım yap.
 
-## Harcama Kişilik Profili
-- Tüm verilere bakarak tek cümlelik bir harcama profili çıkar. Örn: "Planlı harcamacı ama dönem ortasında impulsif alışveriş eğilimi var" veya "Tutumlu profil, sabit gider ağırlıklı bütçe, değişkenlerde kontrollü"
-- Bu profil üzerinden bir güçlü yön ve bir gelişim alanı belirt
+## Harcama Alışkanlığı Analizi
+- Harcama verilerinden tespit ettiğin alışkanlıklar neler? (anlık alışveriş, hafta sonu yığılması, maaş günü gevşemesi, ay sonu sıkışması, dışarı harcama alışkanlığı vb.)
+- Tek cümlelik harcama profili çıkar. Örn: "Planlı harcamacı ama dönem ortasında anlık alışveriş eğilimi var"
+- Bu profildeki güçlü yön ve gelişim alanı nedir?
+- Somut bir alışkanlık değişikliği önerisi ver — "X gününde Y yapmak yerine Z yapılsa aylık N TL tasarruf edilir" formatında.
+- Yemek kartı mı kredi kartı mı kullanılmalı konusunda öneri ver. Yemek kartı bakiyesi daha verimli kullanılabilir mi?
 
-## 3 Aksiyon
-- Bu döneme özel 3 somut, uygulanabilir aksiyon. Her birinde RAKAM ver (örn: "X kategorisinde günlük Y TL ile sınırla"). "Tasarruf edin" gibi boş tavsiye VERME.
-- Etkinlik/hedef varsa bunlara yönelik aksiyon da ver.`;
+## 5 Somut Adım
+- Bu döneme özel 5 somut, uygulanabilir adım. Her birinde RAKAM ver (örn: "X kategorisinde günlük Y TL ile sınırla").
+- "Tasarruf edin" gibi boş tavsiye VERME.
+- Adımları öncelik sırasına koy: en çok etkili olan başta.
+- Etkinlik/hedef varsa bunlara yönelik adım da ver.
+- Her adımın tahmini aylık etkisini TL cinsinden belirt.
+- En az 1 adım fatura/abonelik optimizasyonuna, en az 1 adım alışkanlık değişikliğine yönelik olsun.`;
 
             const idToken = await auth.currentUser?.getIdToken();
             if (!idToken) { setAiText("Oturum bulunamadı. Çıkış yapıp tekrar giriş yapın."); setAiLoading(false); return; }
