@@ -291,8 +291,12 @@ function DetailModal({ title, rows, total, totalLabel, totalColor, note, onClose
   return (
     <Modal title={title} onClose={onClose}>
       <div style={{ borderRadius: 10, padding: "12px 14px", background: "rgba(160,190,200,0.35)" }}>
-        {rows.map((row, i) => (
-          <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderBottom: i < rows.length - 1 ? "1px solid rgba(0,0,0,0.05)" : "none", fontSize: 13, ...(row.info ? { background: "rgba(29,78,216,0.05)", borderRadius: 6, padding: "6px 8px", marginTop: 4, border: "1px dashed rgba(29,78,216,0.2)" } : {}) }}>
+        {rows.map((row, i) => row.separator ? (
+          <div key={i} style={{ padding: "8px 0 4px", borderBottom: "none" }}>
+            <div style={{ fontSize: 10, fontWeight: 800, color: X.td, letterSpacing: "0.05em", textTransform: "uppercase", textAlign: "center", borderTop: "1px dashed rgba(0,0,0,0.15)", paddingTop: 8 }}>{row.label}</div>
+          </div>
+        ) : (
+          <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderBottom: i < rows.length - 1 && !rows[i+1]?.separator ? "1px solid rgba(0,0,0,0.05)" : "none", fontSize: 13, ...(row.info ? { background: "rgba(29,78,216,0.05)", borderRadius: 6, padding: "6px 8px", marginTop: 4, border: "1px dashed rgba(29,78,216,0.2)" } : {}) }}>
             <span style={{ color: row.color || X.tm, flex: 1, paddingRight: 8, ...(row.info ? { fontSize: 11, fontStyle: "italic" } : {}) }}>{row.sign === "−" ? "− " : ""}{row.label}{row.sub ? ` (${row.sub})` : ""}</span>
             <span style={{ color: row.color || X.tm, fontFamily: fm, fontWeight: 700, flexShrink: 0, ...(row.info ? { fontSize: 11 } : {}) }}>{row.sign === "−" ? "−" : ""}{typeof row.value === "number" ? C(row.value) : row.value}</span>
           </div>
@@ -689,10 +693,10 @@ function calcMonth(data, m, extraInst) {
 
   // Y = banka bakiyesiyle eşit (sadece A düşülmüş)
   const remainingY = effectiveBudget - groupA;
-  // X = bekleyen kesin ödemeler de düşülmüş
-  const remainingX = remainingY - groupB;
-  // Bloke = B grubu (kesin çıkacak ödemeler)
-  const bloke = groupB;
+  // X = kesin çıkacak + tahmini bloke düşülmüş = gerçekte serbest harcayabileceğin tutar
+  const remainingX = remainingY - groupB - groupC;
+  // Bloke = B grubu (kesin) + C grubu (tahmini)
+  const bloke = groupB + groupC;
   // remaining (geriye uyumluluk) = X
   const remaining = remainingX;
 
@@ -3580,24 +3584,76 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
 
   const history = useMemo(() => { const ms = []; let m = mk; for (let i = 0; i < 6; i++) { ms.unshift({ mk: m, ...calcMonth(data, m, null) }); m = pmk(m); } return ms; }, [mk, data]);
 
-  const handleCSV = e => {
+  const [statementLoading, setStatementLoading] = useState(false);
+
+  const handleStatement = async e => {
     const file = e.target.files?.[0]; if (!file) return;
     if (!csvCardId) { alert("Önce hangi karta ait olduğunu seçin"); return; }
     const targetMk = csvTargetMk || mk;
+    const isPDF = file.name.toLowerCase().endsWith(".pdf") || file.type === "application/pdf";
+
+    if (isPDF) {
+      // PDF → AI analizi
+      setStatementLoading(true);
+      try {
+        const reader = new FileReader();
+        const base64Data = await new Promise((resolve, reject) => {
+          reader.onload = ev => resolve(ev.target.result.split(",")[1]);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+
+        const idToken = await auth.currentUser?.getIdToken();
+        if (!idToken) { alert("Oturum bulunamadı. Tekrar giriş yapın."); setStatementLoading(false); e.target.value = ""; return; }
+
+        const resp = await fetch("/api/analyze-statement", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${idToken}` },
+          body: JSON.stringify({ base64: base64Data, mediaType: "application/pdf" })
+        });
+
+        const result = await resp.json();
+        if (!resp.ok) throw new Error(result.error || "Ekstre analiz edilemedi");
+        if (!result.transactions || result.transactions.length === 0) throw new Error("Ekstrede işlem bulunamadı");
+
+        // PDF sonucunu eşleştirme motoruna gönder
+        handleMatchAndSave(result.transactions.map(t => ({
+          desc: t.desc || "",
+          amount: Math.abs(t.amount || 0),
+          date: t.date || ""
+        })), targetMk);
+
+      } catch (err) {
+        alert("PDF ekstre analizi başarısız: " + err.message);
+      } finally {
+        setStatementLoading(false);
+        e.target.value = "";
+      }
+      return;
+    }
+
+    // CSV → Papa.parse
     Papa.parse(file, {
       header: true, skipEmptyLines: true, encoding: "UTF-8", error: err => { alert("Dosya okunamadı: " + (err?.message || "Bilinmeyen hata")); e.target.value = ""; }, complete: r => {
-        const ves = data.settings.variableExpenses || [];
-        const md = data.months[targetMk] || DM();
-        const ccEntries = (md.ccSingle || []).filter(e2 => e2.cardId === csvCardId);
-
-        // CSV satırlarını parse et
-        const transactions = r.data.map(row => {
+        const parsedRows = r.data.map(row => {
           const desc = (row["Açıklama"] || row["Description"] || row["İşlem Açıklaması"] || Object.values(row)[1] || "").toString();
           const raw = row["Tutar"] || row["Amount"] || row["İşlem Tutarı"] || Object.values(row)[2] || "0";
           const date = (row["Tarih"] || row["Date"] || row["İşlem Tarihi"] || Object.values(row)[0] || "").toString();
           const amt = Math.abs(parseFloat(raw.toString().replace(/[^\d,.-]/g, "").replace(",", ".")) || 0);
-          return { id: uid(), desc, amount: amt, date };
+          return { desc, amount: amt, date };
         }).filter(t => t.amount > 0);
+        handleMatchAndSave(parsedRows, targetMk);
+        e.target.value = "";
+      }
+    });
+  };
+
+  const handleMatchAndSave = (rawTransactions, targetMk) => {
+    const ves = data.settings.variableExpenses || [];
+    const md = data.months[targetMk] || DM();
+    const ccEntries = (md.ccSingle || []).filter(e2 => e2.cardId === csvCardId);
+
+    const transactions = rawTransactions.map(t => ({ id: uid(), ...t })).filter(t => t.amount > 0);
 
         // EŞLEŞME MOTORU
         const matchedCCIds = new Set();
@@ -3706,9 +3762,6 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
           ms[targetMk] = md2;
           return { ...d, months: ms, merchantMap: newMerchantMap };
         });
-        e.target.value = "";
-      }
-    });
   };
 
   // Combine all card CSVs for target month (ekstre dönem seçimine göre)
@@ -4155,15 +4208,15 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
           ? `Konfor kartı yüklemesini ${C(Math.min(c.cardLoadRemaining, c.remainingX * 0.5))} ile sınırlı tutun.`
           : null;
 
-        // F2: X < değişken kalan tahmin
-        const f2Status = c.remainingX < variableBlokeKalan ? "alarm" : c.remainingX < variableBlokeKalan * 1.3 ? "dikkat" : "guvenli";
+        // F2: Serbest bütçe yeterli mi (tüm blokeler düşüldükten sonra kalan)
+        const f2Status = c.remainingX < 0 ? "alarm" : c.remainingX < c.effectiveBudget * 0.05 ? "dikkat" : "guvenli";
         const f2Desc = f2Status === "alarm"
-          ? `Kullanılabilir bütçe (${C(c.remainingX)}) bu ayın kalan değişken gider tahminini (${C(variableBlokeKalan)}) karşılamıyor. Fark: ${C(variableBlokeKalan - c.remainingX)}.`
+          ? `Serbest bütçe (${C(c.remainingX)}) ekside — tüm ayrılmış tutarlar bankadaki parayı aşıyor. ${C(Math.abs(c.remainingX))} açık var.`
           : f2Status === "dikkat"
-          ? `Kullanılabilir bütçe (${C(c.remainingX)}) değişken tahmine (${C(variableBlokeKalan)}) yakın. Tampon çok ince.`
-          : `Kullanılabilir bütçe (${C(c.remainingX)}), kalan değişken tahminin (${C(variableBlokeKalan)}) ${Math.round((c.remainingX/Math.max(variableBlokeKalan,1)-1)*100)}% üzerinde. Yeterli tampon var.`;
+          ? `Serbest bütçe (${C(c.remainingX)}) çok düşük — bütçenin yalnızca %${Math.round((c.remainingX/c.effectiveBudget)*100)}'i. Beklenmedik harcamaya yer yok.`
+          : `Serbest bütçe (${C(c.remainingX)}) — tüm blokeler düşüldükten sonra serbest harcayabileceğiniz tutar.`;
         const f2Oneri = f2Status === "alarm"
-          ? `Değişken giderlerde ${C(variableBlokeKalan - c.remainingX)} tasarruf yapılmalı. Market ve akaryakıt harcamalarını kısın.`
+          ? `${C(Math.abs(c.remainingX))} tasarruf yapılmalı. Değişken giderleri ve konfor harcamalarını kısın.`
           : f2Status === "dikkat" ? "Bu ay büyük beklenmedik harcama yapmaktan kaçının." : null;
 
         // F3: 12 ay sürdürülebilirlik — daha anlamlı bağlam
@@ -4221,10 +4274,10 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
             : "Gelecek aylarda bütçe revizyonu yapın."
           : null;
 
-        // F7: B grubunun Y'ye oranı
-        const bRatio = c.remainingY > 0 ? c.groupB / c.remainingY : 0;
+        // F7: Toplam bloke'nin Y'ye oranı (kesin + tahmini)
+        const bRatio = c.remainingY > 0 ? c.bloke / c.remainingY : 0;
         const f7Status = bRatio > 0.85 ? "alarm" : bRatio > 0.65 ? "dikkat" : "guvenli";
-        const f7Desc = `Bekleyen ödemeler (${C(c.groupB)}) bankadaki paranın %${Math.round(bRatio*100)}'ini oluşturuyor.${bRatio > 0.85 ? " Bankadaki paranın büyük çoğunluğu zaten bağlı." : ""}`;
+        const f7Desc = `Ayrılmış tutarlar (${C(c.bloke)}) bankadaki paranın %${Math.round(bRatio*100)}'ini oluşturuyor.${bRatio > 0.85 ? " Bankadaki paranın büyük çoğunluğu zaten bağlı." : ""}`;
         const f7Oneri = bRatio > 0.85
           ? "Likidite riski yüksek. Ödemeler tamamlandığında rahatlar, ama bu süreçte yeni harcama yapmayın."
           : bRatio > 0.65
@@ -4662,7 +4715,7 @@ GELİR YAPISI:
 ${(() => { const ie = (data.months[mk] || {}).incomeEntries || []; return ie.length > 0 ? ie.map(e => `  ${e.name || "Gelir"}: ${C(e.amount)}${e.date ? " (" + e.date + ")" : ""}`).join("\n") + `\n  TOPLAM: ${C(c.effectiveBudget)}` : `  Tek gelir: ${C(c.effectiveBudget)}`; })()}
 
 BÜTÇE YAPISI (ÖNEMLİ — çift sayma yapma!):
-- Bütçe: ${C(c.effectiveBudget)} | Bankadaki tutar: ${C(c.remainingY)} | Bloke: ${C(c.groupB)} | Kullanılabilir bütçe: ${C(c.remainingX)}
+- Bütçe: ${C(c.effectiveBudget)} | Bankadaki tutar: ${C(c.remainingY)} | Bloke: ${C(c.bloke)} (kesin: ${C(c.groupB)}, tahmini: ${C(c.groupC)}) | Kullanılabilir bütçe: ${C(c.remainingX)}
 - FORMÜL: Kullanılabilir bütçe = Bütçe − Bloke − yapılan harcamalar. Kullanılabilir bütçe zaten net paradır.
 - Bloke şunları İÇERİR: aktarılmamış KK ödemeleri, ödenmemiş sabit giderler, taksitler, borç ödemeleri, değişken gider tahmini, beklenmeyen gider fonu. Bunlar kullanılabilir bütçeden ZATEN düşülmüştür.
 - Aktarılmamış KK ödemeleri hesaba aktarıldığında kullanılabilir bütçe DEĞİŞMEZ — sadece bloke azalır, bankadaki tutar azalır, net etki sıfır.
@@ -5116,10 +5169,11 @@ ${hasPastData ? `- Harcama trendi yükseliyor mu, düşüyor mu, yerinde mi?
                       <Sel label="Hangi Dönemin Ekstresi?" value={csvTargetMk} onChange={setCsvTargetMk} options={[mk, pmk(mk), pmk(pmk(mk))].map(m2 => ({ v: m2, l: ml(m2) }))} />
                       <Sel label="Hangi Kartın Ekstresi?" value={csvCardId} onChange={setCsvCardId} options={[{ v: "", l: "— Seçin —" }, ...cards.map(c2 => ({ v: c2.id, l: c2.name }))]} />
                       <label style={{ display: "block", textAlign: "center", position: "relative", overflow: "hidden" }}>
-                        <span style={{ display: "inline-block", background: csvCardId ? X.g : X.td, color: csvCardId ? "#fff" : "#999", borderRadius: 10, padding: "12px 24px", fontSize: 14, fontWeight: 700, cursor: csvCardId ? "pointer" : "not-allowed" }}>📂 CSV Dosyası Yükle</span>
-                        <input type="file" accept=".csv,.CSV,text/csv,application/vnd.ms-excel" onChange={handleCSV} disabled={!csvCardId} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer" }} />
+                        <span style={{ display: "inline-block", background: statementLoading ? X.td : csvCardId ? X.g : X.td, color: csvCardId ? "#fff" : "#999", borderRadius: 10, padding: "12px 24px", fontSize: 14, fontWeight: 700, cursor: csvCardId && !statementLoading ? "pointer" : "not-allowed" }}>{statementLoading ? "🔍 PDF analiz ediliyor..." : "📂 CSV / PDF Ekstre Yükle"}</span>
+                        <input type="file" accept=".csv,.CSV,text/csv,application/vnd.ms-excel,.pdf,application/pdf" onChange={handleStatement} disabled={!csvCardId || statementLoading} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer" }} />
                       </label>
                       {!csvCardId && <div style={{ color: X.td, fontSize: 11, textAlign: "center", marginTop: 4 }}>Önce kart seçin</div>}
+                      {statementLoading && <div style={{ color: X.b, fontSize: 11, textAlign: "center", marginTop: 4 }}>PDF okunuyor, bu işlem 15-30 saniye sürebilir...</div>}
                     </>
                   )}
                   {Object.keys(allCsvData).length > 0 && <div style={{ marginTop: 12, fontSize: 11, color: X.td }}>Yüklenen: {Object.keys(allCsvData).map(cid => cards.find(c2 => c2.id === cid)?.name || "?").join(", ")}</div>}
@@ -7601,7 +7655,7 @@ function Settings({ data, setData, isAdmin, family, mk }) {
         { q: "Yedekleme nasıl çalışır?", a: "Verileriniz otomatik olarak her gün buluta yedeklenir (son 7 gün saklanır). Ayarlar → Yedekleme'den manuel yedek alabilir veya eski yedeğe dönebilirsiniz." },
       ]},
       { icon: "💡", title: "İpuçları", items: [
-        { q: "Bütçe terimleri ne anlama geliyor?", a: "Kullanılabilir bütçe: harcayabileceğiniz net para. Bankadaki tutar: hesabınızdaki gerçek bakiye. Bloke tutar: taksit, borç ve sabit giderler için ayrılmış para. Kullanılabilir bütçe = Bankadaki tutar − Bloke tutar formülüyle hesaplanır." },
+        { q: "Bütçe terimleri ne anlama geliyor?", a: "Kullanılabilir bütçe: serbest harcayabileceğiniz net para. Bankadaki tutar: hesabınızdaki gerçek bakiye. Bloke tutar: kesin çıkacak ödemeler (taksit, borç, sabit giderler) + tahmini harcamalar (değişken gider tahmini, acil tampon, kumbara) için ayrılmış para. Kullanılabilir bütçe = Bankadaki tutar − Bloke tutar formülüyle hesaplanır." },
         { q: "Dönem nedir?", a: "Bütçe döngünüz maaş gününden bir sonraki maaş gününe kadardır. Örneğin maaş 15'inde yatıyorsa dönem 15 Nisan – 14 Mayıs'tır." },
         { q: "KK aktarımı neden önemli?", a: "Kredi kartıyla yaptığınız harcamalar bankadan otomatik çıkmaz. Aktarım işaretlediğinizde uygulama o tutarı 'ödenmiş' sayar ve blokeden düşer." },
       ]},
@@ -8900,7 +8954,7 @@ export default function App() {
   const showHeaderDetail = () => { const bd = getMonthBreakdown(data, mk); setHeaderDetail({ title: `${ml(mk)} — Bütçe Dökümü`, rows: bd.rows, total: bd.mc.remaining, totalLabel: "Kalan bütçe", totalColor: bd.mc.remaining > bd.mc.effectiveBudget * 0.1 ? X.g : bd.mc.remaining >= 0 ? X.w : X.r }); };
 
   const showBlokeDetail = () => {
-    const rows = [
+    const kesinRows = [
       { label: "Ödenmemiş sabit giderler (hesaptan)", value: c.unpaidFixedAcc || 0, sign: "" },
       { label: "Aktarılmamış Kredi Kartı harcamaları", value: c.untransferredCC || 0, sign: "" },
       { label: "Aktarılmamış sabit Kredi Kartı ödemeleri", value: c.untransferredFixedCC || 0, sign: "" },
@@ -8908,7 +8962,18 @@ export default function App() {
       { label: "Borç ödemeleri", value: c.debtTotal || 0, sign: "" },
       { label: "Aktarılmamış taksit ödemeleri", value: c.untransferredInst || 0, sign: "" },
     ].filter(r => r.value > 0);
-    setHeaderDetail({ title: "Bloke Detayı", rows, total: c.groupB || 0, totalLabel: "Toplam bloke (kesin çıkacak ödemeler)", totalColor: X.w });
+    const tahminiRows = [
+      { label: "Değişken gider tahmini (kalan)", value: c.variableBlokeKalan || 0, sign: "" },
+      { label: "Konfor kartı yükleme (kalan)", value: c.cardBlokeKalan || 0, sign: "" },
+      { label: "Beklenmeyen gider fonu", value: c.emergencyBuffer || 0, sign: "" },
+      { label: "Etkinlik kumbarası", value: c.eventKumbaraBloke || 0, sign: "" },
+    ].filter(r => r.value > 0);
+    const rows = [
+      ...kesinRows,
+      ...(tahminiRows.length > 0 ? [{ label: "── Tahmini Bloke ──", value: 0, sign: "", separator: true }] : []),
+      ...tahminiRows,
+    ];
+    setHeaderDetail({ title: "Bloke Detayı", rows, total: c.bloke || 0, totalLabel: "Toplam bloke (kesin + tahmini)", totalColor: X.w });
   };
 
   const showKalanDetail = () => {
@@ -8953,7 +9018,7 @@ export default function App() {
             {[
               { label: "Aylık Bütçe", val: C(c.effectiveBudget), color: "white", onClick: showHeaderDetail },
               { label: "Bankadaki Tutar", val: C(c.remainingY || 0), color: "white", onClick: showKalanDetail },
-              { label: "Bloke Edilen Tutar", val: C(c.groupB || 0), color: "#FCA5A5", onClick: showBlokeDetail },
+              { label: "Bloke Edilen Tutar", val: C(c.bloke || 0), color: "#FCA5A5", onClick: showBlokeDetail },
               { label: "Bloke Sonrası Kalan Bütçe", val: C(c.remainingX || 0), color: "#6EE7B7", onClick: showKalanDetail },
             ].map((box, i) => (
               <div key={i} onClick={box.onClick} style={{ background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 11, padding: "8px 10px", cursor: box.onClick ? "pointer" : "default" }}>
