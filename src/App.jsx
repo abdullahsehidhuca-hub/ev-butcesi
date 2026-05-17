@@ -693,10 +693,10 @@ function calcMonth(data, m, extraInst) {
 
   // Y = banka bakiyesiyle eşit (sadece A düşülmüş)
   const remainingY = effectiveBudget - groupA;
-  // X = kesin çıkacak + tahmini bloke düşülmüş = gerçekte serbest harcayabileceğin tutar
-  const remainingX = remainingY - groupB - groupC;
-  // Bloke = B grubu (kesin) + C grubu (tahmini)
-  const bloke = groupB + groupC;
+  // X = kesin çıkacak ödemeler düşülmüş
+  const remainingX = remainingY - groupB;
+  // Bloke = sadece B grubu (kesin çıkacak ödemeler)
+  const bloke = groupB;
   // remaining (geriye uyumluluk) = X
   const remaining = remainingX;
 
@@ -4208,15 +4208,15 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
           ? `Konfor kartı yüklemesini ${C(Math.min(c.cardLoadRemaining, c.remainingX * 0.5))} ile sınırlı tutun.`
           : null;
 
-        // F2: Serbest bütçe yeterli mi (tüm blokeler düşüldükten sonra kalan)
-        const f2Status = c.remainingX < 0 ? "alarm" : c.remainingX < c.effectiveBudget * 0.05 ? "dikkat" : "guvenli";
+        // F2: X < değişken kalan tahmin
+        const f2Status = c.remainingX < variableBlokeKalan ? "alarm" : c.remainingX < variableBlokeKalan * 1.3 ? "dikkat" : "guvenli";
         const f2Desc = f2Status === "alarm"
-          ? `Serbest bütçe (${C(c.remainingX)}) ekside — tüm ayrılmış tutarlar bankadaki parayı aşıyor. ${C(Math.abs(c.remainingX))} açık var.`
+          ? `Kullanılabilir bütçe (${C(c.remainingX)}) bu ayın kalan değişken gider tahminini (${C(variableBlokeKalan)}) karşılamıyor. Fark: ${C(variableBlokeKalan - c.remainingX)}.`
           : f2Status === "dikkat"
-          ? `Serbest bütçe (${C(c.remainingX)}) çok düşük — bütçenin yalnızca %${Math.round((c.remainingX/c.effectiveBudget)*100)}'i. Beklenmedik harcamaya yer yok.`
-          : `Serbest bütçe (${C(c.remainingX)}) — tüm blokeler düşüldükten sonra serbest harcayabileceğiniz tutar.`;
+          ? `Kullanılabilir bütçe (${C(c.remainingX)}) değişken tahmine (${C(variableBlokeKalan)}) yakın. Tampon çok ince.`
+          : `Kullanılabilir bütçe (${C(c.remainingX)}), kalan değişken tahminin (${C(variableBlokeKalan)}) ${Math.round((c.remainingX/Math.max(variableBlokeKalan,1)-1)*100)}% üzerinde. Yeterli tampon var.`;
         const f2Oneri = f2Status === "alarm"
-          ? `${C(Math.abs(c.remainingX))} tasarruf yapılmalı. Değişken giderleri ve konfor harcamalarını kısın.`
+          ? `Değişken giderlerde ${C(variableBlokeKalan - c.remainingX)} tasarruf yapılmalı. Market ve akaryakıt harcamalarını kısın.`
           : f2Status === "dikkat" ? "Bu ay büyük beklenmedik harcama yapmaktan kaçının." : null;
 
         // F3: 12 ay sürdürülebilirlik — daha anlamlı bağlam
@@ -4274,10 +4274,10 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
             : "Gelecek aylarda bütçe revizyonu yapın."
           : null;
 
-        // F7: Toplam bloke'nin Y'ye oranı (kesin + tahmini)
-        const bRatio = c.remainingY > 0 ? c.bloke / c.remainingY : 0;
+        // F7: B grubunun Y'ye oranı
+        const bRatio = c.remainingY > 0 ? c.groupB / c.remainingY : 0;
         const f7Status = bRatio > 0.85 ? "alarm" : bRatio > 0.65 ? "dikkat" : "guvenli";
-        const f7Desc = `Ayrılmış tutarlar (${C(c.bloke)}) bankadaki paranın %${Math.round(bRatio*100)}'ini oluşturuyor.${bRatio > 0.85 ? " Bankadaki paranın büyük çoğunluğu zaten bağlı." : ""}`;
+        const f7Desc = `Bekleyen ödemeler (${C(c.groupB)}) bankadaki paranın %${Math.round(bRatio*100)}'ini oluşturuyor.${bRatio > 0.85 ? " Bankadaki paranın büyük çoğunluğu zaten bağlı." : ""}`;
         const f7Oneri = bRatio > 0.85
           ? "Likidite riski yüksek. Ödemeler tamamlandığında rahatlar, ama bu süreçte yeni harcama yapmayın."
           : bRatio > 0.65
@@ -4715,7 +4715,8 @@ GELİR YAPISI:
 ${(() => { const ie = (data.months[mk] || {}).incomeEntries || []; return ie.length > 0 ? ie.map(e => `  ${e.name || "Gelir"}: ${C(e.amount)}${e.date ? " (" + e.date + ")" : ""}`).join("\n") + `\n  TOPLAM: ${C(c.effectiveBudget)}` : `  Tek gelir: ${C(c.effectiveBudget)}`; })()}
 
 BÜTÇE YAPISI (ÖNEMLİ — çift sayma yapma!):
-- Bütçe: ${C(c.effectiveBudget)} | Bankadaki tutar: ${C(c.remainingY)} | Bloke: ${C(c.bloke)} (kesin: ${C(c.groupB)}, tahmini: ${C(c.groupC)}) | Kullanılabilir bütçe: ${C(c.remainingX)}
+- Bütçe: ${C(c.effectiveBudget)} | Bankadaki tutar: ${C(c.remainingY)} | Bloke: ${C(c.groupB)} | Kullanılabilir bütçe: ${C(c.remainingX)}
+- Tahmini giderler (bloke dışı): değişken gider tahmini ${C(c.variableBlokeKalan)}, acil tampon ${C(c.emergencyBuffer)}, kumbara ${C(c.eventKumbaraBloke)} = toplam ${C(c.groupC)}
 - FORMÜL: Kullanılabilir bütçe = Bütçe − Bloke − yapılan harcamalar. Kullanılabilir bütçe zaten net paradır.
 - Bloke şunları İÇERİR: aktarılmamış KK ödemeleri, ödenmemiş sabit giderler, taksitler, borç ödemeleri, değişken gider tahmini, beklenmeyen gider fonu. Bunlar kullanılabilir bütçeden ZATEN düşülmüştür.
 - Aktarılmamış KK ödemeleri hesaba aktarıldığında kullanılabilir bütçe DEĞİŞMEZ — sadece bloke azalır, bankadaki tutar azalır, net etki sıfır.
@@ -7655,7 +7656,7 @@ function Settings({ data, setData, isAdmin, family, mk }) {
         { q: "Yedekleme nasıl çalışır?", a: "Verileriniz otomatik olarak her gün buluta yedeklenir (son 7 gün saklanır). Ayarlar → Yedekleme'den manuel yedek alabilir veya eski yedeğe dönebilirsiniz." },
       ]},
       { icon: "💡", title: "İpuçları", items: [
-        { q: "Bütçe terimleri ne anlama geliyor?", a: "Kullanılabilir bütçe: serbest harcayabileceğiniz net para. Bankadaki tutar: hesabınızdaki gerçek bakiye. Bloke tutar: kesin çıkacak ödemeler (taksit, borç, sabit giderler) + tahmini harcamalar (değişken gider tahmini, acil tampon, kumbara) için ayrılmış para. Kullanılabilir bütçe = Bankadaki tutar − Bloke tutar formülüyle hesaplanır." },
+        { q: "Bütçe terimleri ne anlama geliyor?", a: "Kullanılabilir bütçe: bloke düşüldükten sonra kalan tutardır. Bankadaki tutar: hesabınızdaki gerçek bakiye. Bloke tutar: kesin çıkacak ödemeler (taksit, borç, sabit giderler) için ayrılmış para. Bloke detayına tıklayarak tahmini giderleri de (değişken gider tahmini, acil tampon, kumbara) görebilirsiniz. Kullanılabilir bütçe = Bankadaki tutar − Bloke formülüyle hesaplanır." },
         { q: "Dönem nedir?", a: "Bütçe döngünüz maaş gününden bir sonraki maaş gününe kadardır. Örneğin maaş 15'inde yatıyorsa dönem 15 Nisan – 14 Mayıs'tır." },
         { q: "KK aktarımı neden önemli?", a: "Kredi kartıyla yaptığınız harcamalar bankadan otomatik çıkmaz. Aktarım işaretlediğinizde uygulama o tutarı 'ödenmiş' sayar ve blokeden düşer." },
       ]},
@@ -8970,10 +8971,10 @@ export default function App() {
     ].filter(r => r.value > 0);
     const rows = [
       ...kesinRows,
-      ...(tahminiRows.length > 0 ? [{ label: "── Tahmini Bloke ──", value: 0, sign: "", separator: true }] : []),
+      ...(tahminiRows.length > 0 ? [{ label: "── Tahmini Giderler (bilgi amaçlı) ──", value: 0, sign: "", separator: true }] : []),
       ...tahminiRows,
     ];
-    setHeaderDetail({ title: "Bloke Detayı", rows, total: c.bloke || 0, totalLabel: "Toplam bloke (kesin + tahmini)", totalColor: X.w });
+    setHeaderDetail({ title: "Bloke Detayı", rows, total: c.bloke || 0, totalLabel: "Toplam bloke (kesin çıkacak ödemeler)", totalColor: X.w, note: tahminiRows.length > 0 ? `Tahmini giderler (${C(c.groupC)}) blokeye dahil değildir. Kullanılabilir bütçeden bu tutarın da harcanacağını göz önünde bulundurun.` : null });
   };
 
   const showKalanDetail = () => {
@@ -9018,7 +9019,7 @@ export default function App() {
             {[
               { label: "Aylık Bütçe", val: C(c.effectiveBudget), color: "white", onClick: showHeaderDetail },
               { label: "Bankadaki Tutar", val: C(c.remainingY || 0), color: "white", onClick: showKalanDetail },
-              { label: "Bloke Edilen Tutar", val: C(c.bloke || 0), color: "#FCA5A5", onClick: showBlokeDetail },
+              { label: "Bloke Edilen Tutar", val: C(c.groupB || 0), color: "#FCA5A5", onClick: showBlokeDetail },
               { label: "Bloke Sonrası Kalan Bütçe", val: C(c.remainingX || 0), color: "#6EE7B7", onClick: showKalanDetail },
             ].map((box, i) => (
               <div key={i} onClick={box.onClick} style={{ background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 11, padding: "8px 10px", cursor: box.onClick ? "pointer" : "default" }}>
