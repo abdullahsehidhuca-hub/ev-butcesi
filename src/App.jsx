@@ -2175,7 +2175,7 @@ function CCCombinedModal({ data, mk, cards, variableExpenses, ccSingleEntries, o
   const [a, sa] = useState(""); const [n, sn] = useState(""); const [d, sd] = useState(td());
   const [cardId, setCardId] = useState(cards[0]?.id || "");
   const [saved, setSaved] = useState(false);
-  const closeTimer = useRef(null);
+  const [savedAt, setSavedAt] = useState(0);
   const digerCat = (variableExpenses || []).find(ve => ve.name && ve.name.toLowerCase() === "diğer");
   const [categoryId, setCategoryId] = useState(digerCat?.id || ""); const [userChanged, setUserChanged] = useState(false);
   const [ia, sia] = useState(""); const [mo, smo] = useState("3");
@@ -2200,9 +2200,11 @@ function CCCombinedModal({ data, mk, cards, variableExpenses, ccSingleEntries, o
   for (let i = 0; i < 4; i++) { startOptions.push({ v: sm, l: ml(sm) + (i === 0 ? " (bu ay)" : "") }); sm = nmk(sm); }
 
   useEffect(() => {
-    if (saved && a) { setSaved(false); if (closeTimer.current) { clearTimeout(closeTimer.current); closeTimer.current = null; } }
-  }, [a]);
-  useEffect(() => () => { if (closeTimer.current) clearTimeout(closeTimer.current); }, []);
+    if (!saved) return;
+    const timer = setTimeout(() => { onClose(); }, 2000);
+    return () => clearTimeout(timer);
+  }, [savedAt]);
+  useEffect(() => { if (saved && a.length > 0) setSaved(false); }, [a]);
 
   useEffect(() => {
     if (userChanged) return;
@@ -2293,12 +2295,11 @@ function CCCombinedModal({ data, mk, cards, variableExpenses, ccSingleEntries, o
           <Inp label="Tarih" type="date" value={d} onChange={sd} />
           <Btn onClick={() => {
             if (!a || !cardId) return;
-            onSaveSingle({ id: uid(), amount: parseFloat(a), note: n, merchantName: "", date: d, cardId, categoryId: categoryId || null });
+            const entry = { id: uid(), amount: parseFloat(a), note: n, merchantName: "", date: d, cardId, categoryId: categoryId || null };
+            onSaveSingle(entry);
             sa(""); sn(""); sd(td()); setCategoryId(digerCat?.id || ""); setUserChanged(false); setSingleListOpen(true);
-            setSaved(true);
-            if (closeTimer.current) clearTimeout(closeTimer.current);
-            closeTimer.current = setTimeout(() => { onClose(); }, 2000);
-          }} disabled={!cardId}>{saved ? "✓ Kaydedildi" : "💳 Kaydet"}</Btn>
+            setSaved(true); setSavedAt(Date.now());
+          }} disabled={!cardId} c={saved ? X.g : X.b}>{saved ? "✓ Kaydedildi" : "💳 Kaydet"}</Btn>
           <div style={{ marginTop: 14 }}>
             <div onClick={() => setSingleListOpen(!singleListOpen)} style={{ ...glassSolid, borderRadius: singleListOpen ? "10px 10px 0 0" : 10, padding: "12px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <span style={{ fontSize: 15, fontWeight: 700, color: X.tm }}>Bu ayki tek çekim girişleri</span>
