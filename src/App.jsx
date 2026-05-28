@@ -2170,7 +2170,7 @@ function AccountPayModal({ variableExpenses, entries, transferred, onClose, onSa
   );
 }
 
-function CCCombinedModal({ data, mk, cards, variableExpenses, ccSingleEntries, onClose, onSaveSingle, onDeleteSingle, onSaveInstall, onDeletePlan, onEditPlan, onEventTaksit }) {
+function CCCombinedModal({ data, mk, cards, variableExpenses, ccSingleEntries, onClose, onSaveSingle, onDeleteSingle, onEditSingle, onSaveInstall, onDeletePlan, onEditPlan, onEventTaksit }) {
   const [tab, setTab] = useState("single");
   const [a, sa] = useState(""); const [n, sn] = useState(""); const [d, sd] = useState(td());
   const [cardId, setCardId] = useState(cards[0]?.id || "");
@@ -2311,7 +2311,7 @@ function CCCombinedModal({ data, mk, cards, variableExpenses, ccSingleEntries, o
                         <Sel label="Kategori" value={sEditCategoryId} onChange={setSEditCategoryId} options={[{ v: "", l: "— Kategori seçiniz —" }, ...(variableExpenses || []).map(ve => ({ v: ve.id, l: (ve.icon || "📋") + " " + ve.name }))]} />
                       )}
                       <div style={{ display: "flex", gap: 6 }}>
-                        <button onClick={() => { onDeleteSingle(e.id); onSaveSingle({ ...e, amount: parseFloat(sEditAmt) || e.amount, note: sEditNote, date: sEditDate, cardId: sEditCardId, categoryId: sEditCategoryId || null }); setSEditId(null); }} style={{ flex: 1, background: X.b, border: "none", borderRadius: 8, padding: "8px", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: ff }}>✓ Kaydet</button>
+                        <button onClick={() => { onEditSingle(e.id, { amount: parseFloat(sEditAmt) || e.amount, note: sEditNote, date: sEditDate, cardId: sEditCardId, categoryId: sEditCategoryId || null }); setSEditId(null); }} style={{ flex: 1, background: X.b, border: "none", borderRadius: 8, padding: "8px", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: ff }}>✓ Kaydet</button>
                         <button onClick={() => setSEditId(null)} style={{ flex: 1, background: "transparent", border: "1px solid rgba(0,0,0,0.15)", borderRadius: 8, padding: "8px", color: X.td, fontSize: 13, cursor: "pointer", fontFamily: ff }}>İptal</button>
                       </div>
                     </div>
@@ -3060,12 +3060,7 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
 
   const handleCCSingle = entry => { setMonthField(mk, "ccSingle", [...(md.ccSingle || []), entry]); flash("✓ Tek çekim kaydedildi"); };
   const deleteCCSingle = id => { setMonthField(mk, "ccSingle", (md.ccSingle || []).filter(e => e.id !== id)); };
-  const editCCSingle = id => {
-    const entry = (md.ccSingle || []).find(e => e.id === id); if (!entry) return;
-    const newAmt = prompt("Tutar:", String(entry.amount)); if (newAmt === null) return;
-    const newNote = prompt("Açıklama:", entry.note || entry.merchantName || "");
-    setMonthField(mk, "ccSingle", (md.ccSingle || []).map(e => e.id === id ? { ...e, amount: parseFloat(newAmt) || e.amount, note: newNote !== null ? newNote : e.note } : e));
-  };
+  const editCCSingle = (id, updates) => { setMonthField(mk, "ccSingle", (md.ccSingle || []).map(e => e.id === id ? { ...e, ...updates } : e)); };
   const handleCardLoad = (amt, date) => { const entry = { id: uid(), amount: amt, date: date || td() }; setData(d => { const newMd = { ...(d.months[mk] || DM()), cardLoaded: ((d.months[mk] || DM()).cardLoaded || 0) + amt, cardEntries: [...((d.months[mk] || DM()).cardEntries || []), entry] }; return { ...d, months: { ...d.months, [mk]: newMd } }; }); flash("✓"); };
   const editCardLoad = () => {
     const newVal = prompt("Toplam yüklenen tutar:", String(md.cardLoaded || 0)); if (newVal === null) return;
@@ -3624,9 +3619,9 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
 
       </div>{/* WRAPPER KAPANIŞ */}
 
-      {modal === "ccCombined" && <CCCombinedModal data={data} mk={mk} cards={data.settings.cards || []} variableExpenses={data.settings.variableExpenses || []} ccSingleEntries={md.ccSingle || []} onClose={() => setModal(null)} onSaveSingle={handleCCSingle} onDeleteSingle={deleteCCSingle} onSaveInstall={handleInstSave} onDeletePlan={deleteInstallment} onEditPlan={editInstallment} onEventTaksit={handleEventTaksit} />}
+      {modal === "ccCombined" && <CCCombinedModal data={data} mk={mk} cards={data.settings.cards || []} variableExpenses={data.settings.variableExpenses || []} ccSingleEntries={md.ccSingle || []} onClose={() => setModal(null)} onSaveSingle={handleCCSingle} onDeleteSingle={deleteCCSingle} onEditSingle={editCCSingle} onSaveInstall={handleInstSave} onDeletePlan={deleteInstallment} onEditPlan={editInstallment} onEventTaksit={handleEventTaksit} />}
       {modal === "accountPay" && <AccountPayModal variableExpenses={data.settings.variableExpenses || []} entries={md.accountEntries || []} transferred={md.accountTransferred || {}} onClose={() => setModal(null)} onSave={handleAccountPay} onDelete={deleteAccountEntry} onEdit={editAccountEntry} onTransfer={handleAccountTransfer} onUndoTransfer={undoAccountTransfer} />}
-      {modal === "simulate" && <CCCombinedModal data={data} mk={mk} cards={data.settings.cards || []} variableExpenses={data.settings.variableExpenses || []} ccSingleEntries={md.ccSingle || []} onClose={() => setModal(null)} onSaveSingle={handleCCSingle} onDeleteSingle={deleteCCSingle} onSaveInstall={handleInstSave} onDeletePlan={deleteInstallment} onEditPlan={editInstallment} onEventTaksit={handleEventTaksit} />}
+      {modal === "simulate" && <CCCombinedModal data={data} mk={mk} cards={data.settings.cards || []} variableExpenses={data.settings.variableExpenses || []} ccSingleEntries={md.ccSingle || []} onClose={() => setModal(null)} onSaveSingle={handleCCSingle} onDeleteSingle={deleteCCSingle} onEditSingle={editCCSingle} onSaveInstall={handleInstSave} onDeletePlan={deleteInstallment} onEditPlan={editInstallment} onEventTaksit={handleEventTaksit} />}
       {modal === "cardLoad" && <CardLoadModal currentLoaded={md.cardLoaded || 0} maxTotal={c.generalCardBudget} entries={md.cardEntries || []} debitEntries={md.debitCardEntries || []} debitLimit={(data.settings.cards || []).filter(c2 => c2.type === "debit").reduce((s, c2) => s + (c2.monthlyLimit || 0), 0)} onClose={() => setModal(null)} onSave={handleCardLoad} onDelete={deleteCardEntry} onEdit={editCardEntry} onSaveDebit={entry => setMonthField(mk, "debitCardEntries", [...(md.debitCardEntries || []), entry])} onDeleteDebit={id => setMonthField(mk, "debitCardEntries", (md.debitCardEntries || []).filter(e => e.id !== id))} />}
       {modal === "debtPay" && <DebtPayModal debts={data.debts} debtPayments={md.debtPayments} data={data} mk={mk} onClose={() => setModal(null)} onPay={handleDebtPay} onUndo={undoDebtPay} />}
       {modal === "budget" && <BudgetModal mk={mk} incomeEntries={md.incomeEntries || []} defaultBudget={data.settings.monthlyBudget} onSave={entries => { setMonthField(mk, "incomeEntries", entries); setMonthField(mk, "budget", entries.reduce((s, e) => s + (e.amount || 0), 0)); }} onClose={() => setModal(null)} />}
