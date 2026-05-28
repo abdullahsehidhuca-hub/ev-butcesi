@@ -17,10 +17,10 @@ export default async function handler(req, res) {
       headers: {
         "Content-Type": "application/json",
         "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01"
+        "anthropic-version": "2025-04-15"
       },
       body: JSON.stringify({
-        model: "claude-opus-4-7",
+        model: "claude-opus-4-6",
         max_tokens: 2000,
         messages: [{
           role: "user",
