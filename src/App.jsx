@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import * as Papa from "papaparse";
 import { initializeApp } from "firebase/app";
 import { getDatabase, ref, set, get, onValue } from "firebase/database";
@@ -2174,6 +2174,8 @@ function CCCombinedModal({ data, mk, cards, variableExpenses, ccSingleEntries, o
   const [tab, setTab] = useState("single");
   const [a, sa] = useState(""); const [n, sn] = useState(""); const [d, sd] = useState(td());
   const [cardId, setCardId] = useState(cards[0]?.id || "");
+  const [saved, setSaved] = useState(false);
+  const closeTimer = useRef(null);
   const digerCat = (variableExpenses || []).find(ve => ve.name && ve.name.toLowerCase() === "diğer");
   const [categoryId, setCategoryId] = useState(digerCat?.id || ""); const [userChanged, setUserChanged] = useState(false);
   const [ia, sia] = useState(""); const [mo, smo] = useState("3");
@@ -2196,6 +2198,11 @@ function CCCombinedModal({ data, mk, cards, variableExpenses, ccSingleEntries, o
   const t = parseFloat(ia) || 0; const m2 = parseInt(mo) || 1; const mp = Math.ceil(t / m2);
   const startOptions = []; let sm = mk;
   for (let i = 0; i < 4; i++) { startOptions.push({ v: sm, l: ml(sm) + (i === 0 ? " (bu ay)" : "") }); sm = nmk(sm); }
+
+  useEffect(() => {
+    if (saved && a) { setSaved(false); if (closeTimer.current) { clearTimeout(closeTimer.current); closeTimer.current = null; } }
+  }, [a]);
+  useEffect(() => () => { if (closeTimer.current) clearTimeout(closeTimer.current); }, []);
 
   useEffect(() => {
     if (userChanged) return;
@@ -2284,7 +2291,14 @@ function CCCombinedModal({ data, mk, cards, variableExpenses, ccSingleEntries, o
           )}
           {categoryId && !userChanged && <div style={{ color: X.g, fontSize: 11, marginTop: -8, marginBottom: 12 }}>✓ Anahtar kelime eşleşmesi bulundu</div>}
           <Inp label="Tarih" type="date" value={d} onChange={sd} />
-          <Btn onClick={() => { if (!a || !cardId) return; onSaveSingle({ id: uid(), amount: parseFloat(a), note: n, merchantName: "", date: d, cardId, categoryId: categoryId || null }); sa(""); sn(""); sd(td()); setCategoryId(digerCat?.id || ""); setUserChanged(false); setSingleListOpen(true); }} disabled={!cardId}>💳 Kaydet</Btn>
+          <Btn onClick={() => {
+            if (!a || !cardId) return;
+            onSaveSingle({ id: uid(), amount: parseFloat(a), note: n, merchantName: "", date: d, cardId, categoryId: categoryId || null });
+            sa(""); sn(""); sd(td()); setCategoryId(digerCat?.id || ""); setUserChanged(false); setSingleListOpen(true);
+            setSaved(true);
+            if (closeTimer.current) clearTimeout(closeTimer.current);
+            closeTimer.current = setTimeout(() => { onClose(); }, 2000);
+          }} disabled={!cardId}>{saved ? "✓ Kaydedildi" : "💳 Kaydet"}</Btn>
           <div style={{ marginTop: 14 }}>
             <div onClick={() => setSingleListOpen(!singleListOpen)} style={{ ...glassSolid, borderRadius: singleListOpen ? "10px 10px 0 0" : 10, padding: "12px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <span style={{ fontSize: 15, fontWeight: 700, color: X.tm }}>Bu ayki tek çekim girişleri</span>
