@@ -5952,7 +5952,7 @@ function PlanningScreen({ data, setData, mk }) {
         if (p.startMonth === m) events.push({ icon: "📅", text: `Taksit başlangıcı: "${p.note || "Taksitli harcama açıklaması"}"`, color: X.p });
         let cur = p.startMonth;
         for (let j = 0; j < p.months; j++) cur = nmk(cur);
-        if (pmk(cur) === m || cur === m) events.push({ icon: "✅", text: `Taksit son ayı: "${p.note || "Taksitli harcama açıklaması"}"`, sub: `Sonraki ay kullanılabilir limit artışı: +${C(p.monthlyPayment)}`, color: X.g });
+        if (pmk(cur) === m) events.push({ icon: "✅", text: `Taksit son ayı: "${p.note || "Taksitli harcama açıklaması"}"`, sub: `Sonraki ay kullanılabilir limit artışı: +${C(p.monthlyPayment)}`, color: X.g });
       });
       // Borç bitiş
       data.debts.filter(d => d.remainingMonths > 0).forEach(d => {
