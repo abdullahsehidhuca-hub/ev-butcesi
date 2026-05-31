@@ -76,7 +76,7 @@ export default async function handler(req, res) {
       headers: {
         "Content-Type": "application/json",
         "x-api-key": apiKey,
-        "anthropic-version": "2025-04-15"
+        "anthropic-version": "2023-06-01"
       },
       body: JSON.stringify({
         model: "claude-opus-4-6",
