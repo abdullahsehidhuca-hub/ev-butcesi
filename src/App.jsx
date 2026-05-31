@@ -2327,7 +2327,8 @@ function CCCombinedModal({ data, mk, cards, variableExpenses, ccSingleEntries, o
                       )}
                       <div style={{ display: "flex", gap: 6 }}>
                         <button onClick={() => { onEditSingle(e.id, { amount: parseFloat(sEditAmt) || e.amount, note: sEditNote, date: sEditDate, cardId: sEditCardId, categoryId: sEditCategoryId || null }); setSEditId(null); }} style={{ flex: 1, background: X.b, border: "none", borderRadius: 8, padding: "8px", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: ff }}>✓ Kaydet</button>
-                        <button onClick={() => setSEditId(null)} style={{ flex: 1, background: "transparent", border: "1px solid rgba(0,0,0,0.15)", borderRadius: 8, padding: "8px", color: X.td, fontSize: 13, cursor: "pointer", fontFamily: ff }}>İptal</button>
+                        <button onClick={() => { if (confirm("Bu harcamayı silmek istiyor musunuz?")) { onDeleteSingle(e.id); setSEditId(null); } }} style={{ background: X.rd, border: `1px solid ${X.r}`, borderRadius: 8, padding: "8px 12px", color: X.r, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: ff }}>Sil</button>
+                        <button onClick={() => setSEditId(null)} style={{ background: "transparent", border: "1px solid rgba(0,0,0,0.15)", borderRadius: 8, padding: "8px 12px", color: X.td, fontSize: 13, cursor: "pointer", fontFamily: ff }}>İptal</button>
                       </div>
                     </div>
                   ) : (
@@ -2431,7 +2432,8 @@ function CCCombinedModal({ data, mk, cards, variableExpenses, ccSingleEntries, o
                                 )}
                                 <div style={{ display: "flex", gap: 8 }}>
                                   <Btn onClick={saveEdit} c={X.p} s={{ flex: 1 }}>Kaydet</Btn>
-                                  <Btn onClick={cancelEdit} v="outline" c={X.td} s={{ flex: 1 }}>İptal</Btn>
+                                  <Btn onClick={() => { if (confirm("Bu taksit planını silmek istiyor musunuz?")) { onDeletePlan(p.id); setEditingId(null); } }} c={X.r} s={{ flex: "0 0 auto", padding: "8px 14px" }}>Sil</Btn>
+                                  <Btn onClick={cancelEdit} v="outline" c={X.td} s={{ flex: "0 0 auto", padding: "8px 14px" }}>İptal</Btn>
                                 </div>
                               </>
                             ) : (
