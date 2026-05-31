@@ -2414,7 +2414,7 @@ function CCCombinedModal({ data, mk, cards, variableExpenses, ccSingleEntries, o
                           const newMonths = parseInt(editMonths) || p.months;
                           const newMp = Math.ceil(newTotal / newMonths);
                           const newRemaining = (() => { let r = 0; let c2 = editStartMk; for (let i = 0; i < newMonths; i++) { if (c2 >= mk) r++; c2 = nmk(c2); } return r; })();
-                          onEditPlan({ ...p, note: editNote, totalAmount: newTotal, months: newMonths, monthlyPayment: newMp, startMonth: editStartMk, cardId: editCardId, categoryId: editCategoryId || null, remainingMonths: newRemaining });
+                          onEditPlan(p.id, { note: editNote, totalAmount: newTotal, months: newMonths, monthlyPayment: newMp, startMonth: editStartMk, cardId: editCardId, categoryId: editCategoryId || null, remainingMonths: newRemaining });
                           setEditingId(null);
                         };
                         return (
