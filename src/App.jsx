@@ -32,7 +32,7 @@ const PM = [{ id: "account", label: "Hesaptan", icon: "🏦" }, { id: "cc", labe
 const MIN_TL_SAVINGS_PCT = 0.15;   // toplam birikimin en az %15'i TL olmalı
 
 const DD = { settings: { monthlyBudget: 0, fixedExpenses: [], variableExpenses: [], cards: [], emergencyFundTarget: null, billTypes: [], generalCardBudget: 0, emergencyTampon: 0, ccPaymentMode: "instant", onboardingCompleted: null }, months: {}, installmentPlans: [], debts: [], savingsGoals: [], completedGoals: [], plannedEvents: [], completedEvents: [], merchantMap: {}, goldRates: {}, usdRates: {}, eurRates: {}, liveRates: { USD: null, EUR: null, XAU: null, fetchedAt: null }, savings: { TRY: [], USD: [], EUR: [], XAU: [] }, lastClosedMonth: null, lastBackup: null };
-const DM = () => ({ budget: null, incomeEntries: [], fixedPaid: {}, variableEntries: {}, ccSingle: [], accountEntries: [], accountTransferred: {}, cardLoaded: 0, cardEntries: [], debitCardEntries: [], debtPayments: {}, ccTransferred: {}, csvByCard: {}, finalSavings: null, receipts: [] });
+const DM = () => ({ budget: null, incomeEntries: [], fixedPaid: {}, variableEntries: {}, ccSingle: [], accountEntries: [], accountTransferred: {}, cardLoaded: 0, cardEntries: [], debitCardEntries: [], debtPayments: {}, ccTransferred: {}, csvByCard: {}, finalSavings: null, receipts: [], billEntries: [] });
 
 const STORAGE_KEY = "ev-butce-v11";
 
@@ -658,7 +658,9 @@ function calcMonth(data, m, extraInst) {
   const transferredAcc = (md.accountEntries || []).filter(e => md.accountTransferred?.[e.id]?.transferred).reduce((s, e) => s + e.amount, 0);
   // Banka kartı harcamaları (debitCardEntries) doğrudan bakiyeden düşer
   const debitCardSpent = (md.debitCardEntries || []).reduce((s, e) => s + (e.amount || 0), 0);
-  const groupA = paidFixedAcc + transferredCC + transferredFixedCC + cardLoaded + transferredAcc + totalTransferredInst + debitCardSpent + paidDebtTotal;
+  // Faturalar
+  const billPaid = (md.billEntries || []).filter(b => b.paid && b.paymentMethod === "account").reduce((s, b) => s + b.amount, 0);
+  const groupA = paidFixedAcc + transferredCC + transferredFixedCC + cardLoaded + transferredAcc + totalTransferredInst + debitCardSpent + paidDebtTotal + billPaid;
 
   // === B GRUBU: Kesin çıkacak ama henüz çıkmamış ===
   const unpaidFixedAcc = data.settings.fixedExpenses.filter(e => e.paymentMethod === "account" && !md.fixedPaid?.[e.id]).reduce((s, e) => s + e.amount, 0);
@@ -677,7 +679,10 @@ function calcMonth(data, m, extraInst) {
   // Ekstre modunda taksitler de önceki aydan gelir
   const effectiveInstTotal = isEkstre ? ekstreInstTotal : installmentTotal;
   const untransferredInst = effectiveInstTotal - totalTransferredInst;
-  const groupB = unpaidFixedAcc + untransferredCC + untransferredFixedCC + untransferredAcc + debtTotal + untransferredInst;
+  const billUnpaid = (md.billEntries || []).filter(b => !b.paid).reduce((s, b) => s + b.amount, 0);
+  const billUnpaidCC = (md.billEntries || []).filter(b => !b.paid && b.paymentMethod === "cc").reduce((s, b) => s + b.amount, 0);
+  const billPaidCC = (md.billEntries || []).filter(b => b.paid && b.paymentMethod === "cc").reduce((s, b) => s + b.amount, 0);
+  const groupB = unpaidFixedAcc + untransferredCC + untransferredFixedCC + untransferredAcc + debtTotal + untransferredInst + billUnpaid;
 
   // Planlı etkinlik kumbara aylık bloke
   const eventKumbaraBloke = (data.plannedEvents || []).reduce((s, ev) => {
@@ -717,7 +722,11 @@ function calcMonth(data, m, extraInst) {
   const envelopeOverflow = Math.max(0, categorizedTotal - variableEstimate);
   const unpaidFixed = data.settings.fixedExpenses.filter(e => !md.fixedPaid?.[e.id]).reduce((s, e) => s + e.amount, 0);
 
-  return { effectiveBudget, baseBudget, carryoverDeficit, fixedTotal, variableTotal, ccSingleTotal, accountTotal, installmentTotal, debtTotal, paidDebtTotal, cardLoaded, cardLoadMaxPerTx, cardLoadMaxTotal, cardLoadRemaining, availableForCard, totalSpent, remaining, remainingX, remainingY, savingsTarget, expectedCCSingle, ccTransferNeeded, expectedVariable, pendingVariable, variableEstimate, categorizedCC, uncategorizedCC, envelopeRemaining, envelopeOverflow, emergencyBuffer, cardUsable, generalCardBudget, bloke, groupA, groupB, groupC, unpaidFixed, unpaidFixedAcc, untransferredCC, untransferredFixedCC, untransferredAcc, cardBlokeKalan, variableBlokeKalan, transferredAcc, paidFixedAcc, transferredCC, transferredFixedCC, eventKumbaraBloke, untransferredInst };
+  // Önceki aydan taşan fatura (son ödeme tarihi bu ayda olan, önceki ayda girilmiş)
+  const prevBills = (data.months[pmk(m)]?.billEntries || []);
+  const prevBillCarry = prevBills.filter(b => !b.paid && b.dueDate && b.dueDate >= m).reduce((s, b) => s + b.amount, 0);
+
+  return { effectiveBudget, baseBudget, carryoverDeficit, fixedTotal, variableTotal, ccSingleTotal, accountTotal, installmentTotal, debtTotal, paidDebtTotal, cardLoaded, cardLoadMaxPerTx, cardLoadMaxTotal, cardLoadRemaining, availableForCard, totalSpent, remaining, remainingX, remainingY, savingsTarget, expectedCCSingle, ccTransferNeeded, expectedVariable, pendingVariable, variableEstimate, categorizedCC, uncategorizedCC, envelopeRemaining, envelopeOverflow, emergencyBuffer, cardUsable, generalCardBudget, bloke, groupA, groupB, groupC, unpaidFixed, unpaidFixedAcc, untransferredCC, untransferredFixedCC, untransferredAcc, cardBlokeKalan, variableBlokeKalan, transferredAcc, paidFixedAcc, transferredCC, transferredFixedCC, eventKumbaraBloke, untransferredInst, billPaid, billUnpaid, prevBillCarry };
 }
 function calcFlat(data, m, extraInst) {
   const md = data.months[m] || DM();
@@ -960,6 +969,17 @@ function getMonthBreakdown(data, m) {
   // Kategorisiz CC harcamaları
   if (mc.uncategorizedCC > 0) {
     rows.push({ label: `Kategorisiz harcamalar`, value: mc.uncategorizedCC, sign: "−", color: X.o });
+  }
+  // Faturalar
+  if (mc.billUnpaid > 0 || mc.billPaid > 0) {
+    const billCount = (md.billEntries || []).length;
+    const paidCount = (md.billEntries || []).filter(b => b.paid).length;
+    if (mc.billPaid > 0) rows.push({ label: `Ödenen faturalar (${paidCount})`, value: mc.billPaid, sign: "−", color: X.g });
+    if (mc.billUnpaid > 0) rows.push({ label: `Bekleyen faturalar (${billCount - paidCount})`, value: mc.billUnpaid, sign: "−", color: X.w });
+  }
+  // Önceki aydan taşan fatura
+  if (mc.prevBillCarry > 0) {
+    rows.push({ label: "Önceki aydan taşan fatura bedeli", value: mc.prevBillCarry, sign: "", color: X.td, info: true });
   }
   // Hesaptan ödemeler
   if (mc.accountTotal > 0) {
@@ -2091,6 +2111,103 @@ function CCInstallModal({ data, mk, cards, variableExpenses, onClose, onSave, on
   );
 }
 
+function BillPayModal({ mk, cards, onClose, entries, onSave, onDelete, onEdit, onMarkPaid, onUndoPaid }) {
+  const [amt, setAmt] = useState("");
+  const [name, setName] = useState("");
+  const [dueDate, setDueDate] = useState("");
+  const [payMethod, setPayMethod] = useState("account");
+  const [payCardId, setPayCardId] = useState(cards[0]?.id || "");
+  const [editId, setEditId] = useState(null);
+  const [eAmt, setEAmt] = useState(""); const [eName, setEName] = useState(""); const [eDue, setEDue] = useState(""); const [eMethod, setEMethod] = useState(""); const [eCardId, setECardId] = useState("");
+  const [listOpen, setListOpen] = useState(true);
+
+  const billTypeOptions = Object.entries(BILL_TYPES).map(([k, v]) => ({ v: k, l: v.icon + " " + v.label }));
+
+  const save = () => {
+    if (!amt || !name) return;
+    onSave({ id: uid(), name: name.trim(), amount: parseFloat(amt), dueDate: dueDate || null, paymentMethod: payMethod, cardId: payMethod === "cc" ? payCardId : null, paid: false, date: td() });
+    setAmt(""); setName(""); setDueDate(""); setPayMethod("account"); setPayCardId(cards[0]?.id || "");
+  };
+
+  const saveEdit = (entry) => {
+    onEdit(entry.id, { name: eName.trim() || entry.name, amount: parseFloat(eAmt) || entry.amount, dueDate: eDue || entry.dueDate, paymentMethod: eMethod || entry.paymentMethod, cardId: eMethod === "cc" ? eCardId : null });
+    setEditId(null);
+  };
+
+  const sorted = [...(entries || [])].sort((a, b) => (a.paid ? 1 : 0) - (b.paid ? 1 : 0) || (a.dueDate || "").localeCompare(b.dueDate || ""));
+  const unpaidTotal = sorted.filter(e => !e.paid).reduce((s, e) => s + e.amount, 0);
+  const paidTotal = sorted.filter(e => e.paid).reduce((s, e) => s + e.amount, 0);
+
+  return (
+    <Modal title="🧾 Fatura Ödemeleri" onClose={onClose}>
+      <Inp label="Fatura Adı" value={name} onChange={setName} placeholder="Örn: Elektrik, Doğalgaz, Su" />
+      <Inp label="Tutar" type="number" value={amt} onChange={setAmt} suffix="₺" />
+      <Inp label="Son Ödeme Tarihi" type="date" value={dueDate} onChange={setDueDate} />
+      <Sel label="Ödeme Aracı" value={payMethod} onChange={setPayMethod} options={[{ v: "account", l: "🏦 Hesaptan" }, { v: "cc", l: "💳 Kredi Kartı" }]} />
+      {payMethod === "cc" && cards.length > 0 && (
+        <Sel label="Hangi Kart" value={payCardId} onChange={setPayCardId} options={cards.map(c => ({ v: c.id, l: c.name }))} />
+      )}
+      <Btn onClick={save} disabled={!amt || !name}>🧾 Fatura Ekle</Btn>
+
+      <div style={{ marginTop: 14 }}>
+        <div onClick={() => setListOpen(!listOpen)} style={{ ...glassSolid, borderRadius: listOpen ? "10px 10px 0 0" : 10, padding: "12px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span style={{ fontSize: 15, fontWeight: 700, color: X.tm }}>Bu ayki faturalar</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            {sorted.length > 0 && <span style={{ fontSize: 10, color: X.td }}>{sorted.filter(e => !e.paid).length} bekliyor</span>}
+            <span style={{ fontSize: 10, color: X.td, transform: listOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>▼</span>
+          </div>
+        </div>
+        {listOpen && (
+          <div style={{ background: "rgba(160,190,200,0.35)", borderRadius: "0 0 10px 10px", borderTop: `1px solid ${X.border}`, padding: "6px 10px 8px" }}>
+            {sorted.length === 0
+              ? <div style={{ color: X.td, fontSize: 12, padding: "4px 0" }}>Bu ay henüz fatura girilmedi.</div>
+              : sorted.map(e => editId === e.id ? (
+                <div key={e.id} style={{ padding: 8, borderRadius: 7, marginBottom: 3, background: "rgba(245,158,11,0.07)", border: "1px solid rgba(245,158,11,0.2)" }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: X.w, marginBottom: 8 }}>{e.name} — düzenleniyor</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 6 }}>
+                    <div><div style={{ fontSize: 12, color: X.td, marginBottom: 3 }}>Tutar</div><input type="number" value={eAmt} onChange={ev => setEAmt(ev.target.value)} style={{ width: "100%", background: "rgba(255,255,255,0.7)", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 8, padding: "8px 10px", fontSize: 13, color: X.t, boxSizing: "border-box" }} /></div>
+                    <div><div style={{ fontSize: 12, color: X.td, marginBottom: 3 }}>Son Ödeme</div><input type="date" value={eDue} onChange={ev => setEDue(ev.target.value)} style={{ width: "100%", background: "rgba(255,255,255,0.7)", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 8, padding: "8px 10px", fontSize: 13, color: X.t, boxSizing: "border-box" }} /></div>
+                  </div>
+                  <Inp label="Fatura Adı" value={eName} onChange={setEName} />
+                  <Sel label="Ödeme Aracı" value={eMethod} onChange={setEMethod} options={[{ v: "account", l: "🏦 Hesaptan" }, { v: "cc", l: "💳 Kredi Kartı" }]} />
+                  {eMethod === "cc" && cards.length > 0 && <Sel label="Hangi Kart" value={eCardId} onChange={setECardId} options={cards.map(c => ({ v: c.id, l: c.name }))} />}
+                  <div style={{ display: "flex", gap: 4 }}>
+                    <button onClick={() => saveEdit(e)} style={{ flex: 1, background: X.w, border: "none", borderRadius: 8, padding: "8px 6px", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: ff }}>✓ Kaydet</button>
+                    <button onClick={() => { if (confirm("Bu faturayı silmek istiyor musunuz?")) { onDelete(e.id); setEditId(null); } }} style={{ flex: 1, background: X.rd, border: `1px solid ${X.r}`, borderRadius: 8, padding: "8px 6px", color: X.r, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: ff }}>Sil</button>
+                    <button onClick={() => setEditId(null)} style={{ flex: 1, background: "transparent", border: "1px solid rgba(0,0,0,0.15)", borderRadius: 8, padding: "8px 6px", color: X.td, fontSize: 12, cursor: "pointer", fontFamily: ff }}>İptal</button>
+                  </div>
+                </div>
+              ) : (
+                <div key={e.id} style={{ padding: "10px 10px", borderRadius: 10, marginBottom: 4, background: e.paid ? "rgba(15,118,110,0.06)" : "rgba(255,255,255,0.35)", opacity: e.paid ? 0.7 : 1 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                    <span style={{ fontSize: 15, fontWeight: 600, color: X.t, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.name}</span>
+                    {e.dueDate && <span style={{ fontSize: 10, color: X.td, whiteSpace: "nowrap" }}>son: {e.dueDate}</span>}
+                    <span style={{ fontSize: 15, fontWeight: 700, color: e.paid ? X.g : X.w, fontFamily: fm, whiteSpace: "nowrap", flexShrink: 0 }}>{C(e.amount)}</span>
+                  </div>
+                  <div style={{ display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 10, color: X.td }}>{e.paymentMethod === "cc" ? "💳 KK" : "🏦 Hesap"}</span>
+                    {e.paid
+                      ? <button onClick={() => onUndoPaid(e.id)} style={{ background: "#F0FDF4", border: "1px solid #86EFAC", borderRadius: 6, padding: "4px 8px", color: "#15803D", fontSize: 11, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>✓ Ödendi</button>
+                      : <button onClick={() => onMarkPaid(e.id)} style={{ background: "#FFF7ED", border: "1px solid #FDBA74", borderRadius: 6, padding: "4px 8px", color: "#C2410C", fontSize: 11, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>Öde</button>
+                    }
+                    <button onClick={() => { setEditId(e.id); setEAmt(String(e.amount)); setEName(e.name); setEDue(e.dueDate || ""); setEMethod(e.paymentMethod || "account"); setECardId(e.cardId || cards[0]?.id || ""); }} style={{ background: "none", border: "none", color: X.b, fontSize: 18, cursor: "pointer", padding: 0, width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center" }}>✎</button>
+                  </div>
+                </div>
+              ))
+            }
+            {sorted.length > 0 && (
+              <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${X.border}`, display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+                <span style={{ color: X.td }}>Bekleyen: <span style={{ fontWeight: 700, color: X.w, fontFamily: fm }}>{C(unpaidTotal)}</span></span>
+                <span style={{ color: X.td }}>Ödenen: <span style={{ fontWeight: 700, color: X.g, fontFamily: fm }}>{C(paidTotal)}</span></span>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
 function AccountPayModal({ variableExpenses, entries, transferred, onClose, onSave, onDelete, onEdit, onTransfer, onUndoTransfer }) {
   const [a, sa] = useState(""); const [n, sn] = useState(""); const [d, sd] = useState(td());
   const digerCat = (variableExpenses || []).find(ve => ve.name && ve.name.toLowerCase() === "diğer");
@@ -3102,6 +3219,13 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
       plannedEvents: (d.plannedEvents || []).map(ev => ev.id === eventId ? { ...ev, taksitUsed: (ev.taksitUsed || 0) + totalAmount } : ev)
     }));
   };
+  // Fatura handler'ları
+  const handleBillSave = entry => { setMonthField(mk, "billEntries", [...(md.billEntries || []), entry]); flash("✓ Fatura eklendi"); };
+  const handleBillDelete = id => { setMonthField(mk, "billEntries", (md.billEntries || []).filter(e => e.id !== id)); };
+  const handleBillEdit = (id, updates) => { setMonthField(mk, "billEntries", (md.billEntries || []).map(e => e.id === id ? { ...e, ...updates } : e)); };
+  const handleBillPaid = id => { setMonthField(mk, "billEntries", (md.billEntries || []).map(e => e.id === id ? { ...e, paid: true, paidDate: td() } : e)); flash("✓ Fatura ödendi"); };
+  const handleBillUnpaid = id => { setMonthField(mk, "billEntries", (md.billEntries || []).map(e => e.id === id ? { ...e, paid: false, paidDate: null } : e)); };
+
   const handleAccountPay = entry => { setMonthField(mk, "accountEntries", [...(md.accountEntries || []), entry]); flash("✓ Ödeme kaydedildi"); };
   const deleteAccountEntry = id => { setMonthField(mk, "accountEntries", (md.accountEntries || []).filter(e => e.id !== id)); };
   const editAccountEntry = (id, updates) => { setMonthField(mk, "accountEntries", (md.accountEntries || []).map(e => e.id === id ? { ...e, ...updates } : e)); };
@@ -3286,7 +3410,7 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
         }, 0);
 
         return (
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gridTemplateRows: "repeat(3, minmax(0, 1fr))", gap: 6, flex: 5, minHeight: 0 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gridTemplateRows: "repeat(4, minmax(0, 1fr))", gap: 6, flex: 5, minHeight: 0 }}>
         <div onClick={() => setModal("ccCombined")} style={{ background: "rgba(29,78,216,0.22)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(29,78,216,0.28)", borderRadius: 16, padding: "16px 8px", cursor: "pointer", textAlign: "center", position: "relative", boxShadow: neu, overflow: "hidden", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
           <InfoBtn onClick={() => setInfo("ccSingle")} />
           <div style={{ fontSize: 18, marginBottom: 3 }}>💳</div>
@@ -3313,7 +3437,16 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
           <div style={{ color: X.t, fontSize: 15, fontWeight: 800, fontFamily: fm, marginTop: 2 }}>{C(c.debtTotal)}</div>
         </div>
 
-        {/* Receipt + Simulation — konfor harcaması kartıyla aynı yükseklik */}
+        {/* Fatura kartı */}
+        {(() => { const bills = md.billEntries || []; const unpaid = bills.filter(b => !b.paid); const billTotal = unpaid.reduce((s, b) => s + b.amount, 0); return (
+        <div onClick={() => setModal("billPay")} style={{ background: "rgba(245,158,11,0.20)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(245,158,11,0.28)", borderRadius: 16, padding: "16px 8px", cursor: "pointer", textAlign: "center", position: "relative", boxShadow: neu, overflow: "hidden", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gridColumn: "1 / -1" }}>
+          <div style={{ fontSize: 18, marginBottom: 3 }}>🧾</div>
+          <div style={{ color: X.w, fontSize: 13, fontWeight: 800 }}>Fatura Ödemeleri</div>
+          <div style={{ color: X.t, fontSize: 15, fontWeight: 800, fontFamily: fm, marginTop: 2 }}>{billTotal > 0 ? C(billTotal) : "—"}</div>
+          {unpaid.length > 0 && <div style={{ color: X.td, fontSize: 11, marginTop: 3 }}>{unpaid.length} bekleyen fatura</div>}
+        </div>); })()}
+
+        {/* Receipt + Simulation */}
         <div onClick={() => setModal("receipt")} style={{ background: "rgba(194,65,12,0.20)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(194,65,12,0.26)", borderRadius: 16, padding: "16px 8px", cursor: "pointer", textAlign: "center", position: "relative", boxShadow: neu, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
           <div style={{ fontSize: 18, marginBottom: 3 }}>📷</div>
           <div style={{ color: X.o, fontSize: 13, fontWeight: 800 }}>Harcama Fişi</div>
@@ -3637,6 +3770,7 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
       </div>{/* WRAPPER KAPANIŞ */}
 
       {modal === "ccCombined" && <CCCombinedModal data={data} mk={mk} cards={data.settings.cards || []} variableExpenses={data.settings.variableExpenses || []} ccSingleEntries={md.ccSingle || []} onClose={() => setModal(null)} onSaveSingle={handleCCSingle} onDeleteSingle={deleteCCSingle} onEditSingle={editCCSingle} onSaveInstall={handleInstSave} onDeletePlan={deleteInstallment} onEditPlan={editInstallment} onEventTaksit={handleEventTaksit} />}
+      {modal === "billPay" && <BillPayModal mk={mk} cards={data.settings.cards || []} entries={md.billEntries || []} onClose={() => setModal(null)} onSave={handleBillSave} onDelete={handleBillDelete} onEdit={handleBillEdit} onMarkPaid={handleBillPaid} onUndoPaid={handleBillUnpaid} />}
       {modal === "accountPay" && <AccountPayModal variableExpenses={data.settings.variableExpenses || []} entries={md.accountEntries || []} transferred={md.accountTransferred || {}} onClose={() => setModal(null)} onSave={handleAccountPay} onDelete={deleteAccountEntry} onEdit={editAccountEntry} onTransfer={handleAccountTransfer} onUndoTransfer={undoAccountTransfer} />}
       {modal === "simulate" && <CCCombinedModal data={data} mk={mk} cards={data.settings.cards || []} variableExpenses={data.settings.variableExpenses || []} ccSingleEntries={md.ccSingle || []} onClose={() => setModal(null)} onSaveSingle={handleCCSingle} onDeleteSingle={deleteCCSingle} onEditSingle={editCCSingle} onSaveInstall={handleInstSave} onDeletePlan={deleteInstallment} onEditPlan={editInstallment} onEventTaksit={handleEventTaksit} />}
       {modal === "cardLoad" && <CardLoadModal currentLoaded={md.cardLoaded || 0} maxTotal={c.generalCardBudget} entries={md.cardEntries || []} debitEntries={md.debitCardEntries || []} debitLimit={(data.settings.cards || []).filter(c2 => c2.type === "debit").reduce((s, c2) => s + (c2.monthlyLimit || 0), 0)} onClose={() => setModal(null)} onSave={handleCardLoad} onDelete={deleteCardEntry} onEdit={editCardEntry} onSaveDebit={entry => setMonthField(mk, "debitCardEntries", [...(md.debitCardEntries || []), entry])} onDeleteDebit={id => setMonthField(mk, "debitCardEntries", (md.debitCardEntries || []).filter(e => e.id !== id))} />}
@@ -9206,9 +9340,17 @@ export default function App() {
       { label: "Aktarılan Kredi Kartı harcamaları", value: (c.transferredCC || 0) + (c.transferredFixedCC || 0), sign: "−" },
       { label: "Aktarılan hesaptan ödemeler", value: c.transferredAcc || 0, sign: "−" },
       { label: "Konfor kartı yükleme", value: c.cardLoaded || 0, sign: "−" },
+      { label: "Ödenen faturalar", value: c.billPaid || 0, sign: "−" },
       { label: "Ödenen borçlar", value: c.paidDebtTotal || 0, sign: "−" },
     ].filter((r, i) => i === 0 || r.value > 0);
-    setHeaderDetail({ title: "Kalan Bütçe Detayı", rows, total: c.remainingY || 0, totalLabel: `Bankadaki Reel Tutar: ${C(c.remainingY||0)}  |  Bloke Sonrası Kalan: ${C(c.remainingX||0)}`, totalColor: (c.remainingX||0) >= 0 ? X.g : X.r });
+    if (c.prevBillCarry > 0) {
+      rows.push({ label: `+ ${C(c.prevBillCarry)} önceki aydan kalan fatura bedeli`, value: c.prevBillCarry, sign: "", color: X.td, info: true });
+    }
+    const bankReal = (c.remainingY || 0) + (c.prevBillCarry || 0);
+    const totalLabel = c.prevBillCarry > 0
+      ? `Bankadaki Tutar: ${C(c.remainingY||0)} + Fatura bedeli: ${C(c.prevBillCarry)} = Banka bakiyesi: ${C(bankReal)}`
+      : `Bankadaki Reel Tutar: ${C(c.remainingY||0)}  |  Bloke Sonrası Kalan: ${C(c.remainingX||0)}`;
+    setHeaderDetail({ title: "Kalan Bütçe Detayı", rows, total: c.remainingY || 0, totalLabel, totalColor: (c.remainingX||0) >= 0 ? X.g : X.r });
   };
 
   return (
