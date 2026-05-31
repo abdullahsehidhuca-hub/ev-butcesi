@@ -3682,7 +3682,7 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
   const [view, setView] = useState("risk");
   const [csvSub, setCsvSub] = useState("analysis"); // analysis | category
   const [customCatTxId, setCustomCatTxId] = useState(null); const [customCatCardId, setCustomCatCardId] = useState("");
-  const [customCatName, setCustomCatName] = useState(""); const [customCatKw, setCustomCatKw] = useState(""); const [customCatTracked, setCustomCatTracked] = useState(false);
+  const [customCatName, setCustomCatName] = useState(""); const [customCatKw, setCustomCatKw] = useState(""); const [customCatTracked, setCustomCatTracked] = useState(false); const [customCatIcon, setCustomCatIcon] = useState("📋");
   const [selMk, setSelMk] = useState(initialMk);
   const [csvCardId, setCsvCardId] = useState("");
   const [csvTargetMk, setCsvTargetMk] = useState(initialMk);
@@ -4024,7 +4024,7 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
     const kws = (keywords || "").split(",").map(k => k.trim()).filter(k => k.length > 0);
     setData(dd => ({ ...dd, settings: { ...dd.settings, variableExpenses: [...dd.settings.variableExpenses, { id: newId, name: name.trim(), icon: icon || "📋", expectedAmount: 0, keywords: kws, tracked: !!tracked }] } }));
     updateCsvTransaction(cardId, txId, newId);
-    setCustomCatTxId(null); setCustomCatName(""); setCustomCatKw(""); setCustomCatTracked(false);
+    setCustomCatTxId(null); setCustomCatName(""); setCustomCatKw(""); setCustomCatTracked(false); setCustomCatIcon("📋");
   };
   const updateCsvTransaction = (cardId, txId, newCategoryId) => {
     setData(d => {
@@ -5397,23 +5397,33 @@ ${hasPastData ? `- Harcama trendi yükseliyor mu, düşüyor mu, yerinde mi?
 
             {/* Yeni kategori ekleme modalı */}
             {customCatTxId && (
-              <Modal title="📋 Yeni Kategori Ekle" onClose={() => { setCustomCatTxId(null); setCustomCatName(""); setCustomCatKw(""); setCustomCatTracked(false); }}>
-                <Inp label="Kategori Adı" value={customCatName} onChange={setCustomCatName} placeholder="Örn: Eğitim, Sağlık, Tatil" />
-                <div style={{ marginBottom: 12 }}>
-                  <label style={{ fontSize: 12, color: X.tm, fontWeight: 600, marginBottom: 4, display: "block", fontFamily: ff }}>Anahtar Kelimeler (virgülle ayırın)</label>
-                  <textarea value={customCatKw} onChange={e => setCustomCatKw(e.target.value)} placeholder="okul, kurs, eğitim, ders" style={{ width: "100%", background: "rgba(200,220,232,0.65)", border: `1px solid ${X.border}`, borderRadius: 10, padding: "12px 14px", color: X.t, fontSize: 14, fontFamily: ff, outline: "none", boxSizing: "border-box", minHeight: 50, resize: "vertical" }} />
-                  <div style={{ color: X.td, fontSize: 10, marginTop: 4 }}>Bu kelimeler sonraki ekstrelerde bu kategoriye otomatik eşleşme sağlar.</div>
-                </div>
-                <div style={{ marginBottom: 16, display: "flex", alignItems: "center", gap: 10 }}>
-                  <button onClick={() => setCustomCatTracked(!customCatTracked)} style={{ width: 44, height: 24, borderRadius: 12, border: "none", background: customCatTracked ? X.g : "rgba(0,0,0,0.15)", cursor: "pointer", position: "relative", transition: "background 0.2s" }}>
-                    <div style={{ width: 20, height: 20, borderRadius: 10, background: "#fff", position: "absolute", top: 2, left: customCatTracked ? 22 : 2, transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
-                  </button>
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: X.t }}>Değişken gider takibine dahil et</div>
-                    <div style={{ fontSize: 10, color: X.td }}>{customCatTracked ? "Bu kategori aylık zarf takibinde görünür" : "Sadece sınıflandırma amaçlı"}</div>
+              <Modal title="📋 Yeni Kategori Ekle" onClose={() => { setCustomCatTxId(null); setCustomCatName(""); setCustomCatKw(""); setCustomCatTracked(false); setCustomCatIcon("📋"); }}>
+                <div style={{ paddingBottom: 40 }}>
+                  <Inp label="Kategori Adı" value={customCatName} onChange={setCustomCatName} placeholder="Örn: Eğitim, Sağlık, Tatil" />
+                  <div style={{ marginBottom: 12 }}>
+                    <label style={{ fontSize: 12, color: X.tm, fontWeight: 600, marginBottom: 4, display: "block", fontFamily: ff }}>Simge</label>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      {["⚡", "💧", "🌐", "📱", "⛽", "🍽️", "📋", "🔧", "🏥", "📺", "🛒", "🏪", "👶", "🐾", "📚", "🚗", "✈️", "🎓", "💊", "🏠"].map(i => (
+                        <button key={i} onClick={() => setCustomCatIcon(i)} style={{ fontSize: 20, padding: "5px 7px", background: customCatIcon === i ? X.gd : X.bg, border: `1px solid ${customCatIcon === i ? X.g : X.border}`, borderRadius: 8, cursor: "pointer" }}>{i}</button>
+                      ))}
+                    </div>
                   </div>
+                  <div style={{ marginBottom: 12 }}>
+                    <label style={{ fontSize: 12, color: X.tm, fontWeight: 600, marginBottom: 4, display: "block", fontFamily: ff }}>Anahtar Kelimeler (virgülle ayırın)</label>
+                    <textarea value={customCatKw} onChange={e => setCustomCatKw(e.target.value)} placeholder="okul, kurs, eğitim, ders" style={{ width: "100%", background: "rgba(200,220,232,0.65)", border: `1px solid ${X.border}`, borderRadius: 10, padding: "12px 14px", color: X.t, fontSize: 14, fontFamily: ff, outline: "none", boxSizing: "border-box", minHeight: 50, resize: "vertical" }} />
+                    <div style={{ color: X.td, fontSize: 10, marginTop: 4 }}>Bu kelimeler sonraki ekstrelerde bu kategoriye otomatik eşleşme sağlar.</div>
+                  </div>
+                  <div style={{ marginBottom: 16, display: "flex", alignItems: "center", gap: 10 }}>
+                    <button onClick={() => setCustomCatTracked(!customCatTracked)} style={{ width: 44, height: 24, borderRadius: 12, border: "none", background: customCatTracked ? X.g : "rgba(0,0,0,0.15)", cursor: "pointer", position: "relative", transition: "background 0.2s" }}>
+                      <div style={{ width: 20, height: 20, borderRadius: 10, background: "#fff", position: "absolute", top: 2, left: customCatTracked ? 22 : 2, transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
+                    </button>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: X.t }}>Değişken gider takibine dahil et</div>
+                      <div style={{ fontSize: 10, color: X.td }}>{customCatTracked ? "Bu kategori aylık zarf takibinde görünür" : "Sadece sınıflandırma amaçlı"}</div>
+                    </div>
+                  </div>
+                  <Btn onClick={() => { if (customCatName.trim()) addCategoryAndAssign(customCatCardId, customCatTxId, { name: customCatName, keywords: customCatKw, tracked: customCatTracked, icon: customCatIcon }); }} disabled={!customCatName.trim()}>Kategoriyi Kaydet ve Ata</Btn>
                 </div>
-                <Btn onClick={() => { if (customCatName.trim()) addCategoryAndAssign(customCatCardId, customCatTxId, { name: customCatName, keywords: customCatKw, tracked: customCatTracked }); }} disabled={!customCatName.trim()}>Kategoriyi Kaydet ve Ata</Btn>
               </Modal>
             )}
 
