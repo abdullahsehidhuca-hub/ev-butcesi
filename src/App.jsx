@@ -588,7 +588,7 @@ function calcMonth(data, m, extraInst) {
 
   // Değişken gider tahmini: kategori bazında 3 aylık ortalama
   const ves = data.settings.variableExpenses || [];
-  const variableEstimate = ves.reduce((s, ve) => {
+  const variableEstimate = ves.filter(ve => ve.tracked !== false).reduce((s, ve) => {
     const past3 = [pmk(pmk(pmk(m))), pmk(pmk(m)), pmk(m)].map(pm => {
       const pmd = data.months[pm] || DM();
       const ccAmt = (pmd.ccSingle || []).filter(e => e.categoryId === ve.id).reduce((a, e) => a + e.amount, 0);
@@ -739,7 +739,7 @@ function calcFlat(data, m, extraInst) {
   const generalCardBudget = data.settings.generalCardBudget || 0;
   const emergencyTampon = data.settings.emergencyTampon || 0;
   const ves2 = data.settings.variableExpenses || [];
-  const variableEstimate2 = ves2.reduce((s, ve) => {
+  const variableEstimate2 = ves2.filter(ve => ve.tracked !== false).reduce((s, ve) => {
     const past3 = [pmk(pmk(pmk(m))), pmk(pmk(m)), pmk(m)].map(pm => {
       const pmd2 = data.months[pm] || DM();
       return (pmd2.ccSingle || []).filter(e => e.categoryId === ve.id).reduce((a, e) => a + e.amount, 0) +
@@ -3681,6 +3681,7 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
 function AnalysisScreen({ data, setData, mk: initialMk }) {
   const [view, setView] = useState("risk");
   const [csvSub, setCsvSub] = useState("analysis"); // analysis | category
+  const [customCatTxId, setCustomCatTxId] = useState(null); const [customCatName, setCustomCatName] = useState("");
   const [selMk, setSelMk] = useState(initialMk);
   const [csvCardId, setCsvCardId] = useState("");
   const [csvTargetMk, setCsvTargetMk] = useState(initialMk);
@@ -3810,63 +3811,74 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
     const md = data.months[targetMk] || DM();
     const ccEntries = (md.ccSingle || []).filter(e2 => e2.cardId === csvCardId);
 
+    // Taksit planlarından bu kart + bu dönem için aktif olanları da dahil et
+    const instEntries = data.installmentPlans.filter(p => p.cardId === csvCardId).map(p => {
+      let cur = p.startMonth;
+      for (let i = 0; i < p.months; i++) { if (cur === targetMk) return { id: `inst-${p.id}`, amount: p.monthlyPayment, note: p.note, date: null, categoryId: p.categoryId || null, isInstallment: true, planId: p.id }; cur = nmk(cur); }
+      return null;
+    }).filter(Boolean);
+
+    // Birleşik eşleştirme havuzu: tek çekim + taksitler
+    const allEntries = [...ccEntries, ...instEntries];
+
     const transactions = rawTransactions.map(t => ({ id: uid(), ...t })).filter(t => t.amount > 0);
+
+        // Tarih yardımcıları
+        const parseDate = (str) => {
+          if (!str) return null;
+          const n = str.replace(/\./g, "-").replace(/(\d{2})-(\d{2})-(\d{4})/, "$3-$2-$1");
+          const d = new Date(n);
+          return isNaN(d.getTime()) ? null : d;
+        };
+        const dayDiff = (d1, d2) => { if (!d1 || !d2) return Infinity; return Math.abs(Math.round((d1 - d2) / 86400000)); };
 
         // EŞLEŞME MOTORU
         const matchedCCIds = new Set();
         const newMerchantMap = { ...(data.merchantMap || {}) };
+
+        const learnMerchant = (entry, txDesc) => {
+          if (!entry.note) return;
+          const noteWords = entry.note.toLowerCase().split(/\s+/);
+          const bankDesc = txDesc.toLowerCase().split(/\s+/).slice(0, 3).join(" ");
+          noteWords.forEach(word => { if (word.length >= 3 && !newMerchantMap[word]) newMerchantMap[word] = { bankName: txDesc, categoryId: entry.categoryId || null }; });
+          if (bankDesc.length >= 3) newMerchantMap[bankDesc] = { bankName: txDesc, categoryId: entry.categoryId || null };
+        };
 
         const enriched = transactions.map(tx => {
           let categoryId = null;
           let matchedEntryId = null;
           let matchedNote = null;
 
-          // 1. Tarih + tutar eşleşmesi (en güvenilir)
-          const dateNorm = tx.date.replace(/\./g, "-").replace(/(\d{2})-(\d{2})-(\d{4})/, "$3-$2-$1"); // dd.mm.yyyy → yyyy-mm-dd
-          for (const entry of ccEntries) {
+          const txDate = parseDate(tx.date);
+          const txAmt = Math.abs(tx.amount);
+
+          // 1. Tarih (±2 gün) + tutar (±1 TL) eşleşmesi
+          for (const entry of allEntries) {
             if (matchedCCIds.has(entry.id)) continue;
             const entryAmt = Math.abs(entry.amount);
-            const txAmt = Math.abs(tx.amount);
-            if (Math.abs(entryAmt - txAmt) < 0.5 && entry.date) {
-              // Tarih karşılaştırma (farklı formatları tolere et)
-              const entryDateNorm = entry.date.replace(/\./g, "-");
-              if (entryDateNorm === dateNorm || entry.date === tx.date || entryDateNorm.includes(tx.date) || tx.date.includes(entryDateNorm)) {
+            if (Math.abs(entryAmt - txAmt) <= 1.0 && entry.date) {
+              const entryDate = parseDate(entry.date);
+              if (dayDiff(txDate, entryDate) <= 2) {
                 matchedEntryId = entry.id;
                 matchedNote = entry.note;
                 categoryId = entry.categoryId;
                 matchedCCIds.add(entry.id);
-
-                // merchantMap'e öğret: kullanıcının açıklamasındaki anahtar kelimeler → banka açıklaması
-                if (entry.note) {
-                  const noteWords = entry.note.toLowerCase().split(/\s+/);
-                  const bankDesc = tx.desc.toLowerCase().split(/\s+/).slice(0, 3).join(" ");
-                  noteWords.forEach(word => {
-                    if (word.length >= 3 && !newMerchantMap[word]) {
-                      newMerchantMap[word] = { bankName: tx.desc, categoryId: entry.categoryId || null };
-                    }
-                  });
-                  if (bankDesc.length >= 3) {
-                    newMerchantMap[bankDesc] = { bankName: tx.desc, categoryId: entry.categoryId || null };
-                  }
-                }
+                learnMerchant(entry, tx.desc);
                 break;
               }
             }
           }
 
-          // 2. Tutar eşleşmesi (tarihsiz — taksitler için)
+          // 2. Tutar eşleşmesi ±1 TL (tarihsiz — taksitler için)
           if (!matchedEntryId) {
-            for (const entry of ccEntries) {
+            for (const entry of allEntries) {
               if (matchedCCIds.has(entry.id)) continue;
-              if (Math.abs(Math.abs(entry.amount) - Math.abs(tx.amount)) < 0.5) {
+              if (Math.abs(Math.abs(entry.amount) - txAmt) <= 1.0) {
                 matchedEntryId = entry.id;
                 matchedNote = entry.note;
                 categoryId = entry.categoryId;
                 matchedCCIds.add(entry.id);
-                if (entry.note) {
-                  const noteWords = entry.note.toLowerCase().split(/\s+/);
-                  noteWords.forEach(word => { if (word.length >= 3) newMerchantMap[word] = { bankName: tx.desc, categoryId: entry.categoryId || null }; });
-                }
+                learnMerchant(entry, tx.desc);
                 break;
               }
             }
@@ -3899,7 +3911,7 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
         });
 
         // Eşleşmeyen uygulama kayıtları (CSV'de bulunmayan)
-        const unmatchedEntries = ccEntries.filter(e2 => !matchedCCIds.has(e2.id));
+        const unmatchedEntries = allEntries.filter(e2 => !matchedCCIds.has(e2.id));
 
         setData(d => {
           const ms = { ...d.months };
@@ -4005,6 +4017,13 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
   }, [allCsvData, data.settings.variableExpenses, data.settings.billTypes, data.months, mk]);
 
   // Kategori güncelleme ve öğrenme
+  const addCategoryAndAssign = (cardId, txId, catName) => {
+    if (!catName.trim()) return;
+    const newId = uid();
+    setData(dd => ({ ...dd, settings: { ...dd.settings, variableExpenses: [...dd.settings.variableExpenses, { id: newId, name: catName.trim(), icon: "📋", expectedAmount: 0, keywords: [], tracked: false }] } }));
+    updateCsvTransaction(cardId, txId, newId);
+    setCustomCatTxId(null); setCustomCatName("");
+  };
   const updateCsvTransaction = (cardId, txId, newCategoryId) => {
     setData(d => {
       const ms = { ...d.months };
@@ -5367,7 +5386,15 @@ ${hasPastData ? `- Harcama trendi yükseliyor mu, düşüyor mu, yerinde mi?
                     {(Object.keys(billBreakdown.byType).length > 0 || billBreakdown.otherCount > 0 || billBreakdown.billTypes.length > 0) && (
                       <BillAnalysisCard billBreakdown={billBreakdown} compact={true} />
                     )}
-                    {Object.entries(allCsvData).map(([cardId, cardData]) => { const cardName = cards.find(c2 => c2.id === cardId)?.name || "?"; const txs = cardData.transactions || []; if (txs.length === 0) return null; const sorted = [...txs].sort((a, b) => { if (!a.categoryId && b.categoryId) return -1; if (a.categoryId && !b.categoryId) return 1; return b.amount - a.amount; }); return (<Card key={cardId} s={{ marginBottom: 12 }}><div style={{ color: X.tm, fontSize: 12, fontWeight: 700, marginBottom: 10, paddingBottom: 8, borderBottom: `1px solid ${X.border}` }}>💳 {cardName} — {txs.length} işlem</div>{sorted.map(tx => (<div key={tx.id} style={{ padding: "8px 0", borderBottom: `1px solid ${X.border}` }}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}><span style={{ color: X.t, fontSize: 12, fontWeight: 600, flex: 1, marginRight: 8, wordBreak: "break-word" }}>{tx.desc || "—"}</span><span style={{ color: X.t, fontSize: 13, fontWeight: 700, fontFamily: fm, flexShrink: 0 }}>{C(tx.amount)}</span></div>{tx.date && <div style={{ color: X.td, fontSize: 10, marginBottom: 4 }}>{tx.date}</div>}<select value={tx.categoryId || ""} onChange={e => updateCsvTransaction(cardId, tx.id, e.target.value || null)} style={{ width: "100%", background: tx.categoryId ? X.bd : "rgba(255,255,255,0.5)", border: `1px solid ${tx.categoryId ? X.b : X.border}`, borderRadius: 6, padding: "6px 10px", color: tx.categoryId ? X.b : X.tm, fontSize: 11, fontFamily: ff, outline: "none", boxSizing: "border-box" }}><option value="">— Kategori Seçin —</option>{ves.map(ve => <option key={ve.id} value={ve.id}>{(ve.icon || "📋") + " " + ve.name}</option>)}</select></div>))}</Card>); })}
+                    {Object.entries(allCsvData).map(([cardId, cardData]) => { const cardName = cards.find(c2 => c2.id === cardId)?.name || "?"; const txs = cardData.transactions || []; if (txs.length === 0) return null; const sorted = [...txs].sort((a, b) => { if (!a.categoryId && b.categoryId) return -1; if (a.categoryId && !b.categoryId) return 1; return b.amount - a.amount; }); return (<Card key={cardId} s={{ marginBottom: 12 }}><div style={{ color: X.tm, fontSize: 12, fontWeight: 700, marginBottom: 10, paddingBottom: 8, borderBottom: `1px solid ${X.border}` }}>💳 {cardName} — {txs.length} işlem</div>{sorted.map(tx => (<div key={tx.id} style={{ padding: "8px 0", borderBottom: `1px solid ${X.border}` }}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}><span style={{ color: X.t, fontSize: 12, fontWeight: 600, flex: 1, marginRight: 8, wordBreak: "break-word" }}>{tx.desc || "—"}</span><span style={{ color: X.t, fontSize: 13, fontWeight: 700, fontFamily: fm, flexShrink: 0 }}>{C(tx.amount)}</span></div>{tx.date && <div style={{ color: X.td, fontSize: 10, marginBottom: 4 }}>{tx.date}</div>}{customCatTxId === tx.id ? (
+                      <div style={{ display: "flex", gap: 4 }}>
+                        <input value={customCatName} onChange={ev => setCustomCatName(ev.target.value)} placeholder="Kategori adı yazın" autoFocus style={{ flex: 1, background: "rgba(255,255,255,0.7)", border: `1px solid ${X.b}`, borderRadius: 6, padding: "6px 10px", fontSize: 11, color: X.t, fontFamily: ff, outline: "none", boxSizing: "border-box" }} onKeyDown={ev => { if (ev.key === "Enter" && customCatName.trim()) addCategoryAndAssign(cardId, tx.id, customCatName); if (ev.key === "Escape") { setCustomCatTxId(null); setCustomCatName(""); } }} />
+                        <button onClick={() => { if (customCatName.trim()) addCategoryAndAssign(cardId, tx.id, customCatName); }} style={{ background: X.g, border: "none", borderRadius: 6, padding: "6px 10px", color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>✓</button>
+                        <button onClick={() => { setCustomCatTxId(null); setCustomCatName(""); }} style={{ background: "transparent", border: `1px solid ${X.border}`, borderRadius: 6, padding: "6px 8px", color: X.td, fontSize: 11, cursor: "pointer" }}>✕</button>
+                      </div>
+                    ) : (
+                      <select value={tx.categoryId || ""} onChange={e => { if (e.target.value === "__custom") { setCustomCatTxId(tx.id); setCustomCatName(""); } else { updateCsvTransaction(cardId, tx.id, e.target.value || null); } }} style={{ width: "100%", background: tx.categoryId ? X.bd : "rgba(255,255,255,0.5)", border: `1px solid ${tx.categoryId ? X.b : X.border}`, borderRadius: 6, padding: "6px 10px", color: tx.categoryId ? X.b : X.tm, fontSize: 11, fontFamily: ff, outline: "none", boxSizing: "border-box" }}><option value="">— Kategori Seçin —</option>{ves.map(ve => <option key={ve.id} value={ve.id}>{(ve.icon || "📋") + " " + ve.name}</option>)}<option value="__custom">✏️ Elle kategori yaz...</option></select>
+                    )}</div>))}</Card>); })}
                     {Object.keys(data.merchantMap || {}).length > 0 && (<Card s={{ marginBottom: 12, border: `1px solid ${X.g}30` }}><div style={{ color: X.g, fontSize: 12, fontWeight: 700, marginBottom: 4 }}>🧠 Öğrenilen Eşleşmeler</div><div style={{ color: X.tm, fontSize: 11 }}>{Object.keys(data.merchantMap).length} merchant öğrenildi.</div></Card>)}
                   </>
                 )}
@@ -8056,12 +8083,12 @@ function FixedSettings({ data, setData, onBack }) {
 }
 function VariableSettings({ data, setData, onBack }) {
   const [editing, setEditing] = useState(null);
-  const [n, sn] = useState(""); const [ic, sic] = useState("📋"); const [ex, se] = useState(""); const [kw, setKw] = useState("");
+  const [n, sn] = useState(""); const [ic, sic] = useState("📋"); const [ex, se] = useState(""); const [kw, setKw] = useState(""); const [tracked, setTracked] = useState(true);
   const icons = ["⚡", "💧", "🌐", "📱", "⛽", "🍽️", "📋", "🔧", "🏥", "📺", "🛒", "🏪", "👶", "🐾", "📚", "🚗"];
 
-  const startNew = () => { sn(""); sic("📋"); se(""); setKw(""); setEditing("new"); };
-  const startEdit = ve => { sn(ve.name); sic(ve.icon || "📋"); se(String(ve.expectedAmount || "")); setKw((ve.keywords || []).join(", ")); setEditing(ve.id); };
-  const cancel = () => { setEditing(null); sn(""); sic("📋"); se(""); setKw(""); };
+  const startNew = () => { sn(""); sic("📋"); se(""); setKw(""); setTracked(true); setEditing("new"); };
+  const startEdit = ve => { sn(ve.name); sic(ve.icon || "📋"); se(String(ve.expectedAmount || "")); setKw((ve.keywords || []).join(", ")); setTracked(ve.tracked !== false); setEditing(ve.id); };
+  const cancel = () => { setEditing(null); sn(""); sic("📋"); se(""); setKw(""); setTracked(true); };
 
   const save = () => {
     if (!n) return;
@@ -8069,10 +8096,10 @@ function VariableSettings({ data, setData, onBack }) {
     setData(dd => {
       const list = [...dd.settings.variableExpenses];
       if (editing === "new") {
-        list.push({ id: uid(), name: n, icon: ic, expectedAmount: parseFloat(ex) || 0, keywords });
+        list.push({ id: uid(), name: n, icon: ic, expectedAmount: parseFloat(ex) || 0, keywords, tracked });
       } else {
         const idx = list.findIndex(x => x.id === editing);
-        if (idx >= 0) list[idx] = { ...list[idx], name: n, icon: ic, expectedAmount: parseFloat(ex) || 0, keywords };
+        if (idx >= 0) list[idx] = { ...list[idx], name: n, icon: ic, expectedAmount: parseFloat(ex) || 0, keywords, tracked };
       }
       return { ...dd, settings: { ...dd.settings, variableExpenses: list } };
     });
@@ -8096,6 +8123,15 @@ function VariableSettings({ data, setData, onBack }) {
         <label style={{ fontSize: 12, color: X.tm, fontWeight: 600, marginBottom: 4, display: "block" }}>Anahtar Kelimeler (virgülle ayırın)</label>
         <textarea value={kw} onChange={e => setKw(e.target.value)} placeholder="dizel, benzin, yakıt, akaryakıt, lpg" style={{ width: "100%", background: "rgba(200,220,232,0.65)", border: `1px solid ${X.border}`, borderRadius: 10, padding: "12px 14px", color: X.t, fontSize: 14, fontFamily: ff, outline: "none", boxSizing: "border-box", minHeight: 60, resize: "vertical" }} />
         <div style={{ color: X.td, fontSize: 10, marginTop: 4 }}>Bu kelimelerden biri harcamanın açıklaması veya işyeri adında geçerse bu kategoriye otomatik atanır.</div>
+      </div>
+      <div style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 10 }}>
+        <button onClick={() => setTracked(!tracked)} style={{ width: 44, height: 24, borderRadius: 12, border: "none", background: tracked ? X.g : "rgba(0,0,0,0.15)", cursor: "pointer", position: "relative", transition: "background 0.2s" }}>
+          <div style={{ width: 20, height: 20, borderRadius: 10, background: "#fff", position: "absolute", top: 2, left: tracked ? 22 : 2, transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
+        </button>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: X.t }}>Değişken gider takibine dahil</div>
+          <div style={{ fontSize: 10, color: X.td }}>{tracked ? "Bu kategori aylık zarf takibinde görünür" : "Sadece sınıflandırma amaçlı — zarf takibinde görünmez"}</div>
+        </div>
       </div>
       <div style={{ display: "flex", gap: 8 }}>
         <Btn onClick={save} s={{ flex: 1 }}>Kaydet</Btn>
@@ -8123,6 +8159,7 @@ function VariableSettings({ data, setData, onBack }) {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ color: X.t, fontWeight: 700 }}>{ve.name}</div>
                   {ve.expectedAmount > 0 && <div style={{ color: X.tm, fontSize: 11 }}>Beklenen: {C(ve.expectedAmount)}</div>}
+                  {ve.tracked === false && <div style={{ color: X.w, fontSize: 10, fontWeight: 600 }}>Zarf takibinde değil</div>}
                   {(ve.keywords || []).length > 0 && (
                     <div style={{ marginTop: 4, display: "flex", flexWrap: "wrap", gap: 3 }}>
                       {ve.keywords.map((k, i) => <span key={i} style={{ background: X.bd, color: X.b, fontSize: 10, fontWeight: 600, padding: "2px 6px", borderRadius: 4 }}>{k}</span>)}
