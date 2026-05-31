@@ -21,7 +21,11 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: "claude-opus-4-6",
-        max_tokens: 2000,
+        max_tokens: 4000,
+        thinking: {
+          type: "enabled",
+          budget_tokens: 2000
+        },
         messages: [{
           role: "user",
           content: [
@@ -35,7 +39,7 @@ export default async function handler(req, res) {
     const data = await response.json();
     if (data.error) return res.status(500).json({ error: data.error.message || "AI yanıt hatası" });
 
-    const text = (data.content || []).map(c => c.text || "").join("");
+    const text = (data.content || []).filter(c => c.type === "text").map(c => c.text || "").join("");
     const clean = text.replace(/```json|```/g, "").trim();
     const parsed = JSON.parse(clean);
     return res.status(200).json(parsed);
