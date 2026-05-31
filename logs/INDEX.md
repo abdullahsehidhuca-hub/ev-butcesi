@@ -7,3 +7,4 @@
 - 2026-05-03: [bloke-ekstre-auth](./2026-05-03-bloke-ekstre-auth.md) — Bloke tutarsızlığı fix, ekstre modu bilgi bölümleri, bankadaki tutar fark analizi, auth kalıcı düzeltme (retry+sessiz recovery)
 - 2026-05-04: [onboarding-ekstre-yukle](./2026-05-04-onboarding-ekstre-yukle.md) — Onboarding 7 adım iyileştirme, ekstre dönem seçici, fatura alt kategorilendirme, anahtar kelime, cutoffDay, boykot temizliği
 - 2026-05-17: [opus-ai-bloke-pdf](./2026-05-17-opus-ai-bloke-pdf.md) — Opus 4.7 geçişi, AI danışman derinlikli analiz, extended thinking, bloke düzeltme, PDF ekstre desteği, ödeme yöntemi güncelleme
+- 2026-05-31: [ekstre-kategori-simulasyon](./2026-05-31-ekstre-kategori-simulasyon.md) — Ekstre eşleştirme motoru, kategori tracked alanı, taksit simülasyonu geçmiş analiz, API ortak modül, form düzeltmeleri
