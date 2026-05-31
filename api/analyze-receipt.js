@@ -1,47 +1,31 @@
+import { callAnthropic, parseJSON, getToken } from "./_anthropic.js";
+
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return res.status(500).json({ error: "API anahtarı yapılandırılmamış" });
-
-  // Token varlık kontrolü
-  const token = (req.headers.authorization || "").replace("Bearer ", "");
+  const token = getToken(req);
   if (!token) return res.status(401).json({ error: "Giriş yapmanız gerekiyor" });
 
   const { base64, mediaType } = req.body;
   if (!base64 || !mediaType) return res.status(400).json({ error: "Görsel verisi eksik" });
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01"
-      },
-      body: JSON.stringify({
-        model: "claude-opus-4-6",
-        max_tokens: 4000,
-        thinking: {
-          type: "enabled",
-          budget_tokens: 2000
-        },
-        messages: [{
-          role: "user",
-          content: [
-            { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
-            { type: "text", text: "Bu bir market/mağaza fişi. Fişi analiz et ve SADECE aşağıdaki JSON formatında yanıt ver, başka hiçbir şey yazma:\n{\"store\":\"mağaza adı\",\"totalAmount\":toplam_tutar_sayı,\"items\":[{\"name\":\"ürün adı\",\"qty\":adet_sayı,\"price\":birim_fiyat_sayı,\"brand\":\"marka veya boş string\",\"category\":\"kategori\"}]}\ncategory değerleri SADECE şunlardan biri olmalı: süt ürünleri, et/tavuk, meyve/sebze, temel gıda, atıştırmalık, içecek, temizlik, kişisel bakım, bebek/çocuk, diğer.\nFiyatlar Türk Lirası cinsindendir. Eğer fiş okunamıyorsa {\"error\":\"Fiş okunamadı\"} döndür." }
-          ]
-        }]
-      })
+    const { text } = await callAnthropic({
+      maxTokens: 4000,
+      thinkingBudget: 2000,
+      messages: [{
+        role: "user",
+        content: [
+          { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
+          { type: "text", text: `Bu bir market/mağaza fişi. Fişi analiz et ve SADECE aşağıdaki JSON formatında yanıt ver, başka hiçbir şey yazma:
+{"store":"mağaza adı","totalAmount":toplam_tutar_sayı,"items":[{"name":"ürün adı","qty":adet_sayı,"price":birim_fiyat_sayı,"brand":"marka veya boş string","category":"kategori"}]}
+category değerleri SADECE şunlardan biri olmalı: süt ürünleri, et/tavuk, meyve/sebze, temel gıda, atıştırmalık, içecek, temizlik, kişisel bakım, bebek/çocuk, diğer.
+Fiyatlar Türk Lirası cinsindendir. Eğer fiş okunamıyorsa {"error":"Fiş okunamadı"} döndür.` }
+        ]
+      }]
     });
 
-    const data = await response.json();
-    if (data.error) return res.status(500).json({ error: data.error.message || "AI yanıt hatası" });
-
-    const text = (data.content || []).filter(c => c.type === "text").map(c => c.text || "").join("");
-    const clean = text.replace(/```json|```/g, "").trim();
-    const parsed = JSON.parse(clean);
+    const parsed = parseJSON(text);
     return res.status(200).json(parsed);
   } catch (err) {
     return res.status(500).json({ error: "Fiş analiz edilemedi: " + err.message });
