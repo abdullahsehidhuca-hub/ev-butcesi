@@ -3681,7 +3681,8 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
 function AnalysisScreen({ data, setData, mk: initialMk }) {
   const [view, setView] = useState("risk");
   const [csvSub, setCsvSub] = useState("analysis"); // analysis | category
-  const [customCatTxId, setCustomCatTxId] = useState(null); const [customCatName, setCustomCatName] = useState("");
+  const [customCatTxId, setCustomCatTxId] = useState(null); const [customCatCardId, setCustomCatCardId] = useState("");
+  const [customCatName, setCustomCatName] = useState(""); const [customCatKw, setCustomCatKw] = useState(""); const [customCatTracked, setCustomCatTracked] = useState(false);
   const [selMk, setSelMk] = useState(initialMk);
   const [csvCardId, setCsvCardId] = useState("");
   const [csvTargetMk, setCsvTargetMk] = useState(initialMk);
@@ -4017,12 +4018,13 @@ function AnalysisScreen({ data, setData, mk: initialMk }) {
   }, [allCsvData, data.settings.variableExpenses, data.settings.billTypes, data.months, mk]);
 
   // Kategori güncelleme ve öğrenme
-  const addCategoryAndAssign = (cardId, txId, catName) => {
-    if (!catName.trim()) return;
+  const addCategoryAndAssign = (cardId, txId, { name, keywords, tracked, icon }) => {
+    if (!name.trim()) return;
     const newId = uid();
-    setData(dd => ({ ...dd, settings: { ...dd.settings, variableExpenses: [...dd.settings.variableExpenses, { id: newId, name: catName.trim(), icon: "📋", expectedAmount: 0, keywords: [], tracked: false }] } }));
+    const kws = (keywords || "").split(",").map(k => k.trim()).filter(k => k.length > 0);
+    setData(dd => ({ ...dd, settings: { ...dd.settings, variableExpenses: [...dd.settings.variableExpenses, { id: newId, name: name.trim(), icon: icon || "📋", expectedAmount: 0, keywords: kws, tracked: !!tracked }] } }));
     updateCsvTransaction(cardId, txId, newId);
-    setCustomCatTxId(null); setCustomCatName("");
+    setCustomCatTxId(null); setCustomCatName(""); setCustomCatKw(""); setCustomCatTracked(false);
   };
   const updateCsvTransaction = (cardId, txId, newCategoryId) => {
     setData(d => {
@@ -5386,19 +5388,33 @@ ${hasPastData ? `- Harcama trendi yükseliyor mu, düşüyor mu, yerinde mi?
                     {(Object.keys(billBreakdown.byType).length > 0 || billBreakdown.otherCount > 0 || billBreakdown.billTypes.length > 0) && (
                       <BillAnalysisCard billBreakdown={billBreakdown} compact={true} />
                     )}
-                    {Object.entries(allCsvData).map(([cardId, cardData]) => { const cardName = cards.find(c2 => c2.id === cardId)?.name || "?"; const txs = cardData.transactions || []; if (txs.length === 0) return null; const sorted = [...txs].sort((a, b) => { if (!a.categoryId && b.categoryId) return -1; if (a.categoryId && !b.categoryId) return 1; return b.amount - a.amount; }); return (<Card key={cardId} s={{ marginBottom: 12 }}><div style={{ color: X.tm, fontSize: 12, fontWeight: 700, marginBottom: 10, paddingBottom: 8, borderBottom: `1px solid ${X.border}` }}>💳 {cardName} — {txs.length} işlem</div>{sorted.map(tx => (<div key={tx.id} style={{ padding: "8px 0", borderBottom: `1px solid ${X.border}` }}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}><span style={{ color: X.t, fontSize: 12, fontWeight: 600, flex: 1, marginRight: 8, wordBreak: "break-word" }}>{tx.desc || "—"}</span><span style={{ color: X.t, fontSize: 13, fontWeight: 700, fontFamily: fm, flexShrink: 0 }}>{C(tx.amount)}</span></div>{tx.date && <div style={{ color: X.td, fontSize: 10, marginBottom: 4 }}>{tx.date}</div>}{customCatTxId === tx.id ? (
-                      <div style={{ display: "flex", gap: 4 }}>
-                        <input value={customCatName} onChange={ev => setCustomCatName(ev.target.value)} placeholder="Kategori adı yazın" autoFocus style={{ flex: 1, background: "rgba(255,255,255,0.7)", border: `1px solid ${X.b}`, borderRadius: 6, padding: "6px 10px", fontSize: 11, color: X.t, fontFamily: ff, outline: "none", boxSizing: "border-box" }} onKeyDown={ev => { if (ev.key === "Enter" && customCatName.trim()) addCategoryAndAssign(cardId, tx.id, customCatName); if (ev.key === "Escape") { setCustomCatTxId(null); setCustomCatName(""); } }} />
-                        <button onClick={() => { if (customCatName.trim()) addCategoryAndAssign(cardId, tx.id, customCatName); }} style={{ background: X.g, border: "none", borderRadius: 6, padding: "6px 10px", color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>✓</button>
-                        <button onClick={() => { setCustomCatTxId(null); setCustomCatName(""); }} style={{ background: "transparent", border: `1px solid ${X.border}`, borderRadius: 6, padding: "6px 8px", color: X.td, fontSize: 11, cursor: "pointer" }}>✕</button>
-                      </div>
-                    ) : (
-                      <select value={tx.categoryId || ""} onChange={e => { if (e.target.value === "__custom") { setCustomCatTxId(tx.id); setCustomCatName(""); } else { updateCsvTransaction(cardId, tx.id, e.target.value || null); } }} style={{ width: "100%", background: tx.categoryId ? X.bd : "rgba(255,255,255,0.5)", border: `1px solid ${tx.categoryId ? X.b : X.border}`, borderRadius: 6, padding: "6px 10px", color: tx.categoryId ? X.b : X.tm, fontSize: 11, fontFamily: ff, outline: "none", boxSizing: "border-box" }}><option value="">— Kategori Seçin —</option>{ves.map(ve => <option key={ve.id} value={ve.id}>{(ve.icon || "📋") + " " + ve.name}</option>)}<option value="__custom">✏️ Elle kategori yaz...</option></select>
-                    )}</div>))}</Card>); })}
+                    {Object.entries(allCsvData).map(([cardId, cardData]) => { const cardName = cards.find(c2 => c2.id === cardId)?.name || "?"; const txs = cardData.transactions || []; if (txs.length === 0) return null; const sorted = [...txs].sort((a, b) => { if (!a.categoryId && b.categoryId) return -1; if (a.categoryId && !b.categoryId) return 1; return b.amount - a.amount; }); return (<Card key={cardId} s={{ marginBottom: 12 }}><div style={{ color: X.tm, fontSize: 12, fontWeight: 700, marginBottom: 10, paddingBottom: 8, borderBottom: `1px solid ${X.border}` }}>💳 {cardName} — {txs.length} işlem</div>{sorted.map(tx => (<div key={tx.id} style={{ padding: "8px 0", borderBottom: `1px solid ${X.border}` }}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}><span style={{ color: X.t, fontSize: 12, fontWeight: 600, flex: 1, marginRight: 8, wordBreak: "break-word" }}>{tx.desc || "—"}</span><span style={{ color: X.t, fontSize: 13, fontWeight: 700, fontFamily: fm, flexShrink: 0 }}>{C(tx.amount)}</span></div>{tx.date && <div style={{ color: X.td, fontSize: 10, marginBottom: 4 }}>{tx.date}</div>}<select value={tx.categoryId || ""} onChange={e => { if (e.target.value === "__add") { setCustomCatTxId(tx.id); setCustomCatCardId(cardId); setCustomCatName(""); setCustomCatKw(""); setCustomCatTracked(false); } else { updateCsvTransaction(cardId, tx.id, e.target.value || null); } }} style={{ width: "100%", background: tx.categoryId ? X.bd : "rgba(255,255,255,0.5)", border: `1px solid ${tx.categoryId ? X.b : X.border}`, borderRadius: 6, padding: "6px 10px", color: tx.categoryId ? X.b : X.tm, fontSize: 11, fontFamily: ff, outline: "none", boxSizing: "border-box" }}><option value="">— Kategori Seçin —</option>{ves.map(ve => <option key={ve.id} value={ve.id}>{(ve.icon || "📋") + " " + ve.name}</option>)}<option value="__add">＋ Tanımlanmamış / Ekle</option></select></div>))}</Card>); })}
                     {Object.keys(data.merchantMap || {}).length > 0 && (<Card s={{ marginBottom: 12, border: `1px solid ${X.g}30` }}><div style={{ color: X.g, fontSize: 12, fontWeight: 700, marginBottom: 4 }}>🧠 Öğrenilen Eşleşmeler</div><div style={{ color: X.tm, fontSize: 11 }}>{Object.keys(data.merchantMap).length} merchant öğrenildi.</div></Card>)}
                   </>
                 )}
               </>
+            )}
+
+            {/* Yeni kategori ekleme modalı */}
+            {customCatTxId && (
+              <Modal title="📋 Yeni Kategori Ekle" onClose={() => { setCustomCatTxId(null); setCustomCatName(""); setCustomCatKw(""); setCustomCatTracked(false); }}>
+                <Inp label="Kategori Adı" value={customCatName} onChange={setCustomCatName} placeholder="Örn: Eğitim, Sağlık, Tatil" />
+                <div style={{ marginBottom: 12 }}>
+                  <label style={{ fontSize: 12, color: X.tm, fontWeight: 600, marginBottom: 4, display: "block", fontFamily: ff }}>Anahtar Kelimeler (virgülle ayırın)</label>
+                  <textarea value={customCatKw} onChange={e => setCustomCatKw(e.target.value)} placeholder="okul, kurs, eğitim, ders" style={{ width: "100%", background: "rgba(200,220,232,0.65)", border: `1px solid ${X.border}`, borderRadius: 10, padding: "12px 14px", color: X.t, fontSize: 14, fontFamily: ff, outline: "none", boxSizing: "border-box", minHeight: 50, resize: "vertical" }} />
+                  <div style={{ color: X.td, fontSize: 10, marginTop: 4 }}>Bu kelimeler sonraki ekstrelerde bu kategoriye otomatik eşleşme sağlar.</div>
+                </div>
+                <div style={{ marginBottom: 16, display: "flex", alignItems: "center", gap: 10 }}>
+                  <button onClick={() => setCustomCatTracked(!customCatTracked)} style={{ width: 44, height: 24, borderRadius: 12, border: "none", background: customCatTracked ? X.g : "rgba(0,0,0,0.15)", cursor: "pointer", position: "relative", transition: "background 0.2s" }}>
+                    <div style={{ width: 20, height: 20, borderRadius: 10, background: "#fff", position: "absolute", top: 2, left: customCatTracked ? 22 : 2, transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
+                  </button>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: X.t }}>Değişken gider takibine dahil et</div>
+                    <div style={{ fontSize: 10, color: X.td }}>{customCatTracked ? "Bu kategori aylık zarf takibinde görünür" : "Sadece sınıflandırma amaçlı"}</div>
+                  </div>
+                </div>
+                <Btn onClick={() => { if (customCatName.trim()) addCategoryAndAssign(customCatCardId, customCatTxId, { name: customCatName, keywords: customCatKw, tracked: customCatTracked }); }} disabled={!customCatName.trim()}>Kategoriyi Kaydet ve Ata</Btn>
+              </Modal>
             )}
 
             {/* ═══ KATEGORİK HARCAMA ANALİZİ ═══ */}
