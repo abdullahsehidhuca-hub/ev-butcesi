@@ -548,9 +548,11 @@ function calcMonth(data, m, extraInst) {
   const md = data.months[m] || DM();
   const incomeTotal = (md.incomeEntries || []).reduce((s, e) => s + (e.amount || 0), 0);
   const baseBudget = incomeTotal > 0 ? incomeTotal : (md.budget || data.settings.monthlyBudget);
-  let carryoverDeficit = 0;
-  if (data.months[pmk(m)]) { const pr = calcFlat(data, pmk(m), extraInst); if (pr.remaining < 0) carryoverDeficit = Math.abs(pr.remaining); }
-  const effectiveBudget = baseBudget - carryoverDeficit;
+  // Kapanmış ay, yeni ayı etkilemez. Sadece taksit ve sarkan fatura taşınır (kendi mantıklarıyla).
+  // Eski "önceki aydan devir" mekanizması kaldırıldı: kapanan kasayı dondurulmamış halde canlı
+  // yeniden hesaplayıp yeni bütçeden düşüyordu ve kur/borç değişiklikleri geçmişi geriye dönük bozuyordu.
+  const carryoverDeficit = 0;
+  const effectiveBudget = baseBudget;
 
   // Sabit giderler
   const fixedTotal = data.settings.fixedExpenses.reduce((s, e) => s + e.amount, 0);
@@ -728,71 +730,6 @@ function calcMonth(data, m, extraInst) {
 
   return { effectiveBudget, baseBudget, carryoverDeficit, fixedTotal, variableTotal, ccSingleTotal, accountTotal, installmentTotal, debtTotal, paidDebtTotal, cardLoaded, cardLoadMaxPerTx, cardLoadMaxTotal, cardLoadRemaining, availableForCard, totalSpent, remaining, remainingX, remainingY, savingsTarget, expectedCCSingle, ccTransferNeeded, expectedVariable, pendingVariable, variableEstimate, categorizedCC, uncategorizedCC, envelopeRemaining, envelopeOverflow, emergencyBuffer, cardUsable, generalCardBudget, bloke, groupA, groupB, groupC, unpaidFixed, unpaidFixedAcc, untransferredCC, untransferredFixedCC, untransferredAcc, cardBlokeKalan, variableBlokeKalan, transferredAcc, paidFixedAcc, transferredCC, transferredFixedCC, eventKumbaraBloke, untransferredInst, billPaid, billUnpaid, prevBillCarry };
 }
-function calcFlat(data, m, extraInst) {
-  const md = data.months[m] || DM();
-  const incTotal = (md.incomeEntries || []).reduce((s, e) => s + (e.amount || 0), 0);
-  const b = incTotal > 0 ? incTotal : (md.budget || data.settings.monthlyBudget);
-  const ft = data.settings.fixedExpenses.reduce((s, e) => s + e.amount, 0);
-  let inst = data.installmentPlans.reduce((s, p) => { let c = p.startMonth; for (let i = 0; i < p.months; i++) { if (c === m) return s + p.monthlyPayment; c = nmk(c); } return s; }, 0);
-  if (extraInst) { let c = extraInst.startMonth; for (let i = 0; i < extraInst.months; i++) { if (c === m) { inst += extraInst.monthlyPayment; break; } c = nmk(c); } }
-  const curMkF = cmk(data.settings?.payDay || 15);
-  const monthsAheadF = Math.max(0, mkDist(curMkF, m));
-  const dt = data.debts.filter(d => (d.remainingMonths - monthsAheadF) > 0).reduce((s, d) => {
-    if (d.currency === "TRY") return s + d.monthlyPayment;
-    if (d.currency === "USD") return s + d.monthlyPayment * (data.liveRates?.USD || data.usdRates?.[m] || 0);
-    if (d.currency === "EUR") return s + d.monthlyPayment * (data.liveRates?.EUR || data.eurRates?.[m] || 0);
-    if (d.currency === "XAU") return s + d.monthlyPayment * (data.liveRates?.XAU || data.goldRates?.[m] || 0);
-    return s;
-  }, 0);
-  const cl = md.cardLoaded || 0;
-  const generalCardBudget = data.settings.generalCardBudget || 0;
-  const emergencyTampon = data.settings.emergencyTampon || 0;
-  const ves2 = data.settings.variableExpenses || [];
-  const variableEstimate2 = ves2.filter(ve => ve.tracked !== false).reduce((s, ve) => {
-    const past3 = [pmk(pmk(pmk(m))), pmk(pmk(m)), pmk(m)].map(pm => {
-      const pmd2 = data.months[pm] || DM();
-      return (pmd2.ccSingle || []).filter(e => e.categoryId === ve.id).reduce((a, e) => a + e.amount, 0) +
-             (pmd2.accountEntries || []).filter(e => e.categoryId === ve.id).reduce((a, e) => a + e.amount, 0);
-    }).filter(t => t > 0);
-    const avg = past3.length >= 2 ? Math.round(past3.reduce((a, b2) => a + b2, 0) / past3.length) : (ve.expectedAmount || 0);
-    return s + avg;
-  }, 0);
-  // Ekstre modu (calcFlat)
-  const isEkstreF = data.settings.ccPaymentMode === "ekstre";
-  const prevMdF = isEkstreF ? (data.months[pmk(m)] || DM()) : null;
-  const effectiveInstF = isEkstreF ? data.installmentPlans.reduce((s, p) => { let c2 = p.startMonth; for (let i2 = 0; i2 < p.months; i2++) { if (c2 === pmk(m)) return s + p.monthlyPayment; c2 = nmk(c2); } return s; }, 0) : inst;
-
-  // A grubu: gerçek çıkışlar
-  const paidFixedAccF = (data.settings.fixedExpenses || []).filter(e => e.paymentMethod === "account" && md.fixedPaid?.[e.id]).reduce((s, e) => s + e.amount, 0);
-  const ccSourceF = isEkstreF ? prevMdF : md;
-  const ccKeyPrefixF = isEkstreF ? "prev-" : "";
-  const debitCardIdsF = new Set((data.settings.cards || []).filter(c2 => c2.type === "debit").map(c2 => c2.id));
-  const isDebitF = cid => debitCardIdsF.has(cid);
-  const transferredCCF = (ccSourceF.ccSingle || []).filter(e => isDebitF(e.cardId) || md.ccTransferred?.[`${ccKeyPrefixF}single-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
-  const transferredFixedCCF = (data.settings.fixedExpenses || []).filter(e => e.paymentMethod === "cc" && (isDebitF(e.cardId) || md.ccTransferred?.[`${ccKeyPrefixF}fixed-${e.id}`]?.transferred)).reduce((s, e) => s + e.amount, 0);
-  const transferredAccF = (md.accountEntries || []).filter(e => md.accountTransferred?.[e.id]?.transferred).reduce((s, e) => s + e.amount, 0);
-  const transferredInstF = data.installmentPlans.reduce((s, p) => {
-    let cur = p.startMonth;
-    const targetMonthF = isEkstreF ? pmk(m) : m;
-    for (let i2 = 0; i2 < p.months; i2++) {
-      if (cur === targetMonthF) { if (isDebitF(p.cardId)) return s + p.monthlyPayment; const key = `${ccKeyPrefixF}inst-${p.id}`; if (md.ccTransferred?.[key]?.transferred || md.ccTransferred?.["inst-all"]?.transferred) return s + p.monthlyPayment; break; }
-      cur = nmk(cur);
-    }
-    return s;
-  }, 0);
-  const debitCardSpentF = (md.debitCardEntries || []).reduce((s, e) => s + (e.amount || 0), 0);
-  const groupAF = paidFixedAccF + transferredCCF + transferredFixedCCF + cl + transferredAccF + transferredInstF + debitCardSpentF;
-  const unpaidFixedAccF = (data.settings.fixedExpenses || []).filter(e => e.paymentMethod === "account" && !md.fixedPaid?.[e.id]).reduce((s, e) => s + e.amount, 0);
-  const untransferredCCF = (ccSourceF.ccSingle || []).filter(e => !isDebitF(e.cardId) && !md.ccTransferred?.[`${ccKeyPrefixF}single-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
-  const untransferredFixedCCF = (data.settings.fixedExpenses || []).filter(e => e.paymentMethod === "cc" && !isDebitF(e.cardId) && !md.ccTransferred?.[`${ccKeyPrefixF}fixed-${e.id}`]?.transferred).reduce((s, e) => s + e.amount, 0);
-  const untransferredAccF = (md.accountEntries || []).filter(e => !md.accountTransferred?.[e.id]?.transferred).reduce((s, e) => s + e.amount, 0);
-  const untransferredInstF = effectiveInstF - transferredInstF;
-  const groupBF = unpaidFixedAccF + untransferredCCF + untransferredFixedCCF + untransferredAccF + dt + untransferredInstF;
-  const remainingX = b - groupAF - groupBF;
-  const remaining = remainingX;
-  return { remaining, totalSpent: groupAF + groupBF };
-}
-
 /* ═══ YAKLAŞAN ÖDEMELER ═══ */
 function getUpcomingPayments(data, daysAhead = 3, mk = cmk(data?.settings?.payDay || 15)) {
   const today = new Date();
@@ -947,7 +884,6 @@ function getMonthBreakdown(data, m) {
   } else {
     rows.push({ label: "Aylık bütçe", value: mc.effectiveBudget, color: X.g });
   }
-  if (mc.carryoverDeficit > 0) rows.push({ label: "Önceki aydan devir", value: mc.carryoverDeficit, sign: "−", color: X.o });
   if (mc.fixedTotal > 0) {
     rows.push({ label: `Sabit giderler (${data.settings.fixedExpenses.length} kalem)`, value: mc.fixedTotal, sign: "−" });
   }
@@ -1137,7 +1073,6 @@ function genWarnings(data, mk) {
   const c = calcMonth(data, mk, null); if (c.remaining < 0) w.push({ icon: "🚨", msg: `Bu ay ${C(Math.abs(c.remaining))} açık!`, color: X.r }); else if (c.remaining < c.effectiveBudget * 0.1) w.push({ icon: "⚠️", msg: "Kalan bütçe %10'un altında.", color: X.w });
   // Zarf taşması uyarısı
   if (c.envelopeOverflow > 0) w.push({ icon: "⚠️", msg: `Değişken gider kategorilerinde ${C(c.envelopeOverflow)} taşma var.`, color: X.w });
-  if (c.carryoverDeficit > 0) w.push({ icon: "📉", msg: `Geçen aydan ${C(c.carryoverDeficit)} devir.`, color: X.o });
   // Acil tampon uyarısı
   if (c.emergencyBuffer < 5000 && c.remaining > 0) w.push({ icon: "⚠️", msg: `Acil tampon ${C(c.emergencyBuffer)} — beklenmeyen giderler için yetersiz.`, color: X.w });
   return w;

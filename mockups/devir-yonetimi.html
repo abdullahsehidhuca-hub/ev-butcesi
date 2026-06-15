@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Devir Yönetimi — Mockup</title>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --t:#4a3f35; --tm:#8a7d6f; --td:#a89b8c; --border:rgba(160,140,110,0.25);
+    --g:#0f766e; --gd:rgba(15,118,110,0.12);
+    --o:#c2620a; --od:rgba(194,98,10,0.10);
+    --r:#b91c1c; --rd:rgba(185,28,28,0.08);
+    --b:#1d4ed8; --bd:rgba(29,78,216,0.08);
+    --p:#7c3aed;
+    --cream:#f5efe6; --card:rgba(255,255,255,0.72);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;font-family:'Quicksand',sans-serif;background:linear-gradient(160deg,#efe7da,#e7dccb);color:var(--t);padding:16px;display:flex;justify-content:center}
+  .modal{width:100%;max-width:440px;background:rgba(252,249,244,0.92);backdrop-filter:blur(12px);border-radius:20px;padding:22px;box-shadow:0 8px 32px rgba(80,60,30,0.14);border:1px solid var(--border)}
+  .head{text-align:center;margin-bottom:18px}
+  .head .ic{font-size:38px}
+  .head .ttl{font-size:18px;font-weight:800;margin-top:6px}
+  .head .sub{font-size:12px;color:var(--tm);margin-top:4px}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:12px}
+  .lbl{font-size:11px;font-weight:700;color:var(--tm);letter-spacing:.3px;margin-bottom:8px;text-transform:uppercase}
+  .row{display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:3px 0}
+  .amt{font-weight:700}
+  .sec-title{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:800;margin:6px 0 4px}
+  .sec-desc{font-size:11px;color:var(--tm);line-height:1.5;margin-bottom:10px}
+  .item{border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:10px;background:rgba(255,255,255,0.55)}
+  .item-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px}
+  .item-name{font-size:13px;font-weight:700}
+  .item-meta{font-size:10px;color:var(--td);margin-top:2px}
+  .item-amt{font-size:15px;font-weight:800}
+  .opts{display:flex;flex-direction:column;gap:6px}
+  .opt{display:flex;align-items:center;gap:9px;padding:9px 11px;border-radius:10px;border:1.5px solid var(--border);background:rgba(255,255,255,0.6);cursor:pointer;font-size:12px;font-weight:600;transition:.12s}
+  .opt .dot{width:15px;height:15px;border-radius:50%;border:2px solid var(--td);flex:none}
+  .opt .otxt{flex:1}
+  .opt .ohint{font-size:10px;color:var(--td);font-weight:500}
+  .opt.sel{border-color:var(--g);background:var(--gd)}
+  .opt.sel .dot{border-color:var(--g);background:var(--g);box-shadow:inset 0 0 0 3px rgba(255,255,255,0.85)}
+  .opt.sel.o{border-color:var(--o);background:var(--od)} .opt.sel.o .dot{border-color:var(--o);background:var(--o)}
+  .opt.sel.r{border-color:var(--r);background:var(--rd)} .opt.sel.r .dot{border-color:var(--r);background:var(--r)}
+  .opt.sel.b{border-color:var(--b);background:var(--bd)} .opt.sel.b .dot{border-color:var(--b);background:var(--b)}
+  .summary{background:rgba(74,63,53,0.04);border:1px dashed var(--border)}
+  .summary .row{padding:5px 0}
+  .summary .tot{border-top:1px solid var(--border);margin-top:6px;padding-top:8px;font-weight:800}
+  .btn{width:100%;padding:13px;border:none;border-radius:12px;background:var(--g);color:#fff;font-family:inherit;font-weight:700;font-size:14px;cursor:pointer;margin-top:6px}
+  .pill{font-size:9px;font-weight:700;padding:2px 7px;border-radius:20px;background:var(--od);color:var(--o)}
+  .pill.ob{background:var(--bd);color:var(--b)}
+  .note{font-size:10px;color:var(--td);text-align:center;margin-top:14px;line-height:1.5}
+</style>
+</head>
+<body>
+<div class="modal">
+  <div class="head">
+    <div class="ic">📅</div>
+    <div class="ttl">Ay Kapatma — Devir Yönetimi</div>
+    <div class="sub">Mayıs ayını kapatıp Haziran ayını başlatın</div>
+  </div>
+
+  <!-- Önceki ay özeti -->
+  <div class="card" style="background:rgba(160,190,200,0.30)">
+    <div class="lbl">Önceki Ay Özeti (Mayıs)</div>
+    <div class="row"><span>Bütçe</span><span class="amt">410.000 ₺</span></div>
+    <div class="row"><span>Harcama</span><span class="amt">438.500 ₺</span></div>
+    <div class="row tot" style="border-top:1px solid var(--border);margin-top:4px;padding-top:8px">
+      <span style="font-weight:700">Kalan</span><span class="amt" style="color:var(--r);font-size:15px">−28.500 ₺</span>
+    </div>
+  </div>
+
+  <div class="sec-desc" style="margin:14px 0 6px;font-size:12px;color:var(--t)">
+    Bu ay devreden kalemler aşağıda. <b>Her biri için ne yapmak istediğinizi seçin.</b> Seçimleriniz Haziran bütçesine ve birikim havuzuna buna göre yansıyacak.
+  </div>
+
+  <!-- BÖLÜM 1: Geçmiş açık -->
+  <div class="card">
+    <div class="sec-title">📉 Bütçe açığı <span class="pill">geçmiş harcama</span></div>
+    <div class="sec-desc">Mayıs'ta bütçeyi aşan kısım. Para zaten harcandığı için ertelenemez; nasıl karşılanacağını seçin.</div>
+
+    <div class="item">
+      <div class="item-top">
+        <div><div class="item-name">Mayıs ayı açığı</div>
+          <div class="item-meta">438.500 harcama − 410.000 bütçe</div></div>
+        <div class="item-amt" style="color:var(--r)">28.500 ₺</div>
+      </div>
+      <div class="opts">
+        <div class="opt sel o"><span class="dot"></span><span class="otxt">Bütçeden devret</span><span class="ohint">Haziran bütçesinden düşülür</span></div>
+        <div class="opt"><span class="dot"></span><span class="otxt">Birikimden kapat</span><span class="ohint">TL havuzdan −28.500</span></div>
+        <div class="opt"><span class="dot"></span><span class="otxt">Görmezden gel / sıfırla</span><span class="ohint">Temiz başla</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BÖLÜM 2: Sarkan yükümlülükler -->
+  <div class="card">
+    <div class="sec-title">🔁 Sonraki aya sarkan yükümlülükler <span class="pill ob">ödenmedi</span></div>
+    <div class="sec-desc">Mayıs'ta tanımlı ama ödenmemiş kalemler. Henüz para çıkmadığı için erteleyebilir, havuzdan kapatabilir veya iptal edebilirsiniz.</div>
+
+    <div class="item">
+      <div class="item-top">
+        <div><div class="item-name">Yardımcı Abla</div>
+          <div class="item-meta">Sabit gider · ödenmemiş</div></div>
+        <div class="item-amt">36.000 ₺</div>
+      </div>
+      <div class="opts">
+        <div class="opt sel b"><span class="dot"></span><span class="otxt">Sonraki aya ertele</span><span class="ohint">Haziran öde listesine taşı</span></div>
+        <div class="opt"><span class="dot"></span><span class="otxt">Birikimden kapat</span><span class="ohint">Şimdi havuzdan öde</span></div>
+        <div class="opt"><span class="dot"></span><span class="otxt">Görmezden gel / iptal</span><span class="ohint">Bu ay hiç yansımasın</span></div>
+      </div>
+    </div>
+
+    <div class="item">
+      <div class="item-top">
+        <div><div class="item-name">Dostlar Sandığı (borç)</div>
+          <div class="item-meta">Borç taksiti · ödenmemiş</div></div>
+        <div class="item-amt">7.000 ₺</div>
+      </div>
+      <div class="opts">
+        <div class="opt sel b"><span class="dot"></span><span class="otxt">Sonraki aya ertele</span><span class="ohint">Haziran öde listesine taşı</span></div>
+        <div class="opt"><span class="dot"></span><span class="otxt">Birikimden kapat</span><span class="ohint">Şimdi havuzdan öde</span></div>
+        <div class="opt"><span class="dot"></span><span class="otxt">Görmezden gel / iptal</span><span class="ohint">Bu ay hiç yansımasın</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Karar özeti -->
+  <div class="card summary">
+    <div class="lbl">Seçimlerinizin Sonucu</div>
+    <div class="row"><span>Haziran bütçesinden düşülecek</span><span class="amt" style="color:var(--o)">−28.500 ₺</span></div>
+    <div class="row"><span>Haziran öde listesine taşınacak</span><span class="amt" style="color:var(--b)">43.000 ₺</span></div>
+    <div class="row"><span>Birikim havuzundan</span><span class="amt">0 ₺</span></div>
+    <div class="row tot"><span>Haziran net başlangıç bütçesi</span><span class="amt">381.500 ₺</span></div>
+  </div>
+
+  <button class="btn">✓ Kararları Uygula ve Haziran'ı Başlat</button>
+  <div class="note">Mockup — gerçek rakamlar veri dosyandan alınmıştır.<br>Renkli daireye dokununca seçim değişir (örnek etkileşim).</div>
+</div>
+
+<script>
+  // Basit etkileşim: aynı kalem içinde tek seçim
+  document.querySelectorAll('.item').forEach(item=>{
+    const opts=item.querySelectorAll('.opt');
+    opts.forEach((o,i)=>o.addEventListener('click',()=>{
+      opts.forEach(x=>x.className='opt');
+      const cls=['o','b','r']; // ilk=devret/ertele, sonrası havuz/iptal
+      o.className='opt sel '+(i===0?(o.querySelector('.otxt').textContent.includes('Bütçe')?'o':'b'):(i===2?'r':''));
+      if(!o.className.includes('sel'))o.classList.add('sel');
+    }));
+  });
+</script>
+</body>
+</html>
