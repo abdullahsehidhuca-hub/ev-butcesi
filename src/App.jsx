@@ -32,7 +32,7 @@ const PM = [{ id: "account", label: "Hesaptan", icon: "🏦" }, { id: "cc", labe
 const MIN_TL_SAVINGS_PCT = 0.15;   // toplam birikimin en az %15'i TL olmalı
 
 const DD = { settings: { monthlyBudget: 0, fixedExpenses: [], variableExpenses: [], cards: [], emergencyFundTarget: null, billTypes: [], generalCardBudget: 0, emergencyTampon: 0, ccPaymentMode: "instant", onboardingCompleted: null }, months: {}, installmentPlans: [], debts: [], savingsGoals: [], completedGoals: [], plannedEvents: [], completedEvents: [], merchantMap: {}, goldRates: {}, usdRates: {}, eurRates: {}, liveRates: { USD: null, EUR: null, XAU: null, fetchedAt: null }, savings: { TRY: [], USD: [], EUR: [], XAU: [] }, lastClosedMonth: null, lastBackup: null };
-const DM = () => ({ budget: null, incomeEntries: [], fixedPaid: {}, variableEntries: {}, ccSingle: [], accountEntries: [], accountTransferred: {}, cardLoaded: 0, cardEntries: [], debitCardEntries: [], debtPayments: {}, ccTransferred: {}, csvByCard: {}, finalSavings: null, receipts: [], billEntries: [] });
+const DM = () => ({ budget: null, incomeEntries: [], fixedPaid: {}, variableEntries: {}, ccSingle: [], accountEntries: [], accountTransferred: {}, cardLoaded: 0, cardEntries: [], debitCardEntries: [], debtPayments: {}, ccTransferred: {}, csvByCard: {}, finalSavings: null, receipts: [], billEntries: [], carriedItems: [], carriedPaid: {} });
 
 const STORAGE_KEY = "ev-butce-v11";
 
@@ -572,7 +572,10 @@ function calcMonth(data, m, extraInst) {
   };
   const curMk = cmk(data.settings?.payDay || 15);
   const monthsAhead = Math.max(0, mkDist(curMk, m));
-  const activeDebts = data.debts.filter(d => (d.remainingMonths - monthsAhead) > 0 || md.debtPayments?.[d.id]?.paid);
+  // Borç erteleme: deferredMonths içinde bu ay varsa borç bu ay sayılmaz; ertelenen her ay
+  // takvimi bir ay uzatır (kuyruk uzar) — toplam ödeme adedi korunur.
+  const isDebtDeferredHere = d => (d.deferredMonths || []).includes(m);
+  const activeDebts = data.debts.filter(d => !isDebtDeferredHere(d) && ((d.remainingMonths + (d.deferredMonths || []).length - monthsAhead) > 0 || md.debtPayments?.[d.id]?.paid));
   const debtTotal = activeDebts.filter(d => !md.debtPayments?.[d.id]?.paid).reduce((s, d) => s + debtTLCalc(d), 0);
   const paidDebtTotal = activeDebts.filter(d => md.debtPayments?.[d.id]?.paid).reduce((s, d) => s + debtTLCalc(d), 0);
 
@@ -662,7 +665,11 @@ function calcMonth(data, m, extraInst) {
   const debitCardSpent = (md.debitCardEntries || []).reduce((s, e) => s + (e.amount || 0), 0);
   // Faturalar
   const billPaid = (md.billEntries || []).filter(b => b.paid && b.paymentMethod === "account").reduce((s, b) => s + b.amount, 0);
-  const groupA = paidFixedAcc + transferredCC + transferredFixedCC + cardLoaded + transferredAcc + totalTransferredInst + debitCardSpent + paidDebtTotal + billPaid;
+  // Önceki aydan taşınan kalemler (carriedItems): ödenenler A grubunda (çıkmış), ödenmeyenler B grubunda (kesin çıkacak)
+  const carriedItems = md.carriedItems || [];
+  const carriedPaidTotal = carriedItems.filter(ci => md.carriedPaid?.[ci.id]).reduce((s, ci) => s + (ci.amount || 0), 0);
+  const carriedUnpaidTotal = carriedItems.filter(ci => !md.carriedPaid?.[ci.id]).reduce((s, ci) => s + (ci.amount || 0), 0);
+  const groupA = paidFixedAcc + transferredCC + transferredFixedCC + cardLoaded + transferredAcc + totalTransferredInst + debitCardSpent + paidDebtTotal + billPaid + carriedPaidTotal;
 
   // === B GRUBU: Kesin çıkacak ama henüz çıkmamış ===
   const unpaidFixedAcc = data.settings.fixedExpenses.filter(e => e.paymentMethod === "account" && !md.fixedPaid?.[e.id]).reduce((s, e) => s + e.amount, 0);
@@ -684,7 +691,7 @@ function calcMonth(data, m, extraInst) {
   const billUnpaid = (md.billEntries || []).filter(b => !b.paid).reduce((s, b) => s + b.amount, 0);
   const billUnpaidCC = (md.billEntries || []).filter(b => !b.paid && b.paymentMethod === "cc").reduce((s, b) => s + b.amount, 0);
   const billPaidCC = (md.billEntries || []).filter(b => b.paid && b.paymentMethod === "cc").reduce((s, b) => s + b.amount, 0);
-  const groupB = unpaidFixedAcc + untransferredCC + untransferredFixedCC + untransferredAcc + debtTotal + untransferredInst + billUnpaid;
+  const groupB = unpaidFixedAcc + untransferredCC + untransferredFixedCC + untransferredAcc + debtTotal + untransferredInst + billUnpaid + carriedUnpaidTotal;
 
   // Planlı etkinlik kumbara aylık bloke
   const eventKumbaraBloke = (data.plannedEvents || []).reduce((s, ev) => {
@@ -728,7 +735,7 @@ function calcMonth(data, m, extraInst) {
   const prevBills = (data.months[pmk(m)]?.billEntries || []);
   const prevBillCarry = prevBills.filter(b => !b.paid && b.dueDate && b.dueDate >= m).reduce((s, b) => s + b.amount, 0);
 
-  return { effectiveBudget, baseBudget, carryoverDeficit, fixedTotal, variableTotal, ccSingleTotal, accountTotal, installmentTotal, debtTotal, paidDebtTotal, cardLoaded, cardLoadMaxPerTx, cardLoadMaxTotal, cardLoadRemaining, availableForCard, totalSpent, remaining, remainingX, remainingY, savingsTarget, expectedCCSingle, ccTransferNeeded, expectedVariable, pendingVariable, variableEstimate, categorizedCC, uncategorizedCC, envelopeRemaining, envelopeOverflow, emergencyBuffer, cardUsable, generalCardBudget, bloke, groupA, groupB, groupC, unpaidFixed, unpaidFixedAcc, untransferredCC, untransferredFixedCC, untransferredAcc, cardBlokeKalan, variableBlokeKalan, transferredAcc, paidFixedAcc, transferredCC, transferredFixedCC, eventKumbaraBloke, untransferredInst, billPaid, billUnpaid, prevBillCarry };
+  return { effectiveBudget, baseBudget, carryoverDeficit, fixedTotal, variableTotal, ccSingleTotal, accountTotal, installmentTotal, debtTotal, paidDebtTotal, cardLoaded, cardLoadMaxPerTx, cardLoadMaxTotal, cardLoadRemaining, availableForCard, totalSpent, remaining, remainingX, remainingY, savingsTarget, expectedCCSingle, ccTransferNeeded, expectedVariable, pendingVariable, variableEstimate, categorizedCC, uncategorizedCC, envelopeRemaining, envelopeOverflow, emergencyBuffer, cardUsable, generalCardBudget, bloke, groupA, groupB, groupC, unpaidFixed, unpaidFixedAcc, untransferredCC, untransferredFixedCC, untransferredAcc, cardBlokeKalan, variableBlokeKalan, transferredAcc, paidFixedAcc, transferredCC, transferredFixedCC, eventKumbaraBloke, untransferredInst, billPaid, billUnpaid, prevBillCarry, carriedItems, carriedPaidTotal, carriedUnpaidTotal };
 }
 /* ═══ YAKLAŞAN ÖDEMELER ═══ */
 function getUpcomingPayments(data, daysAhead = 3, mk = cmk(data?.settings?.payDay || 15)) {
@@ -917,6 +924,11 @@ function getMonthBreakdown(data, m) {
   if (mc.prevBillCarry > 0) {
     rows.push({ label: "Önceki aydan taşan fatura bedeli", value: mc.prevBillCarry, sign: "", color: X.td, info: true });
   }
+  // Önceki aydan taşınan kalemler (devir)
+  (mc.carriedItems || []).forEach(ci => {
+    const paid = md.carriedPaid?.[ci.id];
+    rows.push({ label: `${ml(ci.sourceMonth)}'tan taşındı: ${ci.name}${paid ? " (ödendi)" : ""}`, value: ci.amount, sign: "−", color: paid ? X.g : X.o });
+  });
   // Hesaptan ödemeler
   if (mc.accountTotal > 0) {
     rows.push({ label: "Hesaptan ödemeler", value: mc.accountTotal, sign: "−", color: X.g });
@@ -3114,6 +3126,8 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
 
   const handleFixedPay = expId => { setMonthField(mk, "fixedPaid", { ...md.fixedPaid, [expId]: { paid: true, date: td() } }); };
   const handleFixedUnpay = expId => { const fp = { ...md.fixedPaid }; delete fp[expId]; setMonthField(mk, "fixedPaid", fp); };
+  const handleCarriedPay = ciId => { setMonthField(mk, "carriedPaid", { ...(md.carriedPaid || {}), [ciId]: { paid: true, date: td() } }); };
+  const handleCarriedUnpay = ciId => { const cp = { ...(md.carriedPaid || {}) }; delete cp[ciId]; setMonthField(mk, "carriedPaid", cp); };
 
   // Eski otomatik işaretleme verilerini temizle (bir kerelik migrasyon)
   useEffect(() => {
@@ -3445,6 +3459,15 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
                 const paid = md.fixedPaid?.[exp.id];
                 return <ItemRow key={exp.id} label={exp.name} sub={`${exp.paymentMethod === "cc" ? "💳" : "🏦"}${exp.autoPayment ? " ⚡oto" : ""}${exp.increaseDate ? " • Artış: " + exp.increaseDate : ""}`} value={exp.amount} color={paid ? X.g : X.t} toggle={!!paid} toggleOn={() => handleFixedPay(exp.id)} toggleOff={() => handleFixedUnpay(exp.id)} toggleLabelOn="Ödendi" toggleLabelOff="Öde" />;
               })}
+              {(md.carriedItems || []).length > 0 && (
+                <div style={{ marginTop: 14 }}>
+                  <div style={{ color: X.o, fontSize: 10, fontWeight: 800, letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 8 }}>Önceki Aydan Taşınan</div>
+                  {(md.carriedItems || []).map(ci => {
+                    const paid = md.carriedPaid?.[ci.id];
+                    return <ItemRow key={ci.id} label={ci.name} sub={`🔁 ${ml(ci.sourceMonth)}'tan taşındı`} value={ci.amount} color={paid ? X.g : X.t} toggle={!!paid} toggleOn={() => handleCarriedPay(ci.id)} toggleOff={() => handleCarriedUnpay(ci.id)} toggleLabelOn="Ödendi" toggleLabelOff="Öde" />;
+                  })}
+                </div>
+              )}
             </div>
           );
 
@@ -8678,6 +8701,35 @@ function MonthCloseRitual({ data, setData, prevMk, onClose }) {
   const actualRemaining = realBankInput !== "" ? parseFloat(realBankInput) || 0 : prev.remaining;
   const hasSurplus = actualRemaining > 0;
 
+  // ═══ Devir kalemleri (kapanan ay) ═══
+  const prevMdClose = data.months[prevMk] || DM();
+  const deficitAmt = prev.remaining < 0 ? Math.abs(prev.remaining) : 0;
+  const mAheadClose = Math.max(0, mkDist(cmk(data.settings?.payDay || 15), prevMk));
+  const debtTLClose = dd => {
+    if (dd.currency === "USD") return dd.monthlyPayment * (data.liveRates?.USD || data.usdRates?.[prevMk] || 0);
+    if (dd.currency === "EUR") return dd.monthlyPayment * (data.liveRates?.EUR || data.eurRates?.[prevMk] || 0);
+    if (dd.currency === "XAU") return dd.monthlyPayment * (data.liveRates?.XAU || data.goldRates?.[prevMk] || 0);
+    return dd.monthlyPayment;
+  };
+  const unpaidFixedItems = (data.settings.fixedExpenses || []).filter(e => e.paymentMethod === "account" && !prevMdClose.fixedPaid?.[e.id]);
+  const unpaidDebtItems = (data.debts || []).filter(dd => !(dd.deferredMonths || []).includes(prevMk) && ((dd.remainingMonths + (dd.deferredMonths || []).length - mAheadClose) > 0) && !prevMdClose.debtPayments?.[dd.id]?.paid);
+  const hasCarry = deficitAmt > 0 || unpaidFixedItems.length > 0 || unpaidDebtItems.length > 0;
+  const [decisions, setDecisions] = useState({});
+  const decOf = (key, def) => decisions[key] ?? def;
+  const setDec = (key, val) => setDecisions(s => ({ ...s, [key]: val }));
+  const OptBtn = (key, def, val, label, hint, color) => {
+    const sel = decOf(key, def) === val;
+    return (
+      <div onClick={() => setDec(key, val)} style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 11px", borderRadius: 10, border: `1.5px solid ${sel ? color : X.border}`, background: sel ? "rgba(120,90,40,0.06)" : "rgba(255,255,255,0.5)", cursor: "pointer", marginBottom: 6 }}>
+        <div style={{ width: 15, height: 15, borderRadius: "50%", border: `2px solid ${sel ? color : X.td}`, background: sel ? color : "transparent", flex: "none" }} />
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: X.t }}>{label}</div>
+          {hint && <div style={{ fontSize: 10, color: X.td }}>{hint}</div>}
+        </div>
+      </div>
+    );
+  };
+
   const motivation = hasSurplus
     ? risk.score < 30 ? "Tebrikler! Bütçenizi iyi yönettiniz ve birikim yaptınız." : "Birikim yaptınız, ancak risk skoru dikkat gerektiriyor."
     : "Bu ay açık verdiniz. Önümüzdeki ay daha dikkatli olmak gerekiyor.";
@@ -8720,11 +8772,32 @@ function MonthCloseRitual({ data, setData, prevMk, onClose }) {
         });
         newSavings.TRY = list;
       }
+
+      // ═══ Devir kararları ═══
+      // Açık → birikimden kapat (sell ile TL havuzu azalır)
+      if (deficitAmt > 0 && decOf("deficit", "accept") === "savings") {
+        newSavings.TRY = [...(newSavings.TRY || []), { id: uid(), type: "sell", amount: deficitAmt, unitPrice: 1, date: lastDay, source: "monthly_close", note: `${ml(prevMk)} ayı açığı (birikimden kapatıldı)` }];
+      }
+      // Sabit giderler → sonraki aya taşı (carriedItems) | iptal (hiçbir şey)
+      const carried = [];
+      unpaidFixedItems.forEach(e => { if (decOf(`fixed-${e.id}`, "carry") === "carry") carried.push({ id: uid(), name: e.name, amount: e.amount, sourceMonth: prevMk, kind: "fixed" }); });
+      // Borçlar → ertele (deferredMonths, takvim uzar) | iptal (deferredMonths + remainingMonths−1, uzamaz)
+      let newDebts = d.debts;
+      const deferIds = new Set(unpaidDebtItems.filter(dd => decOf(`debt-${dd.id}`, "defer") === "defer").map(dd => dd.id));
+      const cancelIds = new Set(unpaidDebtItems.filter(dd => decOf(`debt-${dd.id}`, "defer") === "cancel").map(dd => dd.id));
+      if (deferIds.size || cancelIds.size) {
+        newDebts = d.debts.map(dd => {
+          if (deferIds.has(dd.id)) return { ...dd, deferredMonths: [...(dd.deferredMonths || []), prevMk] };
+          if (cancelIds.has(dd.id)) return { ...dd, deferredMonths: [...(dd.deferredMonths || []), prevMk], remainingMonths: Math.max(0, (dd.remainingMonths || 0) - 1) };
+          return dd;
+        });
+      }
+
       // Yeni ay bütçesini tanımla
       const newMonths = { ...d.months };
       if (!newMonths[newMk]) newMonths[newMk] = DM();
-      newMonths[newMk] = { ...newMonths[newMk], budget };
-      return { ...d, savings: newSavings, months: newMonths, lastClosedMonth: prevMk };
+      newMonths[newMk] = { ...newMonths[newMk], budget, carriedItems: [...(newMonths[newMk].carriedItems || []), ...carried] };
+      return { ...d, debts: newDebts, savings: newSavings, months: newMonths, lastClosedMonth: prevMk };
     });
     onClose();
   };
@@ -8813,6 +8886,57 @@ function MonthCloseRitual({ data, setData, prevMk, onClose }) {
             </Card>
           );
         })()}
+
+        {(bankVerified || prev.remaining <= 0) && hasCarry && (
+          <Card s={{ marginBottom: 12 }}>
+            <div style={{ color: X.t, fontSize: 13, fontWeight: 800, marginBottom: 4 }}>🔁 Devir Yönetimi</div>
+            <div style={{ color: X.tm, fontSize: 11, lineHeight: 1.5, marginBottom: 12 }}>Kapanan kasa yeni kasayı etkilemez; sadece bilinçli taşıdığın kalemler geçer. Her kalem için karar ver.</div>
+
+            {deficitAmt > 0 && (
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 11, fontWeight: 800, color: X.t, marginBottom: 6 }}>📉 Bu ayki açık</div>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                  <span style={{ fontSize: 12, color: X.tm }}>{ml(prevMk)} ayı açığı</span>
+                  <span style={{ fontSize: 14, fontWeight: 800, color: X.r, fontFamily: fm }}>{C(deficitAmt)}</span>
+                </div>
+                {OptBtn("deficit", "accept", "savings", "Birikimden kapat", "TL havuzdan düşülür", X.r)}
+                {OptBtn("deficit", "accept", "accept", "Kabul et (kayıt)", "Banka karşıladı, hareket yok", X.g)}
+              </div>
+            )}
+
+            {unpaidFixedItems.length > 0 && (
+              <div style={{ marginBottom: 8 }}>
+                <div style={{ fontSize: 11, fontWeight: 800, color: X.t, margin: "4px 0 6px" }}>🏠 Sabit giderler</div>
+                {unpaidFixedItems.map(e => (
+                  <div key={e.id} style={{ marginBottom: 10 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: X.t }}>{e.name}</span>
+                      <span style={{ fontSize: 13, fontWeight: 800, color: X.t, fontFamily: fm }}>{C(e.amount)}</span>
+                    </div>
+                    {OptBtn(`fixed-${e.id}`, "carry", "carry", "Sonraki aya taşı", `${ml(newMk)}'a "${ml(prevMk)}'tan" etiketiyle eklenir`, X.b)}
+                    {OptBtn(`fixed-${e.id}`, "carry", "cancel", "İptal / atla", "Bu ödeme yapılmayacak", X.r)}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {unpaidDebtItems.length > 0 && (
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 800, color: X.t, margin: "4px 0 6px" }}>💳 Borçlar</div>
+                {unpaidDebtItems.map(dd => (
+                  <div key={dd.id} style={{ marginBottom: 10 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: X.t }}>{dd.name}</span>
+                      <span style={{ fontSize: 13, fontWeight: 800, color: X.t, fontFamily: fm }}>{C(debtTLClose(dd))}</span>
+                    </div>
+                    {OptBtn(`debt-${dd.id}`, "defer", "defer", "Sonraki aya ertele", "Borç takvimi 1 ay uzar", X.b)}
+                    {OptBtn(`debt-${dd.id}`, "defer", "cancel", "İptal / atla", "Bu taksit sayılmaz", X.r)}
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+        )}
 
         {(bankVerified || prev.remaining <= 0) && (
           <>
