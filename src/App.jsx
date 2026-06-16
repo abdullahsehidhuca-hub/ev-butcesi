@@ -348,6 +348,16 @@ function getAssetBalance(data, asset) {
   return { qty: Math.max(0, qty), totalCost: Math.max(0, cost), txs };
 }
 
+// Sabit gider "ödendi" durumu: CC ödemeli (banka kartı hariç) ise aktarım bayrağından, değilse fixedPaid'ten
+function fixedExpPaid(data, md, e, isEkstre) {
+  const cards = data.settings?.cards || [];
+  const debitIds = new Set(cards.filter(c => c.type === "debit").map(c => c.id));
+  if (e.paymentMethod === "cc" && !debitIds.has(e.cardId || cards[0]?.id)) {
+    return !!md?.ccTransferred?.[`${isEkstre ? "prev-" : ""}fixed-${e.id}`]?.transferred;
+  }
+  return !!md?.fixedPaid?.[e.id];
+}
+
 function getAssetTLValue(data, asset) {
   const { qty } = getAssetBalance(data, asset);
   if (asset === "TRY") return qty;
@@ -3132,7 +3142,7 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
   const fixedCCDebitIds = new Set((data.settings.cards || []).filter(c2 => c2.type === "debit").map(c2 => c2.id));
   const fixedExpIsCCTransfer = exp => exp.paymentMethod === "cc" && !fixedCCDebitIds.has(exp.cardId || (data.settings.cards || [])[0]?.id);
   const fixedExpKey = exp => `${isEkstreMode ? "prev-" : ""}fixed-${exp.id}`;
-  const fixedIsPaid = exp => fixedExpIsCCTransfer(exp) ? !!md.ccTransferred?.[fixedExpKey(exp)]?.transferred : !!md.fixedPaid?.[exp.id];
+  const fixedIsPaid = exp => fixedExpPaid(data, md, exp, isEkstreMode);
 
   // Eski otomatik işaretleme verilerini temizle (bir kerelik migrasyon)
   useEffect(() => {
@@ -4959,7 +4969,7 @@ HARCAMA PROFİLİ VERİLERİ:
 
             // Ödeme takvimi (sabit gider ödeme günleri)
             const paymentCalendar = data.settings.fixedExpenses.map(e => {
-              const paid = md2.fixedPaid?.[e.id];
+              const paid = fixedExpPaid(data, md2, e, data.settings.ccPaymentMode === "ekstre");
               return `  ${e.paymentDay || "?"}. gün: ${e.name} ${C(e.amount)} (${e.paymentMethod === "cc" ? "KK" : "hesap"})${e.autoPayment ? " [otomatik]" : ""}${paid ? " ✓ ödendi" : " ⏳ bekliyor"}`;
             }).sort().join("\n");
 
@@ -8721,7 +8731,9 @@ function MonthCloseRitual({ data, setData, prevMk, onClose }) {
   };
   const unpaidFixedItems = (data.settings.fixedExpenses || []).filter(e => e.paymentMethod === "account" && !prevMdClose.fixedPaid?.[e.id]);
   const unpaidDebtItems = (data.debts || []).filter(dd => !(dd.deferredMonths || []).includes(prevMk) && ((dd.remainingMonths + (dd.deferredMonths || []).length - mAheadClose) > 0) && !prevMdClose.debtPayments?.[dd.id]?.paid);
-  const hasCarry = deficitAmt > 0 || unpaidFixedItems.length > 0 || unpaidDebtItems.length > 0;
+  const unpaidBillItems = (prevMdClose.billEntries || []).filter(b => !b.paid && (b.paymentMethod || "account") === "account");
+  const unpaidCarriedItems = (prevMdClose.carriedItems || []).filter(ci => !prevMdClose.carriedPaid?.[ci.id]);
+  const hasCarry = deficitAmt > 0 || unpaidFixedItems.length > 0 || unpaidDebtItems.length > 0 || unpaidBillItems.length > 0 || unpaidCarriedItems.length > 0;
   const [decisions, setDecisions] = useState({});
   const decOf = (key, def) => decisions[key] ?? def;
   const setDec = (key, val) => setDecisions(s => ({ ...s, [key]: val }));
@@ -8789,6 +8801,15 @@ function MonthCloseRitual({ data, setData, prevMk, onClose }) {
       // Sabit giderler → sonraki aya taşı (carriedItems) | iptal (hiçbir şey)
       const carried = [];
       unpaidFixedItems.forEach(e => { if (decOf(`fixed-${e.id}`, "carry") === "carry") carried.push({ id: uid(), name: e.name, amount: e.amount, sourceMonth: prevMk, kind: "fixed" }); });
+      // Faturalar → taşı (carriedItem + orijinali ödendi işaretle, çift görünmesin) | iptal (sadece ödendi işaretle)
+      const billResolveIds = new Set();
+      unpaidBillItems.forEach(b => {
+        const dec = decOf(`bill-${b.id}`, "carry");
+        if (dec === "carry") { carried.push({ id: uid(), name: b.name || "Fatura", amount: b.amount, sourceMonth: prevMk, kind: "bill" }); billResolveIds.add(b.id); }
+        else if (dec === "cancel") billResolveIds.add(b.id);
+      });
+      // Önceki aydan taşınan ödenmemiş kalemler → yeniden taşı | iptal (bırak)
+      unpaidCarriedItems.forEach(ci => { if (decOf(`carry-${ci.id}`, "carry") === "carry") carried.push({ id: uid(), name: ci.name, amount: ci.amount, sourceMonth: ci.sourceMonth, kind: ci.kind }); });
       // Borçlar → ertele (deferredMonths, takvim uzar) | iptal (deferredMonths + remainingMonths−1, uzamaz)
       let newDebts = d.debts;
       const deferIds = new Set(unpaidDebtItems.filter(dd => decOf(`debt-${dd.id}`, "defer") === "defer").map(dd => dd.id));
@@ -8803,6 +8824,11 @@ function MonthCloseRitual({ data, setData, prevMk, onClose }) {
 
       // Yeni ay bütçesini tanımla
       const newMonths = { ...d.months };
+      // Taşınan/iptal edilen faturaları kapanan ayda "ödendi" yap (sarkan fatura görünümü çift olmasın)
+      if (billResolveIds.size) {
+        const pm = d.months[prevMk] || DM();
+        newMonths[prevMk] = { ...pm, billEntries: (pm.billEntries || []).map(b => billResolveIds.has(b.id) ? { ...b, paid: true } : b) };
+      }
       if (!newMonths[newMk]) newMonths[newMk] = DM();
       newMonths[newMk] = { ...newMonths[newMk], budget, carriedItems: [...(newMonths[newMk].carriedItems || []), ...carried] };
       return { ...d, debts: newDebts, savings: newSavings, months: newMonths, lastClosedMonth: prevMk };
@@ -8939,6 +8965,38 @@ function MonthCloseRitual({ data, setData, prevMk, onClose }) {
                     </div>
                     {OptBtn(`debt-${dd.id}`, "defer", "defer", "Sonraki aya ertele", "Borç takvimi 1 ay uzar", X.b)}
                     {OptBtn(`debt-${dd.id}`, "defer", "cancel", "İptal / atla", "Bu taksit sayılmaz", X.r)}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {unpaidBillItems.length > 0 && (
+              <div style={{ marginBottom: 8 }}>
+                <div style={{ fontSize: 11, fontWeight: 800, color: X.t, margin: "4px 0 6px" }}>🧾 Faturalar</div>
+                {unpaidBillItems.map(b => (
+                  <div key={b.id} style={{ marginBottom: 10 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: X.t }}>{b.name || "Fatura"}</span>
+                      <span style={{ fontSize: 13, fontWeight: 800, color: X.t, fontFamily: fm }}>{C(b.amount)}</span>
+                    </div>
+                    {OptBtn(`bill-${b.id}`, "carry", "carry", "Sonraki aya taşı", `${ml(newMk)}'a taşınır`, X.b)}
+                    {OptBtn(`bill-${b.id}`, "carry", "cancel", "İptal / atla", "Bu fatura kapatılır", X.r)}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {unpaidCarriedItems.length > 0 && (
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 800, color: X.t, margin: "4px 0 6px" }}>🔁 Önceki aydan taşınanlar (hâlâ ödenmemiş)</div>
+                {unpaidCarriedItems.map(ci => (
+                  <div key={ci.id} style={{ marginBottom: 10 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: X.t }}>{ci.name} <span style={{ color: X.td, fontWeight: 500 }}>({ml(ci.sourceMonth)}'tan)</span></span>
+                      <span style={{ fontSize: 13, fontWeight: 800, color: X.t, fontFamily: fm }}>{C(ci.amount)}</span>
+                    </div>
+                    {OptBtn(`carry-${ci.id}`, "carry", "carry", "Yine sonraki aya taşı", `${ml(newMk)}'a tekrar taşınır`, X.b)}
+                    {OptBtn(`carry-${ci.id}`, "carry", "cancel", "İptal / bırak", "Artık taşınmaz", X.r)}
                   </div>
                 ))}
               </div>
