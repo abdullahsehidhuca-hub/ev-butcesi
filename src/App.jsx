@@ -3128,6 +3128,11 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
   const handleFixedUnpay = expId => { const fp = { ...md.fixedPaid }; delete fp[expId]; setMonthField(mk, "fixedPaid", fp); };
   const handleCarriedPay = ciId => { setMonthField(mk, "carriedPaid", { ...(md.carriedPaid || {}), [ciId]: { paid: true, date: td() } }); };
   const handleCarriedUnpay = ciId => { const cp = { ...(md.carriedPaid || {}) }; delete cp[ciId]; setMonthField(mk, "carriedPaid", cp); };
+  // CC ödemeli sabit giderler: "ödendi" durumu aktarım bayrağıyla tek kaynaktan senkron
+  const fixedCCDebitIds = new Set((data.settings.cards || []).filter(c2 => c2.type === "debit").map(c2 => c2.id));
+  const fixedExpIsCCTransfer = exp => exp.paymentMethod === "cc" && !fixedCCDebitIds.has(exp.cardId || (data.settings.cards || [])[0]?.id);
+  const fixedExpKey = exp => `${isEkstreMode ? "prev-" : ""}fixed-${exp.id}`;
+  const fixedIsPaid = exp => fixedExpIsCCTransfer(exp) ? !!md.ccTransferred?.[fixedExpKey(exp)]?.transferred : !!md.fixedPaid?.[exp.id];
 
   // Eski otomatik işaretleme verilerini temizle (bir kerelik migrasyon)
   useEffect(() => {
@@ -3415,7 +3420,7 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
       {/* 4 SEKME KUTUSU + SLIDE-UP PANEL */}
       {(() => {
         const totalFixed = data.settings.fixedExpenses.length;
-        const paidFixed = data.settings.fixedExpenses.filter(e => md.fixedPaid?.[e.id]).length;
+        const paidFixed = data.settings.fixedExpenses.filter(e => fixedIsPaid(e)).length;
         const pendingCC = ccTransferItems.filter(i => !md.ccTransferred?.[i.key]?.transferred).length;
         const ves = data.settings.variableExpenses || [];
         const { categories: cats } = ves.length > 0 ? categorizeMonthSpending(data, mk) : { categories: {} };
@@ -3456,8 +3461,11 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
               </div>
               {data.settings.fixedExpenses.length === 0 && <div style={{ color: X.td, fontSize: 12 }}>Ayarlar'dan sabit gider ekleyin.</div>}
               {data.settings.fixedExpenses.map(exp => {
-                const paid = md.fixedPaid?.[exp.id];
-                return <ItemRow key={exp.id} label={exp.name} sub={`${exp.paymentMethod === "cc" ? "💳" : "🏦"}${exp.autoPayment ? " ⚡oto" : ""}${exp.increaseDate ? " • Artış: " + exp.increaseDate : ""}`} value={exp.amount} color={paid ? X.g : X.t} toggle={!!paid} toggleOn={() => handleFixedPay(exp.id)} toggleOff={() => handleFixedUnpay(exp.id)} toggleLabelOn="Ödendi" toggleLabelOff="Öde" />;
+                const isCCT = fixedExpIsCCTransfer(exp);
+                const paid = fixedIsPaid(exp);
+                const onPay = isCCT ? () => handleCCTransfer(fixedExpKey(exp)) : () => handleFixedPay(exp.id);
+                const onUnpay = isCCT ? () => undoCCTransfer(fixedExpKey(exp)) : () => handleFixedUnpay(exp.id);
+                return <ItemRow key={exp.id} label={exp.name} sub={`${exp.paymentMethod === "cc" ? "💳" : "🏦"}${isCCT ? " • aktarımla senkron" : ""}${exp.autoPayment ? " ⚡oto" : ""}${exp.increaseDate ? " • Artış: " + exp.increaseDate : ""}`} value={exp.amount} color={paid ? X.g : X.t} toggle={!!paid} toggleOn={onPay} toggleOff={onUnpay} toggleLabelOn="Ödendi" toggleLabelOff="Öde" />;
               })}
               {(md.carriedItems || []).length > 0 && (
                 <div style={{ marginTop: 14 }}>
