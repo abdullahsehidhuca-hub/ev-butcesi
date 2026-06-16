@@ -1285,7 +1285,7 @@ function debtTLValue(debt, data, m) {
   return 0;
 }
 
-function DebtPayModal({ debts, debtPayments, data, mk, onClose, onPay, onUndo }) {
+function DebtPayModal({ debts, debtPayments, data, mk, onClose, onPay, onUndo, onDefer, onUndoDefer }) {
   const active = debts.filter(d => d.remainingMonths > 0 || debtPayments?.[d.id]);
   return (
     <Modal title="📌 Borç Ödemesi" onClose={onClose}>
@@ -1298,20 +1298,30 @@ function DebtPayModal({ debts, debtPayments, data, mk, onClose, onPay, onUndo })
       )}
       {active.map(debt => {
         const paid = debtPayments?.[debt.id];
+        const deferred = (debt.deferredMonths || []).includes(mk);
         const sym = debtCurSymbol(debt.currency);
         const tlVal = debtTLValue(debt, data, mk);
         return (
-          <Card key={debt.id} s={{ marginBottom: 8, opacity: paid ? .6 : 1 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <Card key={debt.id} s={{ marginBottom: 8, opacity: paid || deferred ? .6 : 1 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ color: X.t, fontWeight: 700 }}>{debt.name}</div>
+                <div style={{ color: X.t, fontWeight: 700 }}>{debt.name}{deferred && <span style={{ color: X.w, fontSize: 11, fontWeight: 700 }}> · bu ay ertelendi</span>}</div>
                 <div style={{ color: X.tm, fontSize: 12 }}>
                   <span style={{ fontFamily: fm }}>{debt.monthlyPayment} {sym}</span>
                   {debt.currency !== "TRY" && <span style={{ color: X.td }}> ({C(tlVal)})</span>}
                   <span> aylık · {debt.remainingMonths} taksit kaldı</span>
                 </div>
               </div>
-              {paid ? <button onClick={() => onUndo(debt.id)} style={{ background: "none", border: `1px solid ${X.td}`, borderRadius: 8, padding: "6px 12px", color: X.td, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>↩ Geri Al</button> : <Btn onClick={() => onPay(debt.id)} s={{ width: "auto", padding: "8px 16px", fontSize: 13 }}>Ödedim</Btn>}
+              {paid ? (
+                <button onClick={() => onUndo(debt.id)} style={{ background: "none", border: `1px solid ${X.td}`, borderRadius: 8, padding: "6px 12px", color: X.td, fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>↩ Geri Al</button>
+              ) : deferred ? (
+                <button onClick={() => onUndoDefer(debt.id)} style={{ background: "none", border: `1px solid ${X.w}`, borderRadius: 8, padding: "6px 12px", color: X.w, fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>↩ Geri al</button>
+              ) : (
+                <div style={{ display: "flex", gap: 6, flex: "none" }}>
+                  <button onClick={() => onDefer(debt.id)} style={{ background: "none", border: `1px solid ${X.w}`, borderRadius: 8, padding: "6px 10px", color: X.w, fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>Ertele</button>
+                  <Btn onClick={() => onPay(debt.id)} s={{ width: "auto", padding: "8px 14px", fontSize: 13 }}>Ödedim</Btn>
+                </div>
+              )}
             </div>
           </Card>
         );
@@ -3176,6 +3186,8 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
   };
   const handleDebtPay = debtId => { setMonthField(mk, "debtPayments", { ...md.debtPayments, [debtId]: { paid: true, date: td() } }); setData(d => ({ ...d, debts: d.debts.map(db => db.id === debtId ? { ...db, remainingMonths: Math.max(0, db.remainingMonths - 1) } : db) })); flash("✓"); };
   const undoDebtPay = debtId => { const dp = { ...md.debtPayments }; delete dp[debtId]; setMonthField(mk, "debtPayments", dp); setData(d => ({ ...d, debts: d.debts.map(db => db.id === debtId ? { ...db, remainingMonths: db.remainingMonths + 1 } : db) })); };
+  const handleDebtDefer = debtId => { setData(d => ({ ...d, debts: d.debts.map(db => db.id === debtId ? { ...db, deferredMonths: [...(db.deferredMonths || []), mk] } : db) })); flash("Bu ay ertelendi"); };
+  const undoDebtDefer = debtId => { setData(d => ({ ...d, debts: d.debts.map(db => db.id === debtId ? { ...db, deferredMonths: (db.deferredMonths || []).filter(m2 => m2 !== mk) } : db) })); };
   const handleInstSave = plan => { setData(d => ({ ...d, installmentPlans: [...d.installmentPlans, plan] })); flash("✓ Taksit kaydedildi"); };
   const handleEventTaksit = (eventId, totalAmount) => {
     setData(d => ({
@@ -3750,7 +3762,7 @@ function Dashboard({ data, mk, gmd, setMonthField, setData }) {
       {modal === "accountPay" && <AccountPayModal variableExpenses={data.settings.variableExpenses || []} entries={md.accountEntries || []} transferred={md.accountTransferred || {}} onClose={() => setModal(null)} onSave={handleAccountPay} onDelete={deleteAccountEntry} onEdit={editAccountEntry} onTransfer={handleAccountTransfer} onUndoTransfer={undoAccountTransfer} />}
       {modal === "simulate" && <CCCombinedModal data={data} mk={mk} cards={data.settings.cards || []} variableExpenses={data.settings.variableExpenses || []} ccSingleEntries={md.ccSingle || []} onClose={() => setModal(null)} onSaveSingle={handleCCSingle} onDeleteSingle={deleteCCSingle} onEditSingle={editCCSingle} onSaveInstall={handleInstSave} onDeletePlan={deleteInstallment} onEditPlan={editInstallment} onEventTaksit={handleEventTaksit} />}
       {modal === "cardLoad" && <CardLoadModal currentLoaded={md.cardLoaded || 0} maxTotal={c.generalCardBudget} entries={md.cardEntries || []} debitEntries={md.debitCardEntries || []} debitLimit={(data.settings.cards || []).filter(c2 => c2.type === "debit").reduce((s, c2) => s + (c2.monthlyLimit || 0), 0)} onClose={() => setModal(null)} onSave={handleCardLoad} onDelete={deleteCardEntry} onEdit={editCardEntry} onSaveDebit={entry => setMonthField(mk, "debitCardEntries", [...(md.debitCardEntries || []), entry])} onDeleteDebit={id => setMonthField(mk, "debitCardEntries", (md.debitCardEntries || []).filter(e => e.id !== id))} />}
-      {modal === "debtPay" && <DebtPayModal debts={data.debts} debtPayments={md.debtPayments} data={data} mk={mk} onClose={() => setModal(null)} onPay={handleDebtPay} onUndo={undoDebtPay} />}
+      {modal === "debtPay" && <DebtPayModal debts={data.debts} debtPayments={md.debtPayments} data={data} mk={mk} onClose={() => setModal(null)} onPay={handleDebtPay} onUndo={undoDebtPay} onDefer={handleDebtDefer} onUndoDefer={undoDebtDefer} />}
       {modal === "budget" && <BudgetModal mk={mk} incomeEntries={md.incomeEntries || []} defaultBudget={data.settings.monthlyBudget} onSave={entries => { setMonthField(mk, "incomeEntries", entries); setMonthField(mk, "budget", entries.reduce((s, e) => s + (e.amount || 0), 0)); }} onClose={() => setModal(null)} />}
       {modal === "receipt" && <ReceiptModal receipts={md.receipts || []} onClose={() => setModal(null)} onSave={handleReceiptSave} onDelete={handleReceiptDelete} />}
       {info && info === "cardLoad" && (
