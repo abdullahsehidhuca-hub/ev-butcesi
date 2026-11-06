@@ -43,6 +43,8 @@ Durum işaretleri: [x] tamam · [~] kısmen · [ ] bekliyor
 - [x] Hesap bakiyesi ve banka mutabakatı: uygulama = banka, kuruşu kuruşuna; fark varsa
       son tutan mutabakattan beri hareketler listelenir; görünür "bakiye düzeltme" — 2026-11-06
 - [x] Para birimi kuralı: işlem hesabın para biriminde; dövizli borç TL hesaptan gerçek TL ile — 2026-11-06
+- [x] Denetim düzeltmeleri — 2026-11-06: karttaki taksit kart bakiyesine yansır ve ay kapatmada
+      devredilmez; ayrı girilen maaş çift sayılmaz; Türkçe karakterli etiketleme (`src/core/labels.js`)
 - [ ] Birikim / döviz / altın varlıkları ve hedefler
 - [ ] Kayıt kayıt senkron katmanı (Firebase; tüm veriyi tek parça ezmeden)
 - [ ] Eski veriden yeni modele dönüştürücü + 3 aylık gerçek veriyle karşılaştırma testi
@@ -71,3 +73,4 @@ yerel bir kabukla paketlenmesi gerekir.
 - 2026-11-06 · Faz 0: AI token doğrulaması (kısmen), çevrimdışı/yankı yazma düzeltmesi (`src/App.jsx`).
 - 2026-11-06 · Öncelik: temel işlevler. Taksit, taksit yükü, bakiye mutabakatı (`src/core/installments.js`,
   `src/core/accounts.js`, `tests/balance.test.js`). Toplam 25 test geçiyor.
+- 2026-11-06 · Temel hesap ve etiketleme denetimi: 4 hata düzeltildi (`tests/audit.test.js`). Toplam 32 test geçiyor.

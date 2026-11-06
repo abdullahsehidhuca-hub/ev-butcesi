@@ -71,10 +71,10 @@ test("banka bakiyesi: yalnız gerçekleşen hareketler, kuruşu kuruşuna", () =
   s = quickAdd(s, { type: "transfer", amount: 500_00, accountId: "bank", toAccountId: "card", date: "2026-10-25" }, ctx()).state;
 
   // 10.000 + 60.000 − 20.000 − 1.234,56 − 500 = 48.265,44 ; ödenmemiş dolar borcu bakiyeyi etkilemez
-  assert.equal(balanceOf(s, "bank"), 48265_44);
+  assert.equal(balanceOf(s, "bank", "2026-10-31"), 48265_44);
   assert.equal(balanceOf(s, "bank", "2026-10-16"), 50000_00);
   assert.equal(balanceOf(s, "bank", "2026-10-14"), 10000_00, "açılıştan önceki hareket yok");
-  assert.equal(balanceOf(s, "card"), 0, "karttaki 500 harcama 500 ödemeyle kapandı");
+  assert.equal(balanceOf(s, "card", "2026-10-31"), 0, "karttaki 500 harcama 500 ödemeyle kapandı");
 
   const ok = reconcile(s, "bank", "2026-10-31", 48265_44);
   assert.equal(ok.matched, true);
@@ -102,7 +102,7 @@ test("para birimi kuralları: dövizli borç TL hesaptan gerçek TL tutarıyla �
   s = payObligation(s, "borc", "2026-10", { amount: 4012_50, date: "2026-10-20" }, ctx()).state;
   const borc = computePeriod(s, "2026-10", { rates: RATES }).obligations.items.find(i => i.obligationId === "borc");
   assert.equal(borc.cost, 4012_50, "gerçek maliyet hesaptan çıkan TL");
-  assert.equal(balanceOf(s, "bank"), 10000_00 - 4012_50);
+  assert.equal(balanceOf(s, "bank", "2026-10-31"), 10000_00 - 4012_50);
   assert.throws(() => quickAdd(s, { amount: 10_00, accountId: "bank", currency: "USD", categoryId: "market" }, ctx()), ValidationError);
   assert.throws(() => quickAdd(s, { type: "transfer", amount: 10_00, accountId: "bank", toAccountId: "usd" }, ctx()), ValidationError);
 });

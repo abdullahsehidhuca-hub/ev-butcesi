@@ -27,13 +27,15 @@ export function emptyState() {
     categories: {},
     transactions: {},
     obligations: {},
-    closedPeriods: {}
+    closedPeriods: {},
+    merchantLabels: {}
   };
 }
 
 // account: { id, name, type, currency, cutoffDay? (kredi kartı hesap kesim günü),
 //   opening?: { date, balance } (bu tarihin BAŞINDAKİ bakiye, kuruş; kartta borç eksi yazılır) }
-// category: { id, name, icon?, budget? (aylık, kuruş), archived? }
+// category: { id, name, icon?, budget? (aylık, kuruş), keywords? (etiketleme), archived? }
+// merchantLabels: { satıcı anahtarı: categoryId } — kullanıcı düzeltmelerinden öğrenilir
 // transaction: { id, type, date, amount, currency, accountId, toAccountId?, categoryId?,
 //   note?, obligationId?, period? (yükümlülüğün hangi dönemine ait olduğu),
 //   createdAt, createdBy }

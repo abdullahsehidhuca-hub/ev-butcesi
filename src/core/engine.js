@@ -37,17 +37,25 @@ function liveSummary(state, period, rates) {
   for (const t of txs) {
     if (t.obligationId) paidBy[t.obligationId] = (paidBy[t.obligationId] || 0) + base(t.amount, t.currency);
   }
+  // Kredi kartına bağlı gider kalemleri (taksit, abonelik) karttan kendiliğinden çekilir:
+  // "ödendi" işareti beklenmez, açık sayılmaz ve ay kapatmada devredilmez (çift sayım olurdu).
+  // Kartın kendisi bankadan ödenir; o ödeme cards bölümünde izlenir.
   const items = occurrencesIn(state, period).map(oc => {
     const planned = base(oc.amount, oc.currency);
     const paid = paidBy[oc.obligationId] || 0;
-    const settled = paid > 0;
-    return { ...oc, planned, paid, settled, cost: settled ? paid : planned, open: settled ? 0 : planned };
+    const auto = oc.kind !== "income" && state.accounts[oc.accountId]?.type === "credit";
+    const settled = paid > 0 || auto;
+    return { ...oc, planned, paid, auto, settled, cost: paid > 0 ? paid : planned, open: settled ? 0 : planned };
   });
   const incomeItems = items.filter(i => i.kind === "income");
   const outItems = items.filter(i => i.kind !== "income");
 
-  const received = sum(txs.filter(t => t.type === "income").map(t => base(t.amount, t.currency)));
-  const expectedOpen = sum(incomeItems.map(i => i.open));
+  // Maaş gibi beklenen gelir "alındı" işaretlenmeden ayrı bir gelir olarak girilmişse çift sayılmaz:
+  // bağsız gelir önce bekleyen gelir kalemlerini karşılar, fazlası ek gelirdir.
+  const incomeTxs = txs.filter(t => t.type === "income");
+  const received = sum(incomeTxs.map(t => base(t.amount, t.currency)));
+  const unlinkedIncome = sum(incomeTxs.filter(t => !t.obligationId && !t.adjustment).map(t => base(t.amount, t.currency)));
+  const expectedOpen = Math.max(0, sum(incomeItems.map(i => i.open)) - unlinkedIncome);
   const incomeTotal = received + expectedOpen;
 
   // Serbest harcamalar (yükümlülüğe bağlı olmayan giderler), kategori bazında.

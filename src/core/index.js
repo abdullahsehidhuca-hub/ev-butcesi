@@ -8,3 +8,4 @@ export * from "./engine.js";
 export * from "./quickEntry.js";
 export * from "./accounts.js";
 export * from "./installments.js";
+export * from "./labels.js";

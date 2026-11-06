@@ -89,7 +89,8 @@ test("ödendi işareti gerçek tutarı kullanır; gelir alındı çift sayılmaz
   assert.equal(r.income.received, 60000_00);
   assert.equal(r.income.expectedOpen, 0);
   assert.equal(r.income.total, 60000_00);
-  assert.equal(r.obligations.open, 1500_00 + 4000_00);
+  assert.equal(r.obligations.open, 4000_00, "karttaki taksit otomatik çekilir; açık kalan yalnız dolar borcu");
+  assert.equal(r.obligations.items.find(i => i.obligationId === "tel").auto, true);
 });
 
 test("eksik kur sessizce sıfır sayılmaz, raporlanır", () => {
