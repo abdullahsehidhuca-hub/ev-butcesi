@@ -2,9 +2,16 @@
 // Model, versiyon, thinking ayarları tek yerden yönetilir.
 // Değişiklik gerektiğinde sadece bu dosyayı güncelle.
 
+import { initializeApp, getApps } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
+
 const MODEL = "claude-sonnet-4-6";
 const API_VERSION = "2023-06-01";
 const API_URL = "https://api.anthropic.com/v1/messages";
+
+// Token doğrulaması yalnızca proje kimliği ister (Google'ın açık anahtarlarıyla imza denetlenir);
+// servis hesabı gerekmez. Proje kimliği gizli değildir.
+const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || "ev-butcesi-96167";
 
 /**
  * Anthropic API'ye mesaj gönderir ve text yanıtı döndürür.
@@ -59,25 +66,48 @@ export function parseJSON(text) {
 }
 
 /**
- * Firebase token varlık kontrolü (basit format kontrolü)
+ * Authorization başlığındaki Bearer token'ı alır
  * @param {object} req - HTTP request
  * @returns {string|null} Token veya null
  */
 export function getToken(req) {
-  const token = (req.headers.authorization || "").replace("Bearer ", "");
+  const header = req.headers.authorization || "";
+  const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
   return token || null;
 }
 
+function adminAuth() {
+  const app = getApps()[0] || initializeApp({ projectId: FIREBASE_PROJECT_ID });
+  return getAuth(app);
+}
+
 /**
- * Token'dan Firebase UID çıkarır
- * @param {string} token - Firebase ID token
- * @returns {string} UID
+ * Firebase ID token'ını imza, süre ve proje açısından doğrular.
+ * @param {object} req - HTTP request
+ * @returns {Promise<string|null>} Doğrulanmış kullanıcı UID'si veya null
  */
-export function getUid(token) {
+export async function verifyUser(req) {
+  const token = getToken(req);
+  if (!token) return null;
   try {
-    const payload = JSON.parse(Buffer.from(token.split(".")[1], "base64").toString());
-    return payload.user_id || payload.sub || "unknown";
+    const decoded = await adminAuth().verifyIdToken(token);
+    return decoded.uid || null;
   } catch {
-    return "unknown";
+    return null;
   }
+}
+
+/**
+ * base64 veri ve medya türü doğrulaması (boyut sınırı dahil)
+ * @param {object} body - req.body
+ * @param {string[]} allowedTypes - izin verilen medya türleri
+ * @param {number} maxBytes - çözülmüş verinin azami boyutu
+ * @returns {string|null} Hata mesajı veya null
+ */
+export function checkFile(body, allowedTypes, maxBytes) {
+  const { base64, mediaType } = body || {};
+  if (typeof base64 !== "string" || !base64 || typeof mediaType !== "string") return "Dosya verisi eksik";
+  if (!allowedTypes.includes(mediaType)) return "Desteklenmeyen dosya türü";
+  if (Math.floor(base64.length * 3 / 4) > maxBytes) return "Dosya çok büyük";
+  return null;
 }

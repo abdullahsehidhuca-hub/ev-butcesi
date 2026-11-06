@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Ev Bütçesi v2 arayüz taslağı: ana ekran, hızlı ekleme ve ay kapatma.">
+<title>Ev Bütçesi v2 — Arayüz Taslağı</title>
+<style>
+  :root {
+    --bg: #F5F0EB; --card: #FFFFFF; --ink: #1F2937; --muted: #57534E; --line: #E7E0D8;
+    --brand: #0F766E; --brand-soft: #E6F2F1; --warn: #B45309; --warn-soft: #FDF3E7;
+    --bad: #B91C1C; --bad-soft: #FDECEC; --focus: #1D4ED8;
+    font-family: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #171412; --card: #24201D; --ink: #F5F0EB; --muted: #C7BFB7; --line: #3A342F;
+      --brand: #2DD4BF; --brand-soft: #123532; --warn: #F59E0B; --warn-soft: #3A2A12; --bad: #F87171; --bad-soft: #3B1A1A; --focus: #93C5FD; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-size: 16px; line-height: 1.45; }
+  button { font: inherit; color: inherit; }
+  :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  .wrap { max-width: 480px; margin: 0 auto; padding: 12px 16px 104px; }
+  .demo { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 16px; max-width: 480px; margin: 0 auto; border-bottom: 1px dashed var(--line); }
+  .demo p { width: 100%; margin: 0; font-size: 14px; color: var(--muted); }
+  .chip, .btn, .seg button, .tab, .key { min-height: 44px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); cursor: pointer; }
+  .chip { padding: 0 14px; }
+  .chip[aria-pressed="true"] { background: var(--brand); border-color: var(--brand); color: #fff; }
+  h1 { font-size: 20px; margin: 8px 0 2px; }
+  h2 { font-size: 17px; margin: 0 0 10px; }
+  .sub { color: var(--muted); font-size: 15px; margin: 0; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 16px; margin-top: 14px; }
+  .hero .label { font-size: 15px; color: var(--muted); }
+  .hero .amount { font-size: 40px; font-weight: 700; letter-spacing: -0.5px; margin: 2px 0 6px; font-variant-numeric: tabular-nums; }
+  .hero .detail { font-size: 15px; color: var(--muted); }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+  .row:first-of-type { border-top: 0; }
+  .row .name { font-weight: 600; }
+  .row .meta { font-size: 14px; color: var(--muted); }
+  .money { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; font-size: 17px; }
+  .btn { padding: 0 16px; font-weight: 600; }
+  .btn.primary { background: var(--brand); border-color: var(--brand); color: #fff; width: 100%; min-height: 52px; font-size: 17px; }
+  .btn.small { min-height: 44px; padding: 0 14px; }
+  .bar { height: 10px; border-radius: 6px; background: var(--line); overflow: hidden; margin: 8px 0 4px; }
+  .bar > span { display: block; height: 100%; background: var(--warn); }
+  .warn { background: var(--warn-soft); border-color: transparent; }
+  .bad { background: var(--bad-soft); border-color: transparent; }
+  .tabs { position: fixed; left: 0; right: 0; bottom: 0; background: var(--card); border-top: 1px solid var(--line);
+    padding: 6px 8px calc(6px + env(safe-area-inset-bottom)); }
+  .tabs nav { max-width: 480px; margin: 0 auto; display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; align-items: center; }
+  .tab { border: 0; background: transparent; font-size: 13px; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 52px; }
+  .tab[aria-current="page"] { color: var(--brand); font-weight: 700; }
+  .tab .ic { font-size: 20px; line-height: 1; }
+  .fab { justify-self: center; width: 56px; height: 56px; border-radius: 50%; border: 0; background: var(--brand); color: #fff; font-size: 30px; cursor: pointer; }
+  .amount-input { font-size: 44px; font-weight: 700; text-align: center; padding: 8px 0; font-variant-numeric: tabular-nums; }
+  .keys { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }
+  .key { font-size: 22px; min-height: 56px; }
+  .cats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .cats .chip { min-height: 64px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 14px; }
+  .cats .chip .ic { font-size: 22px; }
+  .line-edit { display: flex; gap: 8px; margin: 12px 0; }
+  .line-edit .chip { flex: 1; text-align: left; }
+  .seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 8px; }
+  .seg button[aria-pressed="true"] { background: var(--ink); color: var(--card); border-color: var(--ink); }
+  .skel { background: linear-gradient(90deg, var(--line), var(--card), var(--line)); background-size: 200% 100%; animation: sk 1.2s infinite; border-radius: 8px; }
+  @keyframes sk { to { background-position: -200% 0; } }
+  @media (prefers-reduced-motion: reduce) { .skel { animation: none; } }
+  .note { font-size: 14px; color: var(--muted); margin: 8px 0 0; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+</style>
+</head>
+<body>
+
+<div class="demo" role="group" aria-label="Taslak seçici">
+  <p>Taslak seçici (uygulamada görünmez). Rakamlar örnektir.</p>
+  <button class="chip" data-screen="home" aria-pressed="true">Ana ekran</button>
+  <button class="chip" data-screen="add" aria-pressed="false">+ Ekle</button>
+  <button class="chip" data-screen="close" aria-pressed="false">Ay kapatma</button>
+  <button class="chip" data-screen="loading" aria-pressed="false">Yükleniyor</button>
+  <button class="chip" data-screen="empty" aria-pressed="false">İlk açılış</button>
+  <button class="chip" data-screen="offline" aria-pressed="false">Bağlantı yok</button>
+</div>
+
+<main class="wrap">
+
+  <!-- ANA EKRAN -->
+  <section id="home" aria-labelledby="home-h">
+    <h1 id="home-h">Kasım dönemi</h1>
+    <p class="sub">15 Kasım – 14 Aralık · 18 gün kaldı</p>
+
+    <div class="card hero">
+      <div class="label">Güvenle harcanabilir</div>
+      <div class="amount">14.550 ₺</div>
+      <div class="detail">Ay sonu beklenen kalan 17.250 ₺ · bütçelere ayrılan 2.700 ₺</div>
+    </div>
+
+    <div class="card warn">
+      <h2>Ekim dönemi kapanmadı</h2>
+      <p class="sub">2 ödeme açık kaldı. Kapatınca Ekim'in rakamları sabitlenir.</p>
+      <p><button class="btn small" data-screen="close">Ekim'i kapat</button></p>
+    </div>
+
+    <div class="card">
+      <h2>Yaklaşan ödemeler</h2>
+      <div class="row">
+        <div><div class="name">Kira</div><div class="meta">5 Aralık · Banka</div></div>
+        <div class="money">20.000 ₺</div>
+        <button class="btn small" aria-label="Kira ödendi olarak işaretle">Ödendi</button>
+      </div>
+      <div class="row">
+        <div><div class="name">Kart ödemesi</div><div class="meta">10 Aralık · Ekim harcamaları + 2 taksit</div></div>
+        <div class="money">8.740 ₺</div>
+        <button class="btn small" aria-label="Kart ödemesini yap">Öde</button>
+      </div>
+      <div class="row">
+        <div><div class="name">Elektrik</div><div class="meta">12 Aralık · tutar faturaya göre</div></div>
+        <div class="money">≈ 850 ₺</div>
+        <button class="btn small" aria-label="Elektrik ödendi olarak işaretle">Ödendi</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Bütçeler</h2>
+      <div class="row" style="display:block">
+        <div style="display:flex;justify-content:space-between"><span class="name">Market</span><span class="money">4.200 / 5.000 ₺</span></div>
+        <div class="bar" role="img" aria-label="Market bütçesinin yüzde 84'ü kullanıldı"><span style="width:84%"></span></div>
+        <div class="meta">800 ₺ kaldı · günlük 44 ₺</div>
+      </div>
+      <div class="row" style="display:block">
+        <div style="display:flex;justify-content:space-between"><span class="name">Yakıt</span><span class="money">1.100 / 3.000 ₺</span></div>
+        <div class="bar" role="img" aria-label="Yakıt bütçesinin yüzde 37'si kullanıldı"><span style="width:37%;background:var(--brand)"></span></div>
+        <div class="meta">1.900 ₺ kaldı</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- + EKLE -->
+  <section id="add" hidden aria-labelledby="add-h">
+    <h1 id="add-h">Harcama ekle</h1>
+    <p class="sub">Tutarı yaz, kategoriye dokun — kaydedilir.</p>
+    <div class="card">
+      <div id="amt" class="amount-input" role="status" aria-label="Girilen tutar" aria-live="polite">345 ₺</div>
+      <div class="keys" aria-label="Rakam tuşları">
+        <button class="key">1</button><button class="key">2</button><button class="key">3</button>
+        <button class="key">4</button><button class="key">5</button><button class="key">6</button>
+        <button class="key">7</button><button class="key">8</button><button class="key">9</button>
+        <button class="key">,</button><button class="key">0</button><button class="key" aria-label="Sil">⌫</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Sık kullanılanlar</h2>
+      <div class="cats">
+        <button class="chip" aria-pressed="true"><span class="ic" aria-hidden="true">🛒</span>Market</button>
+        <button class="chip" aria-pressed="false"><span class="ic" aria-hidden="true">⛽</span>Yakıt</button>
+        <button class="chip" aria-pressed="false"><span class="ic" aria-hidden="true">🍽️</span>Dışarıda yemek</button>
+        <button class="chip" aria-pressed="false"><span class="ic" aria-hidden="true">💊</span>Sağlık</button>
+        <button class="chip" aria-pressed="false"><span class="ic" aria-hidden="true">👕</span>Giyim</button>
+        <button class="chip" aria-pressed="false"><span class="ic" aria-hidden="true">⋯</span>Tümü</button>
+      </div>
+      <div class="line-edit">
+        <button class="chip" aria-label="Hesap: Kredi kartı, değiştir">💳 Kredi kartı</button>
+        <button class="chip" aria-label="Tarih: bugün, değiştir">📅 Bugün</button>
+      </div>
+      <p class="note">Hesap, bu kategoride en son kullandığınızdan geldi. Taksit, iade ya da gelir için: <button class="btn small">Diğer türler</button></p>
+    </div>
+    <p style="margin-top:14px"><button class="btn primary">Kaydet</button></p>
+  </section>
+
+  <!-- AY KAPATMA -->
+  <section id="close" hidden aria-labelledby="close-h">
+    <h1 id="close-h">Ekim dönemini kapat</h1>
+    <p class="sub">15 Ekim – 14 Kasım</p>
+    <div class="card">
+      <div class="row"><span>Gelir</span><span class="money">60.000 ₺</span></div>
+      <div class="row"><span>Ödemeler</span><span class="money">31.640 ₺</span></div>
+      <div class="row"><span>Harcamalar</span><span class="money">19.210 ₺</span></div>
+      <div class="row"><strong>Ay sonu kalan</strong><strong class="money">9.150 ₺</strong></div>
+    </div>
+    <div class="card">
+      <h2>Açık kalan ödemeler</h2>
+      <p class="sub">Her biri için karar verin. Varsayılan: sonraki aya taşı.</p>
+      <fieldset style="border:0;padding:0;margin:14px 0 0">
+        <legend class="name">Su faturası · 420 ₺</legend>
+        <div class="seg"><button aria-pressed="true">Taşı</button><button aria-pressed="false">Ertele</button><button aria-pressed="false">Vazgeç</button></div>
+      </fieldset>
+      <fieldset style="border:0;padding:0;margin:16px 0 0">
+        <legend class="name">Dolar borcu · 100 $ (4.012 ₺)</legend>
+        <div class="seg"><button aria-pressed="false">Taşı</button><button aria-pressed="true">Ertele</button><button aria-pressed="false">Vazgeç</button></div>
+        <p class="note">Ertele: taksit takvimi bir ay uzar, toplam borç değişmez.</p>
+      </fieldset>
+      <p class="note">Karttan otomatik çekilen 2 taksit (1.500 ₺) ödenmiş sayıldı; karar gerekmez.</p>
+    </div>
+    <div class="card">
+      <h2>Banka kontrolü (isteğe bağlı)</h2>
+      <p class="sub">Uygulamadaki bakiye: <span class="money">48.265,44 ₺</span></p>
+      <p><button class="btn small">Bankadaki tutarı gir</button></p>
+    </div>
+    <p style="margin-top:14px"><button class="btn primary">Ekim'i kapat</button></p>
+    <p class="note">Kapatınca Ekim'e kayıt eklenemez ve rakamları değişmez.</p>
+  </section>
+
+  <!-- YÜKLENİYOR -->
+  <section id="loading" hidden aria-busy="true" aria-label="Yükleniyor">
+    <div class="skel" style="height:24px;width:50%;margin-top:8px"></div>
+    <div class="skel" style="height:16px;width:70%;margin-top:8px"></div>
+    <div class="card"><div class="skel" style="height:16px;width:40%"></div><div class="skel" style="height:44px;width:60%;margin-top:10px"></div></div>
+    <div class="card"><div class="skel" style="height:120px"></div></div>
+    <p class="note">Kutular gerçek içerikle aynı boyutta; yüklenince düzen kaymaz.</p>
+  </section>
+
+  <!-- İLK AÇILIŞ -->
+  <section id="empty" hidden aria-labelledby="empty-h">
+    <h1 id="empty-h">Hoş geldiniz</h1>
+    <p class="sub">3 adımda başlayın; sonra her şey kendiliğinden hesaplanır.</p>
+    <div class="card"><div class="row"><span class="name">1. Banka hesabı ve bugünkü bakiye</span><button class="btn small">Ekle</button></div>
+      <div class="row"><span class="name">2. Maaş ve maaş günü</span><button class="btn small">Ekle</button></div>
+      <div class="row"><span class="name">3. Kira, fatura gibi sabit ödemeler</span><button class="btn small">Ekle</button></div></div>
+    <p class="note">Kredi kartı ve taksitleri sonra da ekleyebilirsiniz.</p>
+  </section>
+
+  <!-- BAĞLANTI YOK -->
+  <section id="offline" hidden aria-labelledby="off-h">
+    <div class="card bad" role="status">
+      <h2 id="off-h">İnternet bağlantısı yok</h2>
+      <p class="sub">Girdiğiniz kayıtlar bu telefonda saklanıyor; bağlantı gelince eşitlenecek. Diğer aile üyesinin son değişiklikleri henüz görünmüyor olabilir.</p>
+      <p><button class="btn small">Tekrar dene</button></p>
+    </div>
+  </section>
+
+</main>
+
+<div class="tabs">
+  <nav aria-label="Ana menü">
+    <button class="tab" aria-current="page"><span class="ic" aria-hidden="true">🏠</span>Bugün</button>
+    <button class="tab"><span class="ic" aria-hidden="true">📋</span>Hareketler</button>
+    <button class="fab" data-screen="add" aria-label="Harcama ekle">+</button>
+    <button class="tab"><span class="ic" aria-hidden="true">📅</span>Plan</button>
+    <button class="tab"><span class="ic" aria-hidden="true">🏦</span>Hesaplar</button>
+  </nav>
+</div>
+
+<script>
+  // Yalnızca taslakta ekranlar arası geçiş; hiçbir veri kaydedilmez.
+  const screens = ["home", "add", "close", "loading", "empty", "offline"];
+  function show(id) {
+    screens.forEach(s => { document.getElementById(s).hidden = s !== id; });
+    document.querySelectorAll(".demo .chip").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.screen === id)));
+    window.scrollTo(0, 0);
+  }
+  document.querySelectorAll("[data-screen]").forEach(b => b.addEventListener("click", () => show(b.dataset.screen)));
+  // Kategori ve karar düğmeleri: grupta tek seçim
+  document.querySelectorAll(".cats, .seg").forEach(group => group.addEventListener("click", e => {
+    const btn = e.target.closest("button");
+    if (!btn) return;
+    group.querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b === btn)));
+  }));
+</script>
+</body>
+</html>

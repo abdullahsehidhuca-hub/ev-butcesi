@@ -10,3 +10,5 @@
 - 2026-05-31: [ekstre-kategori-simulasyon](./2026-05-31-ekstre-kategori-simulasyon.md) — Ekstre eşleştirme motoru, kategori tracked alanı, taksit simülasyonu geçmiş analiz, API ortak modül, form düzeltmeleri
 - 2026-07-01: [banka-bakiye-mutabakat](./2026-07-01-banka-bakiye-mutabakat.md) — Haziran app Bankadaki Tutar (14.721,50) vs reel banka (20.474,50) farkı: çift sayma değil; 2 eksik giriş + transit hesap (ekstra 102k yatırma, Abdullah'a 308k/119.586 lump) + açık ay
 - 2026-07-03: [app-satir-azaltma](./2026-07-03-app-satir-azaltma.md) — App.jsx ölü kod temizliği: 9.566 → 9.099 satır (−467); DebtSettings/guidance dahil kullanılmayan tanımlar silindi, build doğrulandı
+- 2026-11-06: [devir-durum-ve-yol-haritasi](./2026-11-06-devir-durum-ve-yol-haritasi.md) — İş #20 devir notu: yapılanlar, bulunulan aşama (Faz 1 büyük ölçüde tamam, Faz 2 UI/UX ajanıyla planlanacak), sıradaki adımlar
+- 2026-11-06: [durum-tespiti-yol-haritasi](./2026-11-06-durum-tespiti-yol-haritasi.md) — Uçtan uca durum tespiti: veri kaybı/eşzamanlı yazma, AI uç noktası token doğrulaması, geçmiş ayları bozan hesap mantığı, dağınık veri girişi; 4 fazlı yol haritası
