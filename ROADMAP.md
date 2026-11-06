@@ -5,6 +5,7 @@ maddenin durumu güncellenir ve hangi işte yapıldığı yazılır. Bir değiş
 plandan sapıyorsa önce burada gerekçesiyle güncellenir.
 
 İlk durum tespiti: `logs/2026-11-06-durum-tespiti-yol-haritasi.md`
+Ticari sürüm değerlendirmesi ve eksik listesi: `docs/URUN-DEGERLENDIRME.md`
 
 ## Hedef
 Mağazada (App Store / Google Play) satılabilecek, herkesin kullanabileceği bir aile
@@ -47,7 +48,10 @@ Durum işaretleri: [x] tamam · [~] kısmen · [ ] bekliyor
       devredilmez; ayrı girilen maaş çift sayılmaz; Türkçe karakterli etiketleme (`src/core/labels.js`)
 - [ ] Birikim / döviz / altın varlıkları ve hedefler
 - [ ] Kayıt kayıt senkron katmanı (Firebase; tüm veriyi tek parça ezmeden)
-- [ ] Eski veriden yeni modele dönüştürücü + 3 aylık gerçek veriyle karşılaştırma testi
+- [x] Bütünlük kuralları — 2026-11-06: kısmi ödeme, iade, kapalı döneme karşı korumalı
+      düzenleme/silme, kullanımdaki kaydı silmeme (arşiv/sonlandırma), maaş günü değişikliğinde
+      eski işlemlerin ay değiştirmemesi (`tests/integrity.test.js`)
+- İptal — eski veriden dönüştürücü: eski veriler aktarılmayacak (Abdullah, 2026-11-06)
 
 ## Faz 2 — Sade arayüz (önce mockup, onaydan sonra kod)
 - [ ] Tek "+ Ekle" akışı ve sık kullanılan kategori kısayolları
@@ -64,7 +68,7 @@ yerel bir kabukla paketlenmesi gerekir.
       Google girişinin yanında Apple ile Giriş
 - [ ] Çok aileli kullanım: aile başına veri izolasyonu, davet akışı güvenliği
 - [ ] AI özellikleri için maliyet modeli (kota / abonelik)
-- [ ] Mevcut kullanıcıların (Abdullah ve Kadriye) verisinin taşınması, bir ay paralel çalışma
+- İptal — mevcut verinin taşınması (Abdullah, 2026-11-06)
 
 ## İş günlüğü
 - 2026-11-06 · Durum tespiti ve yol haritası.
@@ -74,3 +78,5 @@ yerel bir kabukla paketlenmesi gerekir.
 - 2026-11-06 · Öncelik: temel işlevler. Taksit, taksit yükü, bakiye mutabakatı (`src/core/installments.js`,
   `src/core/accounts.js`, `tests/balance.test.js`). Toplam 25 test geçiyor.
 - 2026-11-06 · Temel hesap ve etiketleme denetimi: 4 hata düzeltildi (`tests/audit.test.js`). Toplam 32 test geçiyor.
+- 2026-11-06 · Ticari sürüm değerlendirmesi (`docs/URUN-DEGERLENDIRME.md`); 6 bütünlük eksiği giderildi.
+  Eski veri aktarımı iptal. Toplam 38 test geçiyor.
