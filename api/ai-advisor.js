@@ -1,6 +1,7 @@
-import { callAnthropic, getToken, getUid } from "./_anthropic.js";
+import { callAnthropic, verifyUser } from "./_anthropic.js";
 
 const DAILY_LIMIT = 3;
+const MAX_PROMPT_CHARS = 200000;
 const usageMap = {};
 
 const SYSTEM_PROMPT = `Sen deneyimli bir kişisel finans danışmanısın. Türk aile bütçesi yönetimi konusunda uzmansın.
@@ -25,6 +26,7 @@ ANALİZ DERİNLİĞİ:
 - Türkçe yaz, sade ve anlaşılır bir dille.
 - Emoji kullanabilirsin ama abartma.`;
 
+// Not: sayaç sunucu belleğinde; sunucu yeniden başlarsa sıfırlanır. Kalıcı sayaç ROADMAP Faz 0'da.
 function checkLimit(uid) {
   const today = new Date().toISOString().slice(0, 10);
   const key = `${uid}_${today}`;
@@ -44,10 +46,8 @@ function incrementUsage(uid) {
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  const token = getToken(req);
-  if (!token) return res.status(401).json({ error: "Giriş yapmanız gerekiyor" });
-
-  const uid = getUid(token);
+  const uid = await verifyUser(req);
+  if (!uid) return res.status(401).json({ error: "Giriş yapmanız gerekiyor" });
 
   const { allowed, remaining } = checkLimit(uid);
   if (!allowed) {
@@ -57,8 +57,9 @@ export default async function handler(req, res) {
     });
   }
 
-  const { prompt } = req.body;
-  if (!prompt) return res.status(400).json({ error: "Prompt eksik" });
+  const { prompt } = req.body || {};
+  if (typeof prompt !== "string" || !prompt.trim()) return res.status(400).json({ error: "Prompt eksik" });
+  if (prompt.length > MAX_PROMPT_CHARS) return res.status(400).json({ error: "Analiz verisi çok uzun" });
 
   try {
     const { text } = await callAnthropic({

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import * as Papa from "papaparse";
 import { initializeApp } from "firebase/app";
 import { getDatabase, ref, set, get, onValue } from "firebase/database";
@@ -139,30 +139,33 @@ async function getFamilyMembers(familyId) {
   return {};
 }
 
+// cloudOk: bulut okunabildi mi? Okunamadıysa yerel kopya buluta YAZILMAMALI (eski veri güncelini ezer).
 async function loadDB(familyId) {
   const lsKey = familyId ? `${STORAGE_KEY}_${familyId}` : STORAGE_KEY;
+  let cloudOk = false;
   try {
     if (familyId) {
       const snap = await get(ref(rtdb, `families/${familyId}/data`));
+      cloudOk = true;
       if (snap.exists()) {
         const data = snap.val();
         try { localStorage.setItem(lsKey, JSON.stringify(data)); } catch {}
-        return data;
+        return { data, cloudOk };
       }
     }
   } catch (e) { console.warn("Firebase okuma hatası:", e); }
-  try { const r = localStorage.getItem(lsKey); if (r) return JSON.parse(r); } catch {}
-  return null;
+  try { const r = localStorage.getItem(lsKey); if (r) return { data: JSON.parse(r), cloudOk }; } catch {}
+  return { data: null, cloudOk };
 }
 
-async function saveDB(d, familyId) {
+async function saveDB(d, familyId, { cloud = true } = {}) {
   const lsKey = familyId ? `${STORAGE_KEY}_${familyId}` : STORAGE_KEY;
   const clean = JSON.parse(JSON.stringify(d));
   if (clean.settings) delete clean.settings.claudeApiKey;
-  try { if (familyId) await set(ref(rtdb, `families/${familyId}/data`), clean); } catch (e) { console.warn("Firebase kayıt hatası:", e); }
+  try { if (familyId && cloud) await set(ref(rtdb, `families/${familyId}/data`), clean); } catch (e) { console.warn("Firebase kayıt hatası:", e); }
   try { localStorage.setItem(lsKey, JSON.stringify(d)); } catch {}
   // Günlük otomatik snapshot
-  if (familyId) {
+  if (familyId && cloud) {
     try {
       const today = new Date().toISOString().slice(0, 10);
       const snapKey = `_autoBackup_${familyId}`;
@@ -8869,18 +8872,24 @@ export default function App() {
     return () => { cancelled = true; };
   }, [user, pendingInvite, redirectProcessed]);
 
+  const cloudReadyRef = useRef(false);
+  const syncedRef = useRef(null);
   useEffect(() => {
     if (!user || !family?.familyId) { setLoaded(false); return; }
     let unsubValue = null;
-    loadDB(family.familyId).then(d => {
+    cloudReadyRef.current = false;
+    loadDB(family.familyId).then(({ data: d, cloudOk }) => {
+      cloudReadyRef.current = cloudOk;
       if (d) setData({ ...DD, ...d, settings: { ...DD.settings, ...(d.settings || {}) }, liveRates: d.liveRates || DD.liveRates, savings: { ...DD.savings, ...(d.savings || {}) }, lastClosedMonth: d.lastClosedMonth || null, lastBackup: d.lastBackup || null });
       setLoaded(true);
       unsubValue = onValue(ref(rtdb, `families/${family.familyId}/data`), snap => {
+        // Buluttan yanıt geldi: bağlantı var, bundan sonraki değişiklikler buluta yazılabilir.
+        cloudReadyRef.current = true;
         if (snap.exists()) {
           const r = snap.val();
           setData(prev => {
             if (JSON.stringify(r) !== JSON.stringify(prev)) {
-              return { ...DD, ...r, settings: { ...DD.settings, ...(r.settings || {}) }, liveRates: r.liveRates || DD.liveRates, savings: { ...DD.savings, ...(r.savings || {}) }, lastClosedMonth: r.lastClosedMonth || null, lastBackup: r.lastBackup || null };
+              return syncedRef.current = { ...DD, ...r, settings: { ...DD.settings, ...(r.settings || {}) }, liveRates: r.liveRates || DD.liveRates, savings: { ...DD.savings, ...(r.savings || {}) }, lastClosedMonth: r.lastClosedMonth || null, lastBackup: r.lastBackup || null };
             }
             return prev;
           });
@@ -8890,7 +8899,12 @@ export default function App() {
     return () => { if (unsubValue) unsubValue(); };
   }, [user, family]);
 
-  useEffect(() => { if (loaded && family?.familyId) saveDB(data, family.familyId); }, [data, loaded, family]);
+  // Buluttan gelen veri geri yazılmaz (yankı); bulut okunamadıysa yalnızca yerel kayıt yapılır.
+  useEffect(() => {
+    if (!loaded || !family?.familyId) return;
+    if (data === syncedRef.current) return;
+    saveDB(data, family.familyId, { cloud: cloudReadyRef.current });
+  }, [data, loaded, family]);
 
   // Aile kaydı yoksa: sessiz retry ile otomatik oluştur
   useEffect(() => {

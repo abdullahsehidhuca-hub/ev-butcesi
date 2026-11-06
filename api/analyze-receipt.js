@@ -1,13 +1,17 @@
-import { callAnthropic, parseJSON, getToken } from "./_anthropic.js";
+import { callAnthropic, parseJSON, verifyUser, checkFile } from "./_anthropic.js";
+
+const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+const MAX_BYTES = 4 * 1024 * 1024;
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  const token = getToken(req);
-  if (!token) return res.status(401).json({ error: "Giriş yapmanız gerekiyor" });
+  const uid = await verifyUser(req);
+  if (!uid) return res.status(401).json({ error: "Giriş yapmanız gerekiyor" });
 
+  const fileError = checkFile(req.body, IMAGE_TYPES, MAX_BYTES);
+  if (fileError) return res.status(400).json({ error: fileError });
   const { base64, mediaType } = req.body;
-  if (!base64 || !mediaType) return res.status(400).json({ error: "Görsel verisi eksik" });
 
   try {
     const { text } = await callAnthropic({
