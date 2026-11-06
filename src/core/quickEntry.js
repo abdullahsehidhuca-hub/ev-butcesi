@@ -75,13 +75,19 @@ export function payObligation(state, obligationId, period, input = {}, { id, now
   const oc = occurrence(o, period, payDayOf(state));
   if (!oc) throw new ValidationError([`${o.name} için ${period} döneminde ödeme yok`]);
   guardClosed(state, period, allowClosed);
+  const accountId = input.accountId || o.accountId;
+  const currency = state.accounts[accountId]?.currency || oc.currency;
+  // Dövizli kalem başka para birimli hesaptan ödeniyorsa hesaptan çıkan gerçek tutar gerekir.
+  if (currency !== oc.currency && input.amount == null) {
+    throw new ValidationError([`${o.name} ${oc.currency} cinsinden; hesaptan çıkan ${currency} tutarını girin`]);
+  }
   const t = {
     id,
     type: o.kind === "income" ? "income" : "expense",
     date: input.date || todayOf(now),
     amount: input.amount ?? oc.amount,
-    currency: oc.currency,
-    accountId: input.accountId || o.accountId,
+    currency,
+    accountId,
     categoryId: o.categoryId ?? null,
     note: input.note || "",
     obligationId,

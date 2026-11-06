@@ -54,7 +54,7 @@ function liveSummary(state, period, rates) {
   const byCategory = {};
   for (const t of txs) {
     if (t.type !== "expense" || t.obligationId) continue;
-    const k = t.categoryId || "_none";
+    const k = t.adjustment ? "_adjustment" : (t.categoryId || "_none");
     byCategory[k] = (byCategory[k] || 0) + base(t.amount, t.currency);
   }
   const spendingTotal = sum(Object.values(byCategory));

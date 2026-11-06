@@ -22,9 +22,11 @@ motoru yeniden yazılır.
 Durum işaretleri: [x] tamam · [~] kısmen · [ ] bekliyor
 
 ## Faz 0 — Mevcut uygulamada acil koruma
-- [ ] AI uç noktalarında (`api/`) Firebase token'ını sunucuda doğrulama, kalıcı kullanım limiti
+- [~] AI uç noktalarında (`api/`) Firebase token'ını sunucuda doğrulama — 2026-11-06.
+      Eksik: kalıcı kullanım sayacı; canlı ortamda gerçek girişle deneme.
+      Öncelik düşürüldü (Abdullah, 2026-11-06): önce temel işlevler.
 - [ ] Veritabanı kurallarını depoya alma ve gözden geçirme
-- [ ] Çevrimdışı açılışta eski verinin buluta yazılmasını ve yankı yazmayı durdurma
+- [x] Çevrimdışı açılışta eski verinin buluta yazılmasını ve yankı yazmayı durdurma — 2026-11-06
 
 ## Faz 1 — Yeni veri modeli ve hesap motoru (`src/core/`)
 - [x] Tek tip işlem kaydı (gider / gelir / aktarım), kuruş cinsinden tam sayı tutar — 2026-11-06
@@ -36,6 +38,11 @@ Durum işaretleri: [x] tamam · [~] kısmen · [ ] bekliyor
       Eksik: hesap kesim gününe göre ekstre ayrımı.
 - [x] Hızlı giriş: varsayılan hesap, sık kullanılanlar (widget kaynağı), tek dokunuş "ödendi" — 2026-11-06
 - [x] Otomatik testler: `npm test` — 2026-11-06
+- [x] Taksitli alışveriş: kuruş farkı ilk taksitte, toplam birebir; kalan taksit borcu — 2026-11-06
+- [x] Gelecek ayların taksit + borç yükü (hesap/kart bazında, biten taksitler) — 2026-11-06
+- [x] Hesap bakiyesi ve banka mutabakatı: uygulama = banka, kuruşu kuruşuna; fark varsa
+      son tutan mutabakattan beri hareketler listelenir; görünür "bakiye düzeltme" — 2026-11-06
+- [x] Para birimi kuralı: işlem hesabın para biriminde; dövizli borç TL hesaptan gerçek TL ile — 2026-11-06
 - [ ] Birikim / döviz / altın varlıkları ve hedefler
 - [ ] Kayıt kayıt senkron katmanı (Firebase; tüm veriyi tek parça ezmeden)
 - [ ] Eski veriden yeni modele dönüştürücü + 3 aylık gerçek veriyle karşılaştırma testi
@@ -61,3 +68,6 @@ yerel bir kabukla paketlenmesi gerekir.
 - 2026-11-06 · Durum tespiti ve yol haritası.
 - 2026-11-06 · Faz 1 çekirdeği: `src/core/` (model, takvim, motor, hızlı giriş) + `tests/core.test.js`.
   Arayüze henüz bağlanmadı; mevcut uygulama değişmedi.
+- 2026-11-06 · Faz 0: AI token doğrulaması (kısmen), çevrimdışı/yankı yazma düzeltmesi (`src/App.jsx`).
+- 2026-11-06 · Öncelik: temel işlevler. Taksit, taksit yükü, bakiye mutabakatı (`src/core/installments.js`,
+  `src/core/accounts.js`, `tests/balance.test.js`). Toplam 25 test geçiyor.

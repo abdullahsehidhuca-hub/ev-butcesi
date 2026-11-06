@@ -11,6 +11,7 @@ export function amountFor(o, period) {
 }
 
 // Dönemdeki ödeme; yoksa null. index 1'den başlar.
+// firstAmount: taksitte bölünmeden kalan kuruş farkı ilk taksite eklenir.
 export function occurrence(o, period, payDay = 1) {
   if (period < o.startPeriod) return null;
   if (o.endPeriod && period > o.endPeriod) return null;
@@ -26,7 +27,7 @@ export function occurrence(o, period, payDay = 1) {
     period,
     index,
     total: o.count ?? null,
-    amount: amountFor(o, period),
+    amount: index === 1 && o.firstAmount ? o.firstAmount : amountFor(o, period),
     currency: o.currency,
     accountId: o.accountId,
     categoryId: o.categoryId ?? null,

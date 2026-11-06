@@ -31,7 +31,8 @@ export function emptyState() {
   };
 }
 
-// account: { id, name, type, currency, cutoffDay? (kredi kartı hesap kesim günü) }
+// account: { id, name, type, currency, cutoffDay? (kredi kartı hesap kesim günü),
+//   opening?: { date, balance } (bu tarihin BAŞINDAKİ bakiye, kuruş; kartta borç eksi yazılır) }
 // category: { id, name, icon?, budget? (aylık, kuruş), archived? }
 // transaction: { id, type, date, amount, currency, accountId, toAccountId?, categoryId?,
 //   note?, obligationId?, period? (yükümlülüğün hangi dönemine ait olduğu),
@@ -50,9 +51,11 @@ export function validateTransaction(state, t) {
   err(e, isMinor(t.amount) && t.amount > 0, "tutar sıfırdan büyük tam sayı (kuruş) olmalı");
   err(e, CURRENCIES.includes(t.currency), "geçersiz para birimi");
   err(e, !!state.accounts[t.accountId], "hesap bulunamadı");
+  err(e, !state.accounts[t.accountId] || state.accounts[t.accountId].currency === t.currency, "işlem para birimi hesabın para birimiyle aynı olmalı");
   if (t.type === "transfer") {
     err(e, !!state.accounts[t.toAccountId], "hedef hesap bulunamadı");
     err(e, t.toAccountId !== t.accountId, "aynı hesaba aktarım yapılamaz");
+    err(e, state.accounts[t.toAccountId]?.currency === state.accounts[t.accountId]?.currency, "farklı para birimli hesaplar arası aktarım desteklenmiyor");
   }
   if (t.categoryId != null) err(e, !!state.categories[t.categoryId], "kategori bulunamadı");
   if (t.obligationId != null) {
@@ -76,6 +79,7 @@ export function validateObligation(state, o) {
   err(e, (o.skips || []).every(isPeriodKey), "erteleme dönemi geçersiz");
   err(e, (o.changes || []).every(c => isPeriodKey(c.fromPeriod) && isMinor(c.amount) && c.amount > 0), "tutar değişikliği geçersiz");
   if (o.endPeriod != null) err(e, isPeriodKey(o.endPeriod), "bitiş dönemi geçersiz");
+  if (o.firstAmount != null) err(e, isMinor(o.firstAmount) && o.firstAmount > 0, "ilk taksit tutarı geçersiz");
   return e;
 }
 
@@ -92,6 +96,25 @@ export function removeRecord(state, collection, id) {
   const next = { ...state[collection] };
   delete next[id];
   return { ...state, [collection]: next };
+}
+
+export function validateAccount(a) {
+  const e = [];
+  err(e, typeof a.id === "string" && a.id, "id eksik");
+  err(e, typeof a.name === "string" && a.name.trim(), "ad eksik");
+  err(e, ACCOUNT_TYPES.includes(a.type), "geçersiz hesap türü");
+  err(e, CURRENCIES.includes(a.currency), "geçersiz para birimi");
+  if (a.opening != null) {
+    err(e, isDate(a.opening.date), "açılış tarihi geçersiz");
+    err(e, isMinor(a.opening.balance), "açılış bakiyesi tam sayı (kuruş) olmalı");
+  }
+  return e;
+}
+
+export function addAccount(state, a) {
+  const e = validateAccount(a);
+  if (e.length) throw new ValidationError(e);
+  return putRecord(state, "accounts", a);
 }
 
 export function addTransaction(state, t) {
