@@ -6,6 +6,7 @@ plandan sapıyorsa önce burada gerekçesiyle güncellenir.
 
 İlk durum tespiti: `logs/2026-11-06-durum-tespiti-yol-haritasi.md`
 Ticari sürüm değerlendirmesi ve eksik listesi: `docs/URUN-DEGERLENDIRME.md`
+Son devir notu (yeni işlere referans): `logs/2026-11-06-devir-durum-ve-yol-haritasi.md`
 
 ## Hedef
 Mağazada (App Store / Google Play) satılabilecek, herkesin kullanabileceği bir aile
@@ -55,7 +56,8 @@ Durum işaretleri: [x] tamam · [~] kısmen · [ ] bekliyor
 
 ## Faz 2 — Sade arayüz (önce mockup, onaydan sonra kod)
 - [~] Taslak v1 — 2026-11-06: `mockups/v2-taslak.html` (ana ekran, + Ekle, ay kapatma,
-      yükleniyor / ilk açılış / bağlantı yok). Abdullah'ın onayı bekleniyor.
+      yükleniyor / ilk açılış / bağlantı yok). Arayüz UI/UX ajanıyla yeniden planlanacak
+      (Abdullah, 2026-11-06); taslak başlangıç noktasıdır.
 - [ ] Tek "+ Ekle" akışı ve sık kullanılan kategori kısayolları
 - [ ] Ana ekran 3 soru: Bu ay ne kadar kaldı? Yaklaşan ödemeler? Plana göre neredeyim?
 - [ ] Ay kapatma ekranı (devir kararları)
@@ -83,3 +85,4 @@ yerel bir kabukla paketlenmesi gerekir.
 - 2026-11-06 · Ticari sürüm değerlendirmesi (`docs/URUN-DEGERLENDIRME.md`); 6 bütünlük eksiği giderildi.
   Eski veri aktarımı iptal. Toplam 38 test geçiyor.
 - 2026-11-06 · Faz 2 taslak v1: `mockups/v2-taslak.html`. Uygulama koduna dokunulmadı; onay bekleniyor.
+- 2026-11-06 · İş #20 kapanış: devir notu yazıldı, `agent/20` dalı push edildi (main'e birleştirilmedi).
