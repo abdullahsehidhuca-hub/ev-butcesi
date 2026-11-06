@@ -54,6 +54,8 @@ Durum işaretleri: [x] tamam · [~] kısmen · [ ] bekliyor
 - İptal — eski veriden dönüştürücü: eski veriler aktarılmayacak (Abdullah, 2026-11-06)
 
 ## Faz 2 — Sade arayüz (önce mockup, onaydan sonra kod)
+- [~] Taslak v1 — 2026-11-06: `mockups/v2-taslak.html` (ana ekran, + Ekle, ay kapatma,
+      yükleniyor / ilk açılış / bağlantı yok). Abdullah'ın onayı bekleniyor.
 - [ ] Tek "+ Ekle" akışı ve sık kullanılan kategori kısayolları
 - [ ] Ana ekran 3 soru: Bu ay ne kadar kaldı? Yaklaşan ödemeler? Plana göre neredeyim?
 - [ ] Ay kapatma ekranı (devir kararları)
@@ -80,3 +82,4 @@ yerel bir kabukla paketlenmesi gerekir.
 - 2026-11-06 · Temel hesap ve etiketleme denetimi: 4 hata düzeltildi (`tests/audit.test.js`). Toplam 32 test geçiyor.
 - 2026-11-06 · Ticari sürüm değerlendirmesi (`docs/URUN-DEGERLENDIRME.md`); 6 bütünlük eksiği giderildi.
   Eski veri aktarımı iptal. Toplam 38 test geçiyor.
+- 2026-11-06 · Faz 2 taslak v1: `mockups/v2-taslak.html`. Uygulama koduna dokunulmadı; onay bekleniyor.
