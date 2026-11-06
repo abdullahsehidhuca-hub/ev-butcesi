@@ -79,3 +79,10 @@ Aynı harcama türü 7 farklı listeye dağılmış: `ccSingle`, `accountEntries
 
 ## Sonraki adım
 Faz 0 için onay; ardından Faz 1 veri modeli taslağının sade dille sunulması.
+
+## Ek — Faz 1 çekirdeği (aynı gün, düzeltme isteği)
+- Ne yapıldı: Veri modeli ve hesap motoru `src/core/` altında yeniden yazıldı; `tests/core.test.js` (10 test) ve `npm test` betiği eklendi. Mevcut arayüz (`src/App.jsx`) değişmedi, yeni çekirdeğe henüz bağlı değil.
+- Neden: Geçmiş ayların bugünkü ayardan/kurdan yeniden hesaplanması ve dağınık giriş listeleri kök nedendi; yeni modelde tek işlem tipi, takvim üreten yükümlülükler, ileriye dönük tutar değişikliği ve dondurulan dönem var.
+- Değerlendirilen alternatif: Mevcut `calcMonth` üzerinde yama — reddedildi; ay verisi ayarlardan türediği sürece geçmiş korunamaz.
+- Yorum: "Tüm veriler çok tuşlamalı" ifadesi "veri girişi çok fazla dokunuş istiyor" olarak anlaşıldı; hedef 2 adımlı giriş + sık kullanılanlar (widget kaynağı).
+- Sonraki adım: Yol haritası artık kök dizinde `ROADMAP.md`; sıradaki maddeler orada işaretli.

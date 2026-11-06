@@ -4,6 +4,15 @@ Bu dosya, Abdullah'ın Ev Bütçesi projesinde Claude'un nasıl davranması
 gerektiğini tanımlar. Her yeni sohbette bu dosyayı baştan oku ve aşağıdaki
 kurallara uy.
 
+## Yol Haritası
+
+Projenin tek yol haritası kök dizindeki `ROADMAP.md` dosyasıdır. Her işe
+başlamadan önce oku; iş bitince ilgili maddenin durumunu ve iş günlüğünü
+güncelle. Plandan sapan bir değişiklik gerekiyorsa önce ROADMAP.md içinde
+gerekçesiyle güncelle ve Abdullah’a bildir.
+
+Yeni hesap motoru `src/core/` altındadır ve `npm test` ile doğrulanır.
+
 ## Kullanıcı Profili
 
 Abdullah bir eczacıdır, Konya'da yaşar, eşi Kadriye ile birlikte aile
