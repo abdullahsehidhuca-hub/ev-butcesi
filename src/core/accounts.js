@@ -13,7 +13,7 @@ import { occurrence } from "./schedule.js";
 // İşlemin hesabın bakiyesine etkisi (+ giriş, − çıkış).
 export function effectOn(t, accountId) {
   if (t.type === "auto" && t.accountId === accountId) return -t.amount;
-  if (t.type === "income" && t.accountId === accountId) return t.amount;
+  if ((t.type === "income" || t.type === "refund") && t.accountId === accountId) return t.amount;
   if (t.type === "expense" && t.accountId === accountId) return -t.amount;
   if (t.type === "transfer") {
     if (t.accountId === accountId) return -t.amount;

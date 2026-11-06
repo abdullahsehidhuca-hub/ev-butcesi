@@ -3,7 +3,7 @@
 // geçmiş kullanımdan doldurulur. favorites() ana ekran kısayolları ve ileride
 // telefon widget'ı için aynı listeyi üretir.
 
-import { addTransaction, ValidationError } from "./model.js";
+import { addTransaction, stampPeriod, ValidationError } from "./model.js";
 import { isClosed } from "./engine.js";
 import { periodOf, today as todayOf } from "./period.js";
 import { occurrence } from "./schedule.js";
@@ -64,7 +64,8 @@ export function quickAdd(state, input, { id, now = new Date(), userId = null, al
   };
   if (t.type === "transfer") t.toAccountId = input.toAccountId;
   guardClosed(state, periodOf(date, payDayOf(state)), allowClosed);
-  return { state: addTransaction(state, t), transaction: t };
+  const stamped = stampPeriod(state, t);
+  return { state: addTransaction(state, stamped), transaction: stamped };
 }
 
 // Tek dokunuşla "ödendi" (gelir kaleminde "alındı"): planlanan tutarla bağlı işlem oluşturur.
@@ -92,6 +93,7 @@ export function payObligation(state, obligationId, period, input = {}, { id, now
     note: input.note || "",
     obligationId,
     period,
+    ...(input.partial ? { partial: true } : {}),
     createdAt: now.toISOString(),
     createdBy: userId
   };

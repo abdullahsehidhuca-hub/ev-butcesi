@@ -33,9 +33,13 @@ function liveSummary(state, period, rates) {
   const txs = inPeriod(period);
 
   // Yükümlülük ödemeleri: ödenen tutar gerçekleşen maliyettir (fatura tutarı plandan farklı olabilir).
+  // Kısmi ödeme (partial) kalemi kapatmaz; kalan tutar açık kalır.
   const paidBy = {};
+  const finalBy = new Set();
   for (const t of txs) {
-    if (t.obligationId) paidBy[t.obligationId] = (paidBy[t.obligationId] || 0) + base(t.amount, t.currency);
+    if (!t.obligationId) continue;
+    paidBy[t.obligationId] = (paidBy[t.obligationId] || 0) + base(t.amount, t.currency);
+    if (!t.partial) finalBy.add(t.obligationId);
   }
   // Kredi kartına bağlı gider kalemleri (taksit, abonelik) karttan kendiliğinden çekilir:
   // "ödendi" işareti beklenmez, açık sayılmaz ve ay kapatmada devredilmez (çift sayım olurdu).
@@ -44,8 +48,9 @@ function liveSummary(state, period, rates) {
     const planned = base(oc.amount, oc.currency);
     const paid = paidBy[oc.obligationId] || 0;
     const auto = oc.kind !== "income" && state.accounts[oc.accountId]?.type === "credit";
-    const settled = paid > 0 || auto;
-    return { ...oc, planned, paid, auto, settled, cost: paid > 0 ? paid : planned, open: settled ? 0 : planned };
+    const settled = auto || finalBy.has(oc.obligationId);
+    const open = settled ? 0 : Math.max(0, planned - paid);
+    return { ...oc, planned, paid, auto, settled, cost: settled && paid > 0 ? paid : Math.max(planned, paid), open };
   });
   const incomeItems = items.filter(i => i.kind === "income");
   const outItems = items.filter(i => i.kind !== "income");
@@ -58,12 +63,13 @@ function liveSummary(state, period, rates) {
   const expectedOpen = Math.max(0, sum(incomeItems.map(i => i.open)) - unlinkedIncome);
   const incomeTotal = received + expectedOpen;
 
-  // Serbest harcamalar (yükümlülüğe bağlı olmayan giderler), kategori bazında.
+  // Serbest harcamalar (yükümlülüğe bağlı olmayan giderler), kategori bazında; iadeler düşülür.
   const byCategory = {};
   for (const t of txs) {
-    if (t.type !== "expense" || t.obligationId) continue;
+    if ((t.type !== "expense" && t.type !== "refund") || t.obligationId) continue;
     const k = t.adjustment ? "_adjustment" : (t.categoryId || "_none");
-    byCategory[k] = (byCategory[k] || 0) + base(t.amount, t.currency);
+    const sign = t.type === "refund" ? -1 : 1;
+    byCategory[k] = (byCategory[k] || 0) + sign * base(t.amount, t.currency);
   }
   const spendingTotal = sum(Object.values(byCategory));
 
@@ -85,11 +91,12 @@ function liveSummary(state, period, rates) {
   const prevLinked = new Set(prevTxs.filter(t => t.obligationId).map(t => t.obligationId));
   const prevOccurrences = occurrencesIn(state, prev).filter(o => o.kind !== "income" && !prevLinked.has(o.obligationId));
   const cards = Object.values(state.accounts).filter(a => a.type === "credit").map(a => {
-    const charged = sum(prevTxs.filter(t => t.type === "expense" && t.accountId === a.id).map(t => base(t.amount, t.currency)));
+    const charged = sum(prevTxs.filter(t => t.type === "expense" && t.accountId === a.id).map(t => base(t.amount, t.currency)))
+      - sum(prevTxs.filter(t => t.type === "refund" && t.accountId === a.id).map(t => base(t.amount, t.currency)));
     const automatic = sum(prevOccurrences.filter(o => o.accountId === a.id).map(o => base(o.amount, o.currency)));
     const payments = sum(txs.filter(t => t.type === "transfer" && t.toAccountId === a.id).map(t => base(t.amount, t.currency)));
     const charges = charged + automatic;
-    return { accountId: a.id, name: a.name, charges, payments, due: Math.max(0, charges - payments) };
+    return { accountId: a.id, name: a.name, charges: Math.max(0, charges), payments, due: Math.max(0, charges - payments) };
   });
 
   return {

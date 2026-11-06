@@ -11,12 +11,13 @@
 //    (tüm veriyi tek parça ezmek yerine), iki kişi aynı anda güvenle çalışır.
 
 import { CURRENCIES, isMinor } from "./money.js";
-import { isDate, isPeriodKey } from "./period.js";
+import { isDate, isPeriodKey, periodOf } from "./period.js";
 
 export const SCHEMA_VERSION = 2;
 
 export const ACCOUNT_TYPES = ["bank", "cash", "credit", "debit"];
-export const TX_TYPES = ["expense", "income", "transfer"];
+// refund: iade — harcamanın kategorisinden düşer, para hesaba geri girer.
+export const TX_TYPES = ["expense", "income", "transfer", "refund"];
 export const OBLIGATION_KINDS = ["fixed", "installment", "debt", "income"];
 
 export function emptyState() {
@@ -82,6 +83,8 @@ export function validateObligation(state, o) {
   err(e, (o.changes || []).every(c => isPeriodKey(c.fromPeriod) && isMinor(c.amount) && c.amount > 0), "tutar değişikliği geçersiz");
   if (o.endPeriod != null) err(e, isPeriodKey(o.endPeriod), "bitiş dönemi geçersiz");
   if (o.firstAmount != null) err(e, isMinor(o.firstAmount) && o.firstAmount > 0, "ilk taksit tutarı geçersiz");
+  if (o.categoryId != null) err(e, !!state.categories[o.categoryId], "kategori bulunamadı");
+  if (o.dueDay != null) err(e, Number.isInteger(o.dueDay) && o.dueDay >= 1 && o.dueDay <= 31, "son ödeme günü 1-31 arası olmalı");
   return e;
 }
 
@@ -142,6 +145,86 @@ export function changeObligationAmount(state, id, fromPeriod, amount) {
   const e = validateObligation(state, rec);
   if (e.length) throw new ValidationError(e);
   return putRecord(state, "obligations", rec);
+}
+
+// ── Düzenleme ve silme ──────────────────────────────────────────────────────────
+// Tüm ekranlar aynı kayıtlardan hesaplandığı için bir düzenleme her ekrana kendiliğinden
+// yansır (ayrı kopya yok). Kapalı döneme dokunan düzenleme engellenir; kullanımdaki
+// kategori/hesap/yükümlülük silinemez (raporlarda sahipsiz kayıt kalmasın), arşivlenir.
+
+const payDayOf = state => state.settings?.payDay || 1;
+const periodOfTx = (state, t) => t.period || periodOf(t.date, payDayOf(state));
+
+function guardClosedTx(state, t, allowClosed) {
+  const p = periodOfTx(state, t);
+  if (!allowClosed && state.closedPeriods?.[p]) throw new ValidationError([`${p} dönemi kapalı; kayıt değiştirilemez`]);
+}
+
+// İşlemin dönemi oluşturulurken sabitlenir; maaş günü sonradan değişse de işlem ay değiştirmez.
+export function stampPeriod(state, t) {
+  return t.period ? t : { ...t, period: periodOf(t.date, payDayOf(state)) };
+}
+
+export function updateTransaction(state, id, changes, { allowClosed = false } = {}) {
+  const old = state.transactions[id];
+  if (!old) throw new ValidationError(["işlem bulunamadı"]);
+  guardClosedTx(state, old, allowClosed);
+  let next = { ...old, ...changes, id };
+  // Tarih değiştiyse (yükümlülük ödemesi değilse) dönem yeni tarihe göre yeniden belirlenir.
+  if (changes.date && !next.obligationId && !changes.period) next = { ...next, period: periodOf(next.date, payDayOf(state)) };
+  guardClosedTx(state, next, allowClosed);
+  const e = validateTransaction(state, next);
+  if (e.length) throw new ValidationError(e);
+  return putRecord(state, "transactions", next);
+}
+
+export function deleteTransaction(state, id, { allowClosed = false } = {}) {
+  const old = state.transactions[id];
+  if (!old) return state;
+  guardClosedTx(state, old, allowClosed);
+  return removeRecord(state, "transactions", id);
+}
+
+const txs = state => Object.values(state.transactions);
+
+export function archiveCategory(state, id, archived = true) {
+  const c = state.categories[id];
+  if (!c) throw new ValidationError(["kategori bulunamadı"]);
+  return putRecord(state, "categories", { ...c, archived });
+}
+
+export function deleteCategory(state, id) {
+  const used = txs(state).some(t => t.categoryId === id) || Object.values(state.obligations).some(o => o.categoryId === id);
+  if (used) throw new ValidationError(["kategori kullanımda; silmek yerine arşivleyin"]);
+  const labels = Object.fromEntries(Object.entries(state.merchantLabels || {}).filter(([, c]) => c !== id));
+  return { ...removeRecord(state, "categories", id), merchantLabels: labels };
+}
+
+export function deleteAccount(state, id) {
+  const used = txs(state).some(t => t.accountId === id || t.toAccountId === id) || Object.values(state.obligations).some(o => o.accountId === id);
+  if (used) throw new ValidationError(["hesapta kayıt var; silinemez"]);
+  return removeRecord(state, "accounts", id);
+}
+
+// Ödemesi girilmiş yükümlülük silinmez; sonlandırılır (geçmiş korunur).
+export function deleteObligation(state, id) {
+  if (txs(state).some(t => t.obligationId === id)) throw new ValidationError(["ödemesi girilmiş kalem silinemez; sonlandırın"]);
+  return removeRecord(state, "obligations", id);
+}
+
+// Süresiz ya da taksitli kalemi belirtilen dönemden SONRA bitirir (o dönem dahil son ödeme).
+export function endObligation(state, id, lastPeriod) {
+  const o = state.obligations[id];
+  if (!o) throw new ValidationError(["yükümlülük bulunamadı"]);
+  if (!isPeriodKey(lastPeriod)) throw new ValidationError(["bitiş dönemi geçersiz"]);
+  return putRecord(state, "obligations", { ...o, endPeriod: lastPeriod });
+}
+
+// Maaş günü değişikliği yalnız yeni işlemleri etkiler; eski işlemlerin dönemi damgalıdır.
+export function setPayDay(state, payDay) {
+  if (!Number.isInteger(payDay) || payDay < 1 || payDay > 31) throw new ValidationError(["maaş günü 1-31 arası olmalı"]);
+  const stamped = Object.fromEntries(Object.entries(state.transactions).map(([id, t]) => [id, stampPeriod(state, t)]));
+  return { ...state, transactions: stamped, settings: { ...state.settings, payDay } };
 }
 
 // Bir dönemi atla: taksit/borçta ödeme takvimi bir dönem uzar, toplam adet korunur.
