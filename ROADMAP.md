@@ -58,8 +58,11 @@ Durum işaretleri: [x] tamam · [~] kısmen · [ ] bekliyor
 - [~] Taslak v1 — 2026-11-06: `mockups/v2-taslak.html` (ana ekran, + Ekle, ay kapatma,
       yükleniyor / ilk açılış / bağlantı yok). Arayüz UI/UX ajanıyla yeniden planlanacak
       (Abdullah, 2026-11-06); taslak başlangıç noktasıdır.
-- [ ] Tek "+ Ekle" akışı ve sık kullanılan kategori kısayolları
-- [ ] Ana ekran 3 soru: Bu ay ne kadar kaldı? Yaklaşan ödemeler? Plana göre neredeyim?
+- [~] v3 arayüzü /v3 adresinde, `src/core`'a bağlı — 2026-11-07 (`src/v3/`). Veri bağlantısı çalışıyor;
+      **görsel tasarım Abdullah tarafından onaylanmadı** (2026-11-07): kutu içinde kutu, web/trend
+      araştırması yok, belirgin "yapay zekâ tasarımı" görünümü. Görsel yeniden yapılacak; `main`'e alınmaz.
+- [~] Tek "+ Ekle" akışı ve sık kullanılan kategori kısayolları — 2026-11-07 (hızlı harcama çekmecesi)
+- [~] Ana ekran 3 soru: Bu ay ne kadar kaldı? Yaklaşan ödemeler? Plana göre neredeyim?
 - [ ] Ay kapatma ekranı (devir kararları)
 - [ ] Erişilebilirlik: yazı ≥15 px, dokunma alanı ≥44 px, yakınlaştırma açık
 
@@ -86,3 +89,5 @@ yerel bir kabukla paketlenmesi gerekir.
   Eski veri aktarımı iptal. Toplam 38 test geçiyor.
 - 2026-11-06 · Faz 2 taslak v1: `mockups/v2-taslak.html`. Uygulama koduna dokunulmadı; onay bekleniyor.
 - 2026-11-06 · İş #20 kapanış: devir notu yazıldı, `agent/20` dalı push edildi (main'e birleştirilmedi).
+- 2026-11-07 · İş #23: v3 arayüzü /v3 adresinde (`src/v3/`), yeni motora bağlı; eski uygulama değişmedi.
+  `tests/v3.test.js` eklendi, toplam 43 test geçiyor. Ayrıntı: `logs/2026-11-07-v3-arayuz-ilk-surum.md`.

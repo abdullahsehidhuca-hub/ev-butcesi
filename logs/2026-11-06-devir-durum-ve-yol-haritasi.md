@@ -76,3 +76,9 @@ hesabı kullanmaya devam ediyor.
 - `CLAUDE.md` kuralları geçerli: önce planı konuş, görsel işlerde önce taslak.
 - Eski uygulamadaki bulguların (tek parça yazma, geçmişi bozan hesap) çoğu yalnız yeni motorda
   çözüldü; eski ekranlara taşınmadı.
+
+## Güncelleme — 2026-11-07 (iş #23, dal `agent/23`)
+- Sıradaki adımlardan 1. madde başladı: v3 arayüzü /v3 adresinde. Ayrıntı ve yeni sıra:
+  `logs/2026-11-07-v3-arayuz-ilk-surum.md`.
+- Düzeltme (Abdullah, 2026-11-07): v3 görsel tasarımı onaylanmadı. Görsel yeniden yapılacak
+  (web/trend araştırması, Adobe Firefly); veri bağlantısı korunuyor.

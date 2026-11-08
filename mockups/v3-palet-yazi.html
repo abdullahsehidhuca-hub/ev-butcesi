@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Ev Bütçesi v3: üç zarif renk paleti ve üç yazı tipi eşleşmesinin gerçek ekran içeriğiyle karşılaştırması.">
+<title>Ev Bütçesi v3 — Palet ve yazı tipi seçimi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Hanken+Grotesk:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&family=Schibsted+Grotesk:wght@400;500;600&family=Cormorant+Garamond:wght@500;600;700&family=Manrope:wght@400;500;600&display=swap">
+<style>
+  /* Taslak: renk ve yazı tipi seçimi içindir; düzen sonraki adımda. Kutu kullanılmaz,
+     bölümler boşluk ve ince çizgiyle ayrılır. Karşıtlık oranları (WCAG) her palette ölçüldü:
+     metin ≥ 5,6:1, vurgu ≥ 5,6:1, koyu modda ≥ 7,4:1. */
+  :root {
+    --display: "Fraunces", Georgia, serif; --text: "Hanken Grotesk", -apple-system, sans-serif;
+    --bg: #F6F3EE; --ink: #1C1B22; --muted: #5E5A63; --line: #E4DED5; --accent: #7A5C25; --on-accent: #FFFFFF;
+    --pos: #2F6B4F; --neg: #A23B3B; --focus: #2563EB;
+  }
+  /* 1 · Mürekkep ve pirinç: sıcak kâğıt zemin, koyu mürekkep, eski pirinç vurgu */
+  [data-palette="murekkep"] { --bg: #F6F3EE; --ink: #1C1B22; --muted: #5E5A63; --line: #E4DED5; --accent: #7A5C25; --pos: #2F6B4F; --neg: #A23B3B; }
+  [data-palette="murekkep"][data-mode="dark"] { --bg: #15141A; --ink: #EEEAE3; --muted: #A9A3AB; --line: #2C2A31; --accent: #D4B77A; --on-accent: #15141A; --pos: #7DC4A0; --neg: #F09A8E; }
+  /* 2 · Bordo ve taş: açık taş zemin, bordo vurgu; kayıp/aşım için ayrı kiremit tonu */
+  [data-palette="bordo"] { --bg: #F4F1EE; --ink: #211B1D; --muted: #625A5D; --line: #E2DCD7; --accent: #6E2A35; --pos: #36684A; --neg: #9E3B1F; }
+  [data-palette="bordo"][data-mode="dark"] { --bg: #171213; --ink: #F1EBE8; --muted: #B0A6A8; --line: #2E2628; --accent: #E3A3AC; --on-accent: #171213; --pos: #86C49C; --neg: #F2A385; }
+  /* 3 · Gece mavisi ve kum: kum zemin, derin lacivert vurgu */
+  [data-palette="gece"] { --bg: #F3F1EC; --ink: #141B2D; --muted: #586074; --line: #DFDBD2; --accent: #1F3A68; --pos: #2D6A55; --neg: #A33636; }
+  [data-palette="gece"][data-mode="dark"] { --bg: #0F1422; --ink: #ECEAE4; --muted: #A3A9B8; --line: #232A3B; --accent: #A9C1EC; --on-accent: #0F1422; --pos: #7FC6AC; --neg: #F29B9B; }
+
+  [data-type="fraunces"] { --display: "Fraunces", Georgia, serif; --text: "Hanken Grotesk", -apple-system, sans-serif; }
+  [data-type="newsreader"] { --display: "Newsreader", Georgia, serif; --text: "Schibsted Grotesk", -apple-system, sans-serif; }
+  [data-type="cormorant"] { --display: "Cormorant Garamond", Georgia, serif; --text: "Manrope", -apple-system, sans-serif; }
+
+  * { box-sizing: border-box; }
+  html { background: var(--bg); }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--text); font-size: 15px; line-height: 1.5; -webkit-font-smoothing: antialiased; transition: background .2s, color .2s; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { body { transition: none; } }
+
+  .picker { max-width: 430px; margin: 0 auto; padding: 16px 20px 8px; border-bottom: 1px solid var(--line); }
+  .picker p { margin: 0 0 8px; font-size: 13px; color: var(--muted); }
+  .group { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; padding: 0; border: 0; }
+  .group legend { font-size: 13px; font-weight: 600; margin-bottom: 6px; padding: 0; }
+  .opt { min-height: 44px; padding: 0 14px; border-radius: 22px; border: 1px solid var(--line); background: transparent; font-size: 14px; }
+  .opt[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+
+  .screen { max-width: 430px; margin: 0 auto; padding: 20px 24px 120px; }
+  .period { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 13px; color: var(--muted); letter-spacing: .02em; }
+  .period strong { color: var(--ink); font-weight: 600; }
+
+  .hero { padding: 36px 0 28px; }
+  .eyebrow { font-size: 13px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  .big { font-family: var(--display); font-weight: 500; font-size: 56px; line-height: 1; letter-spacing: -.02em; margin: 10px 0 14px; font-variant-numeric: lining-nums; }
+  .big small { font-size: 28px; color: var(--accent); margin-left: 4px; }
+  .ruler { display: grid; grid-template-columns: repeat(20, 1fr); gap: 3px; margin: 4px 0 10px; }
+  .ruler i { height: 14px; border-radius: 1px; background: var(--line); }
+  .ruler i.on { background: var(--accent); }
+  .lede { font-size: 15px; color: var(--muted); margin: 0; }
+  .lede b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; padding: 20px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .pair span { display: block; font-size: 13px; color: var(--muted); }
+  .pair b { font-family: var(--display); font-weight: 500; font-size: 26px; letter-spacing: -.01em; font-variant-numeric: lining-nums; }
+
+  h2 { font-family: var(--display); font-weight: 500; font-size: 24px; letter-spacing: -.01em; margin: 36px 0 6px; }
+  .row { display: flex; justify-content: space-between; align-items: center; gap: 16px; min-height: 60px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+  .row:last-child { border-bottom: 0; }
+  .row .t { font-size: 16px; font-weight: 500; }
+  .row .s { font-size: 13px; color: var(--muted); }
+  .row .v { text-align: right; font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .row .v .s { display: block; font-weight: 500; }
+  .due { color: var(--accent); font-weight: 600; }
+  .pos { color: var(--pos); }
+  .neg { color: var(--neg); }
+
+  .glyphs { margin: 36px 0 0; padding-top: 16px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+  .glyphs .d { font-family: var(--display); font-size: 28px; color: var(--ink); display: block; margin: 4px 0; }
+  .glyphs .x { font-size: 17px; color: var(--ink); display: block; }
+
+  .tabs { position: fixed; left: 0; right: 0; bottom: 0; background: var(--bg); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
+  .tabs nav { max-width: 430px; margin: 0 auto; display: grid; grid-template-columns: repeat(4, 1fr) 64px; align-items: center; padding: 0 12px; }
+  .tab { min-height: 56px; border: 0; background: none; font-size: 13px; color: var(--muted); letter-spacing: .02em; }
+  .tab[aria-current="page"] { color: var(--ink); font-weight: 600; text-decoration: underline; text-decoration-color: var(--accent); text-underline-offset: 6px; text-decoration-thickness: 2px; }
+  .add { width: 48px; height: 48px; justify-self: end; border-radius: 50%; border: 0; background: var(--accent); color: var(--on-accent); font-size: 26px; line-height: 1; }
+</style>
+</head>
+<body data-palette="murekkep" data-type="fraunces" data-mode="light">
+
+<div class="picker" role="group" aria-label="Taslak seçici">
+  <p>Taslak seçici (uygulamada görünmez). Rakamlar örnektir.</p>
+  <fieldset class="group" data-key="palette"><legend>Renk paleti</legend>
+    <button class="opt" data-value="murekkep" aria-pressed="true">1 · Mürekkep ve pirinç</button>
+    <button class="opt" data-value="bordo" aria-pressed="false">2 · Bordo ve taş</button>
+    <button class="opt" data-value="gece" aria-pressed="false">3 · Gece mavisi ve kum</button>
+  </fieldset>
+  <fieldset class="group" data-key="type"><legend>Yazı tipi eşleşmesi (başlık + metin)</legend>
+    <button class="opt" data-value="fraunces" aria-pressed="true">A · Fraunces + Hanken Grotesk</button>
+    <button class="opt" data-value="newsreader" aria-pressed="false">B · Newsreader + Schibsted Grotesk</button>
+    <button class="opt" data-value="cormorant" aria-pressed="false">C · Cormorant Garamond + Manrope</button>
+  </fieldset>
+  <fieldset class="group" data-key="mode"><legend>Görünüm</legend>
+    <button class="opt" data-value="light" aria-pressed="true">Açık</button>
+    <button class="opt" data-value="dark" aria-pressed="false">Koyu</button>
+  </fieldset>
+</div>
+
+<main class="screen">
+  <div class="period"><strong>15 Kasım – 14 Aralık</strong><span>Kasım dönemi · Bitişe 18 gün</span></div>
+
+  <section class="hero" aria-labelledby="h-hero">
+    <div class="eyebrow" id="h-hero">Güvenle harcanabilir</div>
+    <div class="big">14.550<small>₺</small></div>
+    <div class="ruler" role="img" aria-label="Gelirin yüzde 71'i kullanıldı">
+      <i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i>
+    </div>
+    <p class="lede">60.000 ₺ gelirin <b>42.750 ₺</b>'si kullanıldı · bütçelere ayrılan <b>2.700 ₺</b></p>
+  </section>
+
+  <div class="pair">
+    <div><span>Toplam giriş</span><b class="pos">+60.000 ₺</b></div>
+    <div><span>Planlanan ödemeler</span><b>25.000 ₺</b></div>
+  </div>
+
+  <h2>Yaklaşan ödemeler</h2>
+  <div class="row"><div><div class="t">Kira</div><div class="s">Maaş hesabı · 5 Aralık</div></div><div class="v">20.000 ₺<span class="s due">3 gün kaldı</span></div></div>
+  <div class="row"><div><div class="t">Bonus kart ödemesi</div><div class="s">Ekim harcamaları ve taksitler</div></div><div class="v">8.740 ₺<span class="s">Kart borcu</span></div></div>
+  <div class="row"><div><div class="t">Buzdolabı</div><div class="s">Bonus kart · Taksit 2/6</div></div><div class="v">5.000 ₺<span class="s">Otomatik</span></div></div>
+
+  <h2>Son harcamalar</h2>
+  <div class="row"><div><div class="t">Migros</div><div class="s">Market · Maaş hesabı</div></div><div class="v">-1.420 ₺<span class="s">Bugün</span></div></div>
+  <div class="row"><div><div class="t">Opet</div><div class="s">Yakıt · Bonus kart</div></div><div class="v">-1.150 ₺<span class="s">Dün</span></div></div>
+  <div class="row"><div><div class="t">Yakıt bütçesi</div><div class="s">3.300 / 3.000 ₺</div></div><div class="v neg">300 ₺ aşıldı<span class="s">Bütçe uyarısı</span></div></div>
+
+  <div class="glyphs">Türkçe karakter denetimi
+    <span class="d">Ğğ İı Şş Çç Öö Üü — Eylül, Şubat</span>
+    <span class="x">Güvenle harcanabilir: 48.265,44 ₺ · Ödendi · İade</span>
+  </div>
+</main>
+
+<div class="tabs">
+  <nav aria-label="Ana menü">
+    <button class="tab" aria-current="page">Güncel</button>
+    <button class="tab">Analiz</button>
+    <button class="tab">Planlama</button>
+    <button class="tab">Ayarlar</button>
+    <button class="add" aria-label="Hızlı harcama ekle">+</button>
+  </nav>
+</div>
+
+<script>
+  // Yalnızca taslakta seçim değiştirir; hiçbir veri kaydedilmez.
+  document.querySelectorAll(".group").forEach(group => group.addEventListener("click", e => {
+    const btn = e.target.closest("button");
+    if (!btn) return;
+    document.body.dataset[group.dataset.key] = btn.dataset.value;
+    group.querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b === btn)));
+  }));
+</script>
+</body>
+</html>

@@ -12,3 +12,4 @@
 - 2026-07-03: [app-satir-azaltma](./2026-07-03-app-satir-azaltma.md) — App.jsx ölü kod temizliği: 9.566 → 9.099 satır (−467); DebtSettings/guidance dahil kullanılmayan tanımlar silindi, build doğrulandı
 - 2026-11-06: [devir-durum-ve-yol-haritasi](./2026-11-06-devir-durum-ve-yol-haritasi.md) — İş #20 devir notu: yapılanlar, bulunulan aşama (Faz 1 büyük ölçüde tamam, Faz 2 UI/UX ajanıyla planlanacak), sıradaki adımlar
 - 2026-11-06: [durum-tespiti-yol-haritasi](./2026-11-06-durum-tespiti-yol-haritasi.md) — Uçtan uca durum tespiti: veri kaybı/eşzamanlı yazma, AI uç noktası token doğrulaması, geçmiş ayları bozan hesap mantığı, dağınık veri girişi; 4 fazlı yol haritası
+- 2026-11-07: [v3-arayuz-ilk-surum](./2026-11-07-v3-arayuz-ilk-surum.md) — Onaylı v3 taslağı /v3 adresinde yeni motora bağlandı; eski uygulama değişmedi, 43 test geçiyor
