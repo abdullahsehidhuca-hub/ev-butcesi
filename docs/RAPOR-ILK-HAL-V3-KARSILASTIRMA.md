@@ -281,3 +281,76 @@ Geride kalınan temel alanlar:
   - bankayla karşılaştırma (çekirdekteki `reconcile`, `recordReconciliation`, `adjustBalance`).
 - **`src/v3/selectors.js`:** `balanceView` eklendi.
 - **Testler:** 2 test eklendi; toplam 57/57 geçiyor. `npm run build` başarılı.
+
+---
+
+## 8. Devam turu (8 Kasım 2026, agent/35)
+
+Bölüm 6'daki P0 maddelerinden üçü kapandı:
+
+| P0 | Durum | v3'te nerede |
+|---|---|---|
+| 1. İşlem listesi, arama, düzenleme, silme | ✅ | Güncel → Son işlemler → satıra dokun (düzenle / sil) ya da "Tüm işlemler" (dönem süzgeci, arama, net toplam). Kapalı dönemin kaydı yalnız görüntülenir. `src/v3/screens/IslemlerSheet.jsx` |
+| 2. Ay kapatma ekranı | ✅ | Geçmiş dönem kapatılmadıysa Güncel'de bant çıkar. Çekmecede dönem özeti ve her açık ödeme için "taşı / ertele (taksit, borç) / yok say" kararı ile "Ödendi" kısayolu. Dönemler sırayla kapanır. `src/v3/screens/KapatSheet.jsx` |
+| 3. Bulut eşitleme + aile paylaşımı | 🟡 | Kod yazıldı, canlıda denenmedi (bölüm 9) |
+| 4. Yedek hatırlatması | ✅ | İşlem varken son yedek 7 günü geçtiyse Güncel'de engellemeyen bant: "Şimdi yedek indir" / "Yarın hatırlat". Yedek indirilince tarih kaydedilir. |
+
+Ayrıca düzeltilen hata: "Ay döngüsü" değiştirilince eski işlemler dönem değiştirebiliyordu (ipucu "girilmiş kayıtlar dönemini korur" diyordu ama korumuyordu). Artık çekirdekteki `setPayDay` kullanılıyor; test eklendi.
+
+Doğrulama: `npm test` 60/60, `npm run build` başarılı; Güncel, Tüm işlemler, Düzenle ve Ay kapatma örnek veriyle sunucu tarafında çizildi. Gerçek tarayıcıda ve iPhone'da denenmedi.
+
+### Kalan iş sırası (önerilen)
+1. **Bulut + aile paylaşımı (P0-3).** Firebase'e kayıt kayıt yazma, aile üyesi daveti, Firestore güvenlik kuralları ve emülatör testleri. Bu bir veritabanı kuralı değişikliğidir ve canlı veriye dokunur; başlamadan önce Abdullah'ın onayı gerekir: aynı Firebase projesi mi, ayrı koleksiyon mu, eski veri aktarılmayacak kararı sürüyor mu.
+2. P1: birikim/varlıklar + kur girişi, hedefler ve acil durum fonu.
+3. P1: banka ekstresi CSV içe aktarma (papaparse yüklü), çift kayıt kontrolü.
+4. P1: taksit simülasyonu, çok aylı trend + geçmiş ay seçici (Analiz), ödeme bildirimleri.
+5. P2: risk skoru, fatura geçmişi/anomali, etkinlik kumbarası, fiş okuma.
+
+---
+
+## 9. Bulut eşitleme ve aile paylaşımı (8 Kasım 2026, agent/35 düzeltme)
+
+Abdullah'ın kararları (8 Kasım 2026):
+- Aynı Firebase projesi kullanılacak.
+- v3, ilk hâlle karşılaştırılabilsin diye ayrı tutulacak; son hâl verilince tek koleksiyon olacak.
+- Eski veri aktarılmayacak. v3 ekranlarını denemek için ilk hâlin verisi kullanılabilir.
+
+Nasıl çalışıyor:
+- **Yer:** `families/{familyId}/v3`. Eski uygulamanın `families/{familyId}/data` yoluna v3 hiç dokunmaz; eski uygulama da v3 yolunu okumaz.
+- **Giriş ve aile:** eski uygulamayla aynı oturum ve aile kaydı (`userFamilies/{uid}`, `families/{familyId}/members`). Giriş eski sürümden bir kez yapılır; /v3 aynı oturumu kullanır. v3'te ayrı giriş ekranı henüz yok.
+- **Kayıt kayıt yazma:** yalnız değişen hesap, işlem, kategori, düzenli ödeme ya da kapalı dönem yazılır. İki kişi aynı anda farklı kayıtları değiştirirse ikisi de korunur.
+- **Çevrimdışı:** değişiklik bu cihazda saklanır. Bağlantı gelince buluttaki güncel verinin üzerine uygulanır; bu arada eşin sildiği kayıt geri gelmez (testle doğrulandı).
+- **İlk bağlantı:** bulutta v3 verisi varsa o geçerlidir. Bu cihazdaki v3 verisi karışmaz, yerel bir kopya olarak saklanır. Bulut boşsa Güncel'de "Aile hesabına yükle" uyarısı çıkar; yükleme onay ister.
+- **Kimin girdiği:** yeni işlemlere ekleyen üye yazılır. Ailede iki üye varsa listelerde baş harf rozeti görünür.
+- **Yedek hatırlatması:** aile hesabına eşitlenirken gösterilmez.
+- **Silme ve geri yükleme:** eşitliyken "Tüm verileri sil" ve "Yedekten geri yükle" aile hesabındaki v3 verisini tüm üyeler için değiştirir; çekmece ve onay metni bunu açıkça söyler.
+- **Örnek veri modu** (/v3?ornek) buluta hiç bağlanmaz.
+- **Ortak yapılandırma:** Firebase yapılandırması `src/firebaseConfig.js` dosyasına taşındı; eski uygulama da aynı dosyayı kullanır, davranışı değişmedi.
+
+**Veritabanı kuralları — canlıda değişiklik YAPILMADI.** Kurallar depoda yok ve bu ortamdan görülemedi.
+v3 yolu `families/{familyId}` altında olduğu için mevcut aile kuralı geçerli olur. Kural yalnız `data` alt yoluna izin
+veriyorsa v3 yazamaz; ekranda "Bulutla eşitlenemedi — veritabanı kuralları v3 yoluna izin vermiyor olabilir" uyarısı
+çıkar ve veri cihazda kalır. Önerilen kural parçası (Firebase konsolunda mevcut kurallara eklenmeli; uygulanmadan önce
+emülatörde denenmeli):
+
+```json
+"families": {
+  "$familyId": {
+    "v3": {
+      ".read": "auth != null && root.child('families/' + $familyId + '/members/' + auth.uid).exists()",
+      ".write": "auth != null && root.child('families/' + $familyId + '/members/' + auth.uid).exists()",
+      "schemaVersion": { ".validate": "newData.isNumber()" }
+    }
+  }
+}
+```
+
+Doğrulama:
+- Eşitleme kuralları (ağaç biçimi, kayıt kayıt fark, çevrimdışı birleştirme, ilk bağlantı) 8 testle doğrulandı. Testler Firebase'i bellekte taklit eder.
+- `npm test` 68/68, `npm run build` başarılı.
+- **Doğrulanamayan:** Firebase emülatörü bu bilgisayarda çalışmadı (Java ve firebase-tools yok). Canlı veritabanına deneme verisi yazılmadı. Gerçek oturumla iki cihaz arası eşitleme denenmedi.
+
+Sıradaki adımlar:
+1. Kuralları konsoldan depoya almak (`database.rules.json`), v3 parçasını eklemek, emülatörde denemek.
+2. İlk hâlin verisini v3 biçimine çeviren **yalnız deneme amaçlı** dönüştürücü. Yalnız örnek veri modunda yüklenir, buluta yazılmaz. Eski verinin alan adlarını doğru eşlemek için bir eski yedek dosyası (Ayarlar → Yedekleme → JSON indir) gerekir.
+3. v3 içinde giriş ve davet koduyla katılma ekranı.

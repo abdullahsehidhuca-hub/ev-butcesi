@@ -106,3 +106,39 @@ test("Bankayla karşılaştırma farkı düzeltmeyle kapanır; bankadaki tutar g
   const next = adjustBalance(state, r, { id: "duzeltme-1", now: new Date(`${SAMPLE_TODAY}T12:00:00`) }).state;
   assert.equal(balanceOf(next, acc.id, SAMPLE_TODAY), acc.balance - 12345);
 });
+
+import { transactionsView, closeCandidate } from "../src/v3/selectors.js";
+import { updateTransaction, deleteTransaction, closePeriod, setPayDay, txPeriod } from "../src/core/index.js";
+
+test("Tüm işlemler: dönem süzgeci ve arama; düzenleme ve silme listeye yansır", () => {
+  const all = transactionsView(state);
+  assert.equal(all.list.length, Object.keys(state.transactions).length);
+  const p = all.periods[0];
+  const inP = transactionsView(state, { period: p }).list;
+  assert.ok(inP.length > 0 && inP.every(t => txPeriod(t, state.settings.payDay) === p));
+  const hit = transactionsView(state, { query: "MARKET" });
+  assert.ok(hit.list.length > 0 && hit.list.length < all.list.length);
+  const t = hit.list[0];
+  const edited = updateTransaction(state, t.id, { amount: t.amount + 100 });
+  assert.equal(transactionsView(edited).list.find(x => x.id === t.id).amount, t.amount + 100);
+  assert.equal(transactionsView(deleteTransaction(state, t.id)).list.length, all.list.length - 1);
+});
+
+test("Ay kapatma: en eski açık geçmiş dönem önerilir, kapatınca sıradaki geçer ve kayıt kilitlenir", () => {
+  const c = closeCandidate(state, SAMPLE_TODAY);
+  assert.ok(c && c.period < "2026-11");
+  const decisions = Object.fromEntries(c.open.map(i => [i.obligationId, "drop"]));
+  const closed = closePeriod(state, c.period, { decisions });
+  assert.notEqual(closeCandidate(closed, SAMPLE_TODAY)?.period, c.period);
+  const old = Object.values(closed.transactions).find(t => txPeriod(t, closed.settings.payDay) === c.period);
+  assert.ok(old, "örnek veride kapatılan dönemde işlem olmalı");
+  assert.throws(() => updateTransaction(closed, old.id, { amount: old.amount + 1 }));
+  assert.throws(() => deleteTransaction(closed, old.id));
+});
+
+test("Maaş günü değişikliği eski işlemlerin dönemini korur", () => {
+  const before = transactionsView(state).list.map(t => [t.id, transactionsView(state, { period: "2026-11" }).list.some(x => x.id === t.id)]);
+  const next = setPayDay(state, 1);
+  const after = new Set(transactionsView(next, { period: "2026-11" }).list.map(t => t.id));
+  for (const [id, inNov] of before) assert.equal(after.has(id), inNov);
+});

@@ -4,7 +4,7 @@
 // Hesap yoksa 3 adımlı karşılama gösterilir.
 import { useState } from "react";
 import { Icon, Tile, DateBadge, Avatar, Check } from "../components/ui.jsx";
-import { overview, upcoming, recent, forecast, paymentsView, accountsView, balanceView, categoryName, fmt, fmtNum, dayNum, monthShort, monthLong } from "../selectors.js";
+import { overview, upcoming, recent, forecast, paymentsView, accountsView, balanceView, closeCandidate, categoryName, periodLabel, fmt, fmtNum, dayNum, monthShort, monthLong } from "../selectors.js";
 
 function Welcome({ state, open }) {
   const ready = Object.keys(state.accounts).length > 0;
@@ -58,7 +58,7 @@ function Accounts({ state, today, onManage }) {
   );
 }
 
-export default function Ozet({ state, today, members = {}, overrides, open, onResolve, onPay, onOpenPayments, onOpenSettings }) {
+export default function Ozet({ state, today, members = {}, overrides, open, onResolve, onPay, onOpenPayments, onOpenSettings, backupDue }) {
   const [list, setList] = useState("upcoming");
   if (!Object.keys(state.accounts).length) return <Welcome state={state} open={open} />;
 
@@ -74,6 +74,7 @@ export default function Ozet({ state, today, members = {}, overrides, open, onRe
   const ahead = o.pace.diff > 0;
   const memberList = Object.values(members);
   const missing = o.summary.missingRates;
+  const closing = closeCandidate(state, today);
 
   return (
     <>
@@ -88,6 +89,25 @@ export default function Ozet({ state, today, members = {}, overrides, open, onRe
           </div>
         )}
       </header>
+
+      {closing && (
+        <button type="button" className="v3-alert" style={{ textAlign: "left", width: "100%" }} onClick={() => open({ name: "close" })}>
+          <strong>{periodLabel(closing.period)} dönemini kapatın{closing.waiting > 0 ? ` (+${closing.waiting} dönem daha bekliyor)` : ""}</strong>
+          {closing.open.length ? `${closing.open.length} ödeme açık kaldı: taşı, ertele ya da yok say.` : "Açık ödeme yok; dönemi tek dokunuşla dondurun."}
+          <span className="t-sub c-blue" style={{ fontWeight: 600 }}>Ay kapatmaya başla</span>
+        </button>
+      )}
+
+      {backupDue && (
+        <div className="v3-alert" role="status">
+          <strong>{backupDue.days == null ? "Henüz yedek almadınız" : `Son yedek ${backupDue.days} gün önce`}</strong>
+          Veriler yalnız bu cihazda. Haftada bir yedek dosyası indirin; telefon kaybolursa ya da tarayıcı temizlenirse geri yüklersiniz.
+          <span className="row" style={{ gap: 16, flexWrap: "wrap" }}>
+            <button type="button" className="v3-link" style={{ padding: 0 }} onClick={backupDue.onBackup}>Şimdi yedek indir</button>
+            <button type="button" className="v3-link" style={{ padding: 0 }} onClick={backupDue.onSnooze}>Yarın hatırlat</button>
+          </span>
+        </div>
+      )}
 
       {missing?.length > 0 && (
         <div className="v3-alert" role="status">
@@ -173,8 +193,13 @@ export default function Ozet({ state, today, members = {}, overrides, open, onRe
         </section>
       ) : (
         <section className="list" aria-label="Son işlemler" style={{ "--inset": "64px" }}>
-          {rec.map(t => <TxRow key={t.id} t={t} state={state} member={memberList.length > 1 ? members[t.createdBy] : null} />)}
+          {rec.map(t => <TxRow key={t.id} t={t} state={state} member={memberList.length > 1 ? members[t.createdBy] : null} onClick={() => open({ name: "tx", id: t.id })} />)}
           {!rec.length && <p className="t-sub" style={{ margin: 0, padding: 16 }}>Henüz işlem yok. Sağ alttaki + ile ilk harcamanızı ekleyin.</p>}
+          {rec.length > 0 && (
+            <button type="button" className="li" onClick={() => open({ name: "txlist" })} style={{ justifyContent: "center" }}>
+              <span className="t-sub c-blue" style={{ fontWeight: 600 }}>Tüm işlemler · ara, düzenle, sil</span>
+            </button>
+          )}
         </section>
       )}
 
@@ -187,7 +212,7 @@ export default function Ozet({ state, today, members = {}, overrides, open, onRe
 }
 
 // Son işlem satırı: harcama, iade, gelir, aktarım ya da düzenli ödeme kaydı.
-function TxRow({ t, state, member }) {
+export function TxRow({ t, state, member, onClick }) {
   const acc = id => state.accounts[id]?.name;
   const ob = t.obligationId && state.obligations[t.obligationId];
   const c = state.categories[t.categoryId];
@@ -199,8 +224,8 @@ function TxRow({ t, state, member }) {
     : ob
       ? [ob.name, `${when} · ${t.type === "income" ? "Gelir alındı" : t.partial ? "Kısmi ödeme" : "Düzenli ödeme"} · ${acc(t.accountId)}`, ob.icon || (t.type === "income" ? "cash" : "repeat"), ob.color || (t.type === "income" ? "green" : "orange")]
       : [t.note || (t.type === "income" ? "Gelir" : categoryName(state, t.categoryId)), `${when} · ${t.type === "income" ? "Gelir" : t.type === "refund" ? "İade" : categoryName(state, t.categoryId)} · ${acc(t.accountId)}`, c?.icon || (t.type === "income" ? "cash" : "more"), c?.color || (t.type === "income" ? "green" : "gray")];
-  return (
-    <div className="li">
+  const body = (
+    <>
       <Tile icon={icon} color={color} />
       <span className="stack grow gap2">
         <span className="t-body ellipsis">{title}</span>
@@ -208,8 +233,10 @@ function TxRow({ t, state, member }) {
       </span>
       <span className={`num t-body b${plus ? " c-green" : ""}`}>{transfer ? "" : plus ? "+" : "−"}{fmt(t.amount)}</span>
       {member && <Avatar member={member} size={24} />}
-    </div>
+    </>
   );
+  if (!onClick) return <div className="li">{body}</div>;
+  return <button type="button" className="li" onClick={onClick} aria-label={`${title}, ${fmt(t.amount)}, ${sub}. Düzenle`}>{body}</button>;
 }
 
 function daysText(today, date) {

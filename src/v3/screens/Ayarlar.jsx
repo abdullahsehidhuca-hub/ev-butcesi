@@ -29,7 +29,21 @@ function Row({ icon, color, title, sub, value, onClick, tint, danger, href }) {
   return <div className="li" style={style}>{body}</div>;
 }
 
-export default function Ayarlar({ state, today, open, theme, onTheme, backup }) {
+// Bulut satırı: durum, açıklama ve (gerekiyorsa) yapılacak iş.
+function cloudRow(cloud = { status: "off" }, memberCount) {
+  switch (cloud.status) {
+    case "synced": return { title: "Aile hesabında eşitleniyor", sub: `${memberCount > 1 ? `${memberCount} üye · ` : ""}değişiklikler anında herkese yansır` };
+    case "offline": return { title: "Çevrimdışı", sub: "Değişiklikler bu cihazda bekliyor; bağlantı gelince eşitlenir" };
+    case "loading": return { title: "Bulut bağlanıyor…", sub: "Bu arada veriler bu cihazda saklanıyor" };
+    case "signedOut": return { title: "Aile hesabına giriş yapılmadı", sub: "Eski sürümden bir kez giriş yapın, sonra bu adrese dönün", href: "/" };
+    case "noFamily": return { title: "Aile kaydı bulunamadı", sub: "Eski sürümde aile oluşturun ya da davet koduyla katılın", href: "/" };
+    case "needsUpload": return { title: "Bu cihazdaki veri buluta yüklenmedi", sub: "Güncel ekranındaki uyarıdan aile hesabına yükleyin" };
+    case "error": return { title: "Bulutla eşitlenemedi", sub: "Veriler bu cihazda saklanıyor; düzenli yedek alın", danger: true };
+    default: return { title: "Örnek veri · buluta yazılmaz", sub: "Yalnız bu bilgisayarda, gerçek veriden ayrı" };
+  }
+}
+
+export default function Ayarlar({ state, today, open, theme, onTheme, backup, cloud, members = {} }) {
   const fileRef = useRef(null);
   const accounts = Object.values(state.accounts);
   const categories = Object.values(state.categories).filter(c => !c.archived).sort(byName);
@@ -93,10 +107,10 @@ export default function Ayarlar({ state, today, open, theme, onTheme, backup }) 
       <span className="t-cap">Veri ve görünüm</span>
       <section className="list" style={group} aria-label="Veri ve görünüm">
         <Row icon="moon" color="indigo" title="Görünüm" value={THEMES.find(t => t[0] === theme)?.[1]} onClick={nextTheme} />
-        <Row icon="cloud" color="cyan" title="Bu cihazda saklanıyor" sub="Bulut eşitleme ve aile paylaşımı sonraki adımda; düzenli yedek alın." />
+        <Row icon="cloud" color="cyan" {...cloudRow(cloud, Object.keys(members).length)} />
         {backup && <>
           <Row icon="export" color="green" title="Yedek indir" sub="Tüm v3 verisi tek dosyada (JSON)" onClick={backup.exportJson} />
-          <Row icon="repeat" color="orange" title="Yedekten geri yükle" sub="Bu cihazdaki v3 verisinin yerine geçer; önce sorar" onClick={() => fileRef.current?.click()} />
+          <Row icon="repeat" color="orange" title="Yedekten geri yükle" sub={cloud?.status === "synced" ? "Aile hesabındaki v3 verisinin yerine geçer; önce sorar" : "Bu cihazdaki v3 verisinin yerine geçer; önce sorar"} onClick={() => fileRef.current?.click()} />
           <Row icon="export" color="teal" title="İşlemleri CSV olarak indir" sub={`${Object.keys(state.transactions).length} işlem · Excel ve Numbers ile açılır`} onClick={backup.exportCsv} />
           <input ref={fileRef} type="file" accept="application/json,.json" hidden aria-hidden="true" tabIndex={-1}
             onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) backup.restore(f); }} />

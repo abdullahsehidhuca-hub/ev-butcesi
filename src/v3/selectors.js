@@ -4,8 +4,8 @@
 // maaştan önce ne ödenecek) bir araya getirilir.
 
 import {
-  computePeriod, projection, occurrencesIn, balanceOf, favorites,
-  periodOf, periodRange, dateInPeriod, nextPeriod, prevPeriod, addPeriods, sum
+  computePeriod, projection, occurrencesIn, balanceOf, favorites, txPeriod,
+  periodOf, periodRange, dateInPeriod, nextPeriod, prevPeriod, addPeriods, periodDistance, sum
 } from "../core/index.js";
 
 const payDayOf = state => state.settings?.payDay || 1;
@@ -186,6 +186,50 @@ export function recent(state, limit = 8) {
   return Object.values(state.transactions)
     .sort((a, b) => b.date.localeCompare(a.date) || (b.createdAt || "").localeCompare(a.createdAt || ""))
     .slice(0, limit);
+}
+
+// Tüm işlemler: dönem süzgeci ("all" ya da "YYYY-MM") ve arama (açıklama, kategori, hesap, düzenli ödeme adı, tutar).
+// periods: kayıt bulunan dönemler, yeniden eskiye.
+const fold = t => String(t ?? "").toLocaleLowerCase("tr-TR");
+export function transactionsView(state, { period = "all", query = "" } = {}) {
+  const payDay = payDayOf(state);
+  const all = Object.values(state.transactions);
+  const periods = [...new Set(all.map(t => txPeriod(t, payDay)))].sort().reverse();
+  const q = fold(query.trim());
+  const words = t => [t.note, categoryName(state, t.categoryId), state.accounts[t.accountId]?.name, state.accounts[t.toAccountId]?.name,
+    state.obligations[t.obligationId]?.name, fmtNum(t.amount), String(t.amount / 100)].map(fold).join(" ");
+  const list = all
+    .filter(t => period === "all" || txPeriod(t, payDay) === period)
+    .filter(t => !q || words(t).includes(q))
+    .sort((a, b) => b.date.localeCompare(a.date) || (b.createdAt || "").localeCompare(a.createdAt || ""));
+  const signed = t => t.type === "income" || t.type === "refund" ? t.amount : t.type === "transfer" ? 0 : -t.amount;
+  return { list, periods, net: sum(list.filter(t => t.currency === "TRY").map(signed)), closed: p => !!state.closedPeriods?.[p] };
+}
+
+// Ay kapatma: bugünkü dönemden önceki, kaydı olup henüz kapatılmamış en eski dönem. Başlangıç uygulamanın
+// kullanılmaya başlandığı dönemdir (ilk işlem ya da hesap açılışı); öncesinde başlamış taksitler sorulmaz.
+// Dönemler sırayla kapatılır; devreden kalem bir sonraki döneme taşındığı için sıra önemlidir.
+export function closeCandidate(state, today) {
+  const payDay = payDayOf(state);
+  const current = periodOf(today, payDay);
+  const starts = [
+    ...Object.values(state.transactions).map(t => txPeriod(t, payDay)),
+    ...Object.values(state.accounts).filter(a => a.opening?.date).map(a => periodOf(a.opening.date, payDay))
+  ].filter(p => p < current);
+  if (!starts.length) return null;
+  // En çok 24 dönem geriye bakılır; daha eskisi kapatma beklemez.
+  let p = starts.sort()[0];
+  const floor = addPeriods(current, -24);
+  if (p < floor) p = floor;
+  for (; p < current; p = nextPeriod(p)) {
+    if (state.closedPeriods?.[p]) continue;
+    const s = computePeriod(state, p);
+    const open = s.obligations.items.filter(i => i.kind !== "income" && i.open > 0);
+    const pending = Object.values(state.transactions).some(t => txPeriod(t, payDay) === p) || s.obligations.items.length > 0;
+    if (!pending) continue;
+    return { period: p, summary: s, open, waiting: periodDistance(p, current) - 1 };
+  }
+  return null;
 }
 
 // Başlık dökümü (eski uygulamadaki "Bankadaki tutar / Bloke edilen tutar" karşılığı).

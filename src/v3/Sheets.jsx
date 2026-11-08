@@ -4,7 +4,7 @@
 import React, { useState } from "react";
 import {
   quickAdd, payObligation, favorites, defaultAccountFor, suggestCategory, learnCategory,
-  addAccount, addObligation, addInstallmentPurchase, putRecord, emptyState
+  addAccount, addObligation, addInstallmentPurchase, putRecord, emptyState, setPayDay
 } from "../core/index.js";
 import { parseAmount, amountText, fmtMoney, symbolOf } from "./format.js";
 import { newId } from "./store.js";
@@ -288,8 +288,8 @@ export function InstallmentSheet({ state, commit, onClose, today }) {
 export function PayDaySheet({ state, commit, onClose }) {
   const [day, setDay] = useState(String(state.settings.payDay));
   const save = () => {
-    commit(s => ({ ...s, settings: { ...s.settings, payDay: Number(day) } }));
-    onClose();
+    const errs = commit(s => setPayDay(s, Number(day)));
+    if (!errs) onClose();
   };
   return (
     <Sheet title="Ay döngüsü" onClose={onClose}>
@@ -303,11 +303,13 @@ export function PayDaySheet({ state, commit, onClose }) {
 }
 
 // ── Bu cihazdaki v3 verisini silme ─────────────────────────────────────────────
-export function ResetSheet({ commit, onClose }) {
+export function ResetSheet({ commit, onClose, synced }) {
   const save = () => { commit(() => emptyState()); onClose(); };
   return (
     <Sheet title="Tüm verileri sil" onClose={onClose}>
-      <p className="v3-sheet-text">Bu cihazdaki hesaplar, kategoriler, ödemeler ve harcamalar silinir. Geri alınamaz. Eski uygulamanın verisi etkilenmez.</p>
+      <p className="v3-sheet-text">{synced
+        ? "Aile hesabındaki v3 hesapları, kategorileri, ödemeleri ve harcamaları tüm üyeler için silinir. Geri alınamaz; önce yedek indirin. Eski uygulamanın verisi etkilenmez."
+        : "Bu cihazdaki hesaplar, kategoriler, ödemeler ve harcamalar silinir. Geri alınamaz. Eski uygulamanın verisi etkilenmez."}</p>
       <Form onSubmit={save}><Actions submit="Sil" onCancel={onClose} danger /></Form>
     </Sheet>
   );

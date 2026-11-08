@@ -50,6 +50,12 @@ export function newId() {
 // planları (yalnız bakiye akışı tahminini değiştirir) ve görünüm teması.
 export const PLAN_KEY = "evButcesi.v3.plan";
 export const THEME_KEY = "evButcesi.v3.tema";
+// Yedek hatırlatması: son yedeğin ve "yarın hatırlat" ertelemesinin tarihi { last, snooze }.
+export const BACKUP_KEY = "evButcesi.v3.yedek";
+// Bulut eşitlemesi: son görülen bulut verisi (çevrimdışı değişiklikleri bulmak için) ve aileye ilk
+// bağlanırken bulut dolu olduğu için yerine geçilen bu cihazdaki v3 verisinin kopyası.
+export const CLOUD_BASE_KEY = "evButcesi.v3.bulut";
+export const LOCAL_COPY_KEY = "evButcesi.v3.yerelKopya";
 
 export function loadPref(key, fallback, storage) {
   try { const raw = storageOf(storage)?.getItem(key); return raw ? JSON.parse(raw) : fallback; } catch { return fallback; }

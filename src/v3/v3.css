@@ -225,3 +225,7 @@ a.li:active { background: var(--fill2); }
 .why-btn { display: flex; align-items: center; gap: 20px; width: 100%; min-height: 52px; margin-top: 4px; padding-top: 8px; border-top: .5px solid var(--sep); text-align: left; }
 .why-btn:active { opacity: .7; }
 .v3-sheet .sum-line { border-top: .5px solid var(--sep); margin-top: 2px; }
+
+/* Dokunulabilir uyarı bandı (ay kapatma) ve çekmecedeki "İşlemi sil" düğmesi */
+button.v3-alert { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; color: inherit; min-height: 44px; }
+.v3-cancel.c-red { color: var(--red-t, var(--red)); }
