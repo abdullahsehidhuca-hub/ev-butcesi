@@ -92,7 +92,7 @@ async function lookupInvitation(code) {
 // Davetli üye katılım (Firebase Auth hesabı oluşturulduktan sonra)
 async function joinViaInvitation(uid2, code, invData) {
   const { familyId, name, email } = invData;
-  await set(ref(rtdb, `families/${familyId}/members/${uid2}`), { name, email, role: "member", joinedAt: new Date().toISOString() });
+  await set(ref(rtdb, `families/${familyId}/members/${uid2}`), { name, email, role: "member", inviteCode: code, joinedAt: new Date().toISOString() });
   await set(ref(rtdb, `userFamilies/${uid2}`), { familyId, code, role: "member", name });
   await set(ref(rtdb, `invitations/${code}/used`), true);
   await registerName(name, email, familyId, uid2);

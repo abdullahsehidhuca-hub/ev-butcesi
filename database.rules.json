@@ -1,0 +1,57 @@
+{
+  "rules": {
+    "families": {
+      "$familyId": {
+        ".read": "auth != null && ($familyId === auth.uid || root.child('families').child($familyId).child('members').child(auth.uid).exists())",
+        ".write": "auth != null && $familyId === auth.uid",
+        "members": {
+          "$memberUid": {
+            ".write": "auth != null && $memberUid === auth.uid && (data.exists() ? (!newData.exists() || newData.child('role').val() === data.child('role').val()) : (newData.child('role').val() === 'member' && newData.child('inviteCode').isString() && root.child('invitations').child(newData.child('inviteCode').val()).child('familyId').val() === $familyId && root.child('invitations').child(newData.child('inviteCode').val()).child('used').val() === false))"
+          }
+        },
+        "data": {
+          ".write": "auth != null && root.child('families').child($familyId).child('members').child(auth.uid).exists()"
+        },
+        "v3": {
+          ".write": "auth != null && root.child('families').child($familyId).child('members').child(auth.uid).exists()",
+          "schemaVersion": {
+            ".validate": "newData.isNumber()"
+          }
+        }
+      }
+    },
+    "backups": {
+      "$familyId": {
+        ".read": "auth != null && ($familyId === auth.uid || root.child('families').child($familyId).child('members').child(auth.uid).exists())",
+        ".write": "auth != null && ($familyId === auth.uid || root.child('families').child($familyId).child('members').child(auth.uid).exists())"
+      }
+    },
+    "invitations": {
+      "$code": {
+        ".read": true,
+        ".write": "auth != null && newData.child('familyId').val() === auth.uid && (!data.exists() || data.child('familyId').val() === auth.uid)",
+        "used": {
+          ".write": "auth != null && newData.val() === true && root.child('families').child(root.child('invitations').child($code).child('familyId').val() + '').child('members').child(auth.uid).exists()"
+        }
+      }
+    },
+    "nameIndex": {
+      "$name": {
+        ".read": true,
+        ".write": "auth != null && (!data.exists() || data.child('uid').val() === auth.uid || (!newData.exists() && data.child('familyId').val() === auth.uid)) && (!newData.exists() || newData.child('uid').val() === auth.uid)"
+      }
+    },
+    "userFamilies": {
+      "$uid": {
+        ".read": "$uid === auth.uid",
+        ".write": "auth != null && ($uid === auth.uid || (!newData.exists() && data.child('familyId').val() === auth.uid))"
+      }
+    },
+    "budgets": {
+      "$uid": {
+        ".read": "$uid === auth.uid",
+        ".write": "$uid === auth.uid"
+      }
+    }
+  }
+}
