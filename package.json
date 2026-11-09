@@ -4,18 +4,22 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "predev": "node scripts/copy-ocr.mjs",
     "dev": "vite",
+    "prebuild": "node scripts/copy-ocr.mjs",
     "build": "vite build",
     "preview": "vite preview",
     "test": "node --test tests/",
     "test:rules": "JAVA_HOME=/opt/homebrew/opt/java PATH=/opt/homebrew/opt/java/bin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/opt/pmk/env/global/bin:/Library/Apple/usr/bin:/Users/abdullahsehid/DEVHUB/DevHub/server/node_modules/.bin:/Users/abdullahsehid/DEVHUB/DevHub/node_modules/.bin:/Users/abdullahsehid/DEVHUB/node_modules/.bin:/Users/abdullahsehid/node_modules/.bin:/Users/node_modules/.bin:/node_modules/.bin:/opt/homebrew/lib/node_modules/npm/node_modules/@npmcli/run-script/lib/node-gyp-bin:/Users/abdullahsehid/.local/bin:/opt/homebrew/bin:/opt/homebrew/sbin firebase emulators:exec --only database --project demo-ev-butcesi \"node --test rules-test/\""
   },
   "dependencies": {
+    "@tesseract.js-data/tur": "^1.0.0",
     "firebase": "^11.0.0",
     "firebase-admin": "^13.8.0",
     "papaparse": "^5.4.1",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "tesseract.js": "^7.0.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",

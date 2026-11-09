@@ -19,6 +19,7 @@ import BakiyeSheet from "./screens/BakiyeSheet.jsx";
 import KapatSheet from "./screens/KapatSheet.jsx";
 import { TxListSheet, TxEditSheet } from "./screens/IslemlerSheet.jsx";
 import HesapSheet from "./screens/HesapSheet.jsx";
+import EkstreSheet from "./screens/EkstreSheet.jsx";
 import { PaySheet, AccountSheet, CategorySheet, ObligationSheet, InstallmentSheet, PayDaySheet, ResetSheet } from "./Sheets.jsx";
 import "./v3.css";
 
@@ -217,7 +218,8 @@ export default function V3App({ sample }) {
 
       {sheet?.name === "quick" && <EkleSheet {...props} onNeedAccount={() => setSheet({ name: "account" })} onSaved={a => setToast(`${fmt(a)} eklendi`)} />}
       {sheet?.name === "resolve" && <CozSheet state={state} today={todayDate} overrides={overrides} onClose={close} onApply={apply} />}
-      {sheet?.name === "balance" && <BakiyeSheet {...props} onToast={setToast} />}
+      {sheet?.name === "balance" && <BakiyeSheet {...props} onToast={setToast} onStatement={() => setSheet({ name: "statement", back: { name: "balance" } })} />}
+      {sheet?.name === "statement" && <EkstreSheet {...props} onClose={closeTo(sheet.back)} onToast={setToast} />}
       {sheet?.name === "pay" && <PaySheet {...props} onClose={closeTo(sheet.back)} period={sheet.period} target={sheet.target} />}
       {sheet?.name === "txlist" && <TxListSheet state={state} members={members} initial={sheet.filter} onClose={close}
         onEdit={(id, filter) => setSheet({ name: "tx", id, back: { name: "txlist", filter } })} />}

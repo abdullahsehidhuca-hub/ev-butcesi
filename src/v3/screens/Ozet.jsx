@@ -41,7 +41,7 @@ function Accounts({ state, today, onManage }) {
     <section className="stack gap8" aria-label="Hesaplar">
       <div className="row between" style={{ padding: "0 4px" }}>
         <span className="t-cap" style={{ padding: 0 }}>Hesaplar · net <span className="num" style={{ letterSpacing: 0 }}>{fmt(total)}</span></span>
-        <button type="button" className="t-sub c-blue" style={{ minHeight: 44, fontWeight: 500 }} onClick={onManage}>Yönet</button>
+        <button type="button" className="t-sub c-blue" style={{ minHeight: 44, minWidth: 44, fontWeight: 500 }} onClick={onManage}>Yönet</button>
       </div>
       <ul className="accts">
         {list.map(a => (

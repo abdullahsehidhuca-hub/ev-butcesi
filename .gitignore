@@ -32,3 +32,6 @@ lerna-debug.log*
 .env.development.local
 .env.test.local
 .env.production.local
+
+# OCR motor dosyaları (scripts/copy-ocr.mjs ile node_modules tan kopyalanır)
+public/ocr/

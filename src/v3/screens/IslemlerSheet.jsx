@@ -1,7 +1,7 @@
 // Tüm işlemler (eski uygulamadaki "Aylık işlem geçmişi" karşılığı): dönem süzgeci, arama, düzenleme ve silme.
 // Düzenleme çekirdekteki updateTransaction / deleteTransaction ile yapılır; kapalı dönemin kaydı değişmez.
 import { useState } from "react";
-import { updateTransaction, deleteTransaction, txPeriod } from "../../core/index.js";
+import { updateTransaction, deleteTransaction, txPeriod, isCardExpense, markCardTransferred } from "../../core/index.js";
 import { Sheet, Field, SelectField, ErrorText, Actions, Form } from "../ui.jsx";
 import { parseAmount, amountText } from "../format.js";
 import { transactionsView, periodLabel, fmt } from "../selectors.js";
@@ -34,7 +34,20 @@ export function TxListSheet({ state, onClose, onEdit, members = {}, initial }) {
 const byName = (a, b) => a.name.localeCompare(b.name, "tr");
 const TYPE = { expense: "Harcama", income: "Gelir", refund: "İade", transfer: "Aktarım" };
 
-export function TxEditSheet({ state, commit, onClose, id, onToast }) {
+// "Karta aktarıldı" onay kutusu: kredi kartı harcamasının karşılığı bankadan karta aktarıldı mı.
+function TransferCheck({ checked, onChange, since }) {
+  return (
+    <label className="row" style={{ gap: 12, minHeight: 44, margin: "4px 0 8px", cursor: "pointer" }}>
+      <input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)} style={{ width: 22, height: 22, flex: "none" }} />
+      <span className="stack gap2">
+        <span className="t-sub" style={{ color: "var(--label)" }}>Karta aktarıldı</span>
+        <span className="t-meta">{checked && since ? `${since} tarihinde işaretlendi` : "Karşılığı bankadan kart hesabına aktarıldıysa işaretleyin."}</span>
+      </span>
+    </label>
+  );
+}
+
+export function TxEditSheet({ state, commit, onClose, id, onToast, today }) {
   const t = state.transactions[id];
   const [amount, setAmount] = useState(t ? amountText(t.amount) : "");
   const [date, setDate] = useState(t?.date || "");
@@ -42,6 +55,7 @@ export function TxEditSheet({ state, commit, onClose, id, onToast }) {
   const [categoryId, setCategoryId] = useState(t?.categoryId || "");
   const [accountId, setAccountId] = useState(t?.accountId || "");
   const [toAccountId, setToAccountId] = useState(t?.toAccountId || "");
+  const [transferred, setTransferred] = useState(!!t?.cardTransferredAt);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [errors, setErrors] = useState(null);
 
@@ -59,16 +73,33 @@ export function TxEditSheet({ state, commit, onClose, id, onToast }) {
   const ob = t.obligationId && state.obligations[t.obligationId];
   const transfer = t.type === "transfer";
   const hasCategory = !ob && !t.adjustment && (t.type === "expense" || t.type === "refund");
+  // Seçili hesap kredi kartıysa bayrak gösterilir (hesap değiştirildikçe güncellenir).
+  const cardExpense = isCardExpense(state, { ...t, accountId });
+  const flagDate = today || date;
   const accounts = Object.values(state.accounts).sort(byName).map(a => ({ value: a.id, label: a.name }));
   const categories = [{ value: "", label: "Kategorisiz" }, ...Object.values(state.categories)
     .filter(c => !c.archived || c.id === t.categoryId).sort(byName).map(c => ({ value: c.id, label: c.name }))];
   const title = `${TYPE[t.type] || "İşlem"} · ${ob ? ob.name : t.note || "düzenle"}`;
 
   if (closed) {
+    // Kapalı dönemde rakamlar donmuştur; aktarım bayrağı tutarı değiştirmediği için yine de işaretlenebilir.
+    const toggle = () => {
+      const errs = commit(s => markCardTransferred(s, id, t.cardTransferredAt ? null : flagDate));
+      if (errs) setErrors(errs); else onToast?.(t.cardTransferredAt ? "Aktarım işareti kaldırıldı" : "Karta aktarıldı olarak işaretlendi");
+    };
     return (
       <Sheet title={title} onClose={onClose}>
         <p className="v3-sheet-text">{periodLabel(period)} dönemi kapatıldı; rakamları dondurulduğu için bu kayıt değiştirilemez. Bir düzeltme gerekiyorsa bu döneme yeni bir kayıt ekleyin.</p>
         <p className="v3-sheet-text">Tutar <b className="num">{fmt(t.amount)}</b> · {t.date} · {state.accounts[t.accountId]?.name}</p>
+        {isCardExpense(state, t) && (
+          <p className="v3-sheet-text">
+            {t.cardTransferredAt ? `Karta aktarıldı (${t.cardTransferredAt}). ` : "Karta aktarıldı olarak işaretlenmedi. "}
+            <button type="button" className="v3-link" style={{ padding: 0, minHeight: 44 }} onClick={toggle}>
+              {t.cardTransferredAt ? "İşareti kaldır" : "Karta aktarıldı işaretle"}
+            </button>
+          </p>
+        )}
+        <ErrorText errors={errors} />
         <Form onSubmit={onClose}><Actions submit="Tamam" onCancel={onClose} /></Form>
       </Sheet>
     );
@@ -81,7 +112,14 @@ export function TxEditSheet({ state, commit, onClose, id, onToast }) {
     const changes = { amount: minor, date, note: note.trim() || undefined, accountId, currency: state.accounts[accountId]?.currency || t.currency };
     if (hasCategory) changes.categoryId = categoryId || null;
     if (transfer) changes.toAccountId = toAccountId;
-    const errs = commit(s => updateTransaction(s, id, changes));
+    const errs = commit(s => {
+      let next = updateTransaction(s, id, changes);
+      const nt = next.transactions[id];
+      if (isCardExpense(next, nt) && transferred !== !!nt.cardTransferredAt) {
+        next = markCardTransferred(next, id, transferred ? flagDate : null);
+      }
+      return next;
+    });
     if (errs) setErrors(errs); else { onToast?.("İşlem güncellendi"); onClose(); }
   };
   const remove = () => {
@@ -100,6 +138,7 @@ export function TxEditSheet({ state, commit, onClose, id, onToast }) {
         {hasCategory && <SelectField label="Kategori" value={categoryId} onChange={setCategoryId} options={categories} />}
         <SelectField label={transfer ? "Çıkan hesap" : t.type === "income" ? "Yatan hesap" : "Hesap"} value={accountId} onChange={setAccountId} options={accounts} />
         {transfer && <SelectField label="Giden hesap" value={toAccountId} onChange={setToAccountId} options={accounts} />}
+        {cardExpense && <TransferCheck checked={transferred} onChange={setTransferred} since={t.cardTransferredAt} />}
         <ErrorText errors={errors} />
         <Actions submit="Kaydet" onCancel={onClose} />
       </Form>

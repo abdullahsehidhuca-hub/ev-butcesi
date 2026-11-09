@@ -2,7 +2,7 @@
 // Bankadaki tutar / Bloke edilen tutar kutularının karşılığı). Bankadaki tutar uygulamanın kayıtlarına
 // göre hesaplanır; bankadaki gerçek bakiyeyle karşılaştırma (reconcile) eksik ya da hatalı kaydı gösterir.
 import { useState } from "react";
-import { reconcile, recordReconciliation, adjustBalance } from "../../core/index.js";
+import { reconcile, recordReconciliation, adjustBalance, cardTransferSummary, markCardTransferred } from "../../core/index.js";
 import { Sheet, Field, Actions, ErrorText, Form } from "../ui.jsx";
 import { parseBalance } from "../Sheets.jsx";
 import { newId } from "../store.js";
@@ -17,6 +17,47 @@ function Line({ label, value, note, strong, tone }) {
       </div>
       {note && <span className="t-meta">{note}</span>}
     </div>
+  );
+}
+
+// Karta aktarılmamış kredi kartı harcamaları (ilk hâldeki "karta aktarıldı" bayrağı). Banka bakiyesi
+// tutmadığında ilk bakılacak yer burasıdır: aktarılmış ama işaretlenmemiş harcama farkı açıklar.
+function CardTransfers({ state, commit, today, onToast }) {
+  const [errors, setErrors] = useState(null);
+  const sum = cardTransferSummary(state, today);
+  const mark = ids => {
+    const errs = commit(s => markCardTransferred(s, ids, today));
+    if (errs) setErrors(errs); else { setErrors(null); onToast?.(ids.length > 1 ? `${ids.length} harcama karta aktarıldı olarak işaretlendi` : "Karta aktarıldı olarak işaretlendi"); }
+  };
+  return (
+    <section aria-label="Karta aktarılmamış harcamalar">
+      <span className="t-cap" style={{ padding: 0 }}>Karta aktarılmamış kart harcamaları</span>
+      {!sum.list.length ? (
+        <p className="t-sub" style={{ margin: "6px 0 0" }}>Tüm kredi kartı harcamaları karta aktarıldı olarak işaretli.</p>
+      ) : (
+        <>
+          <p className="t-meta" style={{ margin: "6px 0" }}>
+            {sum.list.length} harcama · toplam <span className="num">{fmt(sum.total)}</span>
+            {sum.stale.length ? ` · ${sum.stale.length} tanesi 2 gündür ya da daha uzun süredir bekliyor` : ""}.
+            {" "}Karşılığını bankadan karta aktardıysanız işaretleyin; bankadaki tutar farkı çoğu zaman buradan çıkar.
+          </p>
+          <ul className="stack" style={{ listStyle: "none", margin: 0, padding: 0 }}>
+            {sum.list.map(t => (
+              <li key={t.id} className="row between" style={{ gap: 12, borderBottom: ".5px solid var(--sep)", padding: "4px 0" }}>
+                <div className="stack gap2" style={{ minWidth: 0 }}>
+                  <span className="t-sub ellipsis" style={{ color: "var(--label)" }}>{t.note || state.categories[t.categoryId]?.name || "Harcama"} · {state.accounts[t.accountId]?.name}</span>
+                  <span className={`t-meta${t.days >= 2 ? " c-orange" : ""}`}>{dayNum(t.date)} {monthShort(t.date)} · <span className="num">{fmt(t.amount)}</span>{t.days >= 2 ? ` · ${t.days} gündür aktarılmadı` : ""}</span>
+                </div>
+                <button type="button" className="t-sub c-blue" style={{ minHeight: 44, minWidth: 44, fontWeight: 500, whiteSpace: "nowrap" }}
+                  onClick={() => mark([t.id])} aria-label={`${t.note || "Harcama"} ${fmt(t.amount)}: karta aktarıldı`}>Aktarıldı</button>
+              </li>
+            ))}
+          </ul>
+          {sum.list.length > 1 && <button type="button" className="v3-link" style={{ alignSelf: "flex-start", minHeight: 44 }} onClick={() => mark(sum.list.map(t => t.id))}>Tümünü aktarıldı işaretle</button>}
+          <ErrorText errors={errors} />
+        </>
+      )}
+    </section>
   );
 }
 
@@ -50,6 +91,7 @@ function Check({ state, commit, today, account, onDone }) {
   }
   if (result) {
     const more = result.diff > 0;
+    const pending = cardTransferSummary(state, today);
     return (
       <div className="stack gap8" role="status">
         <dl style={{ margin: 0 }}>
@@ -58,6 +100,11 @@ function Check({ state, commit, today, account, onDone }) {
           <Line label="Fark" value={`${more ? "+" : ""}${fmt(result.diff)}`} tone="c-red" strong
             note={more ? "Bankada daha fazla para var: girilmemiş bir gelir ya da fazla yazılmış bir harcama olabilir." : "Bankada daha az para var: girilmemiş bir harcama ya da ödeme olabilir."} />
         </dl>
+        {pending.list.length > 0 && (
+          <p className="t-meta c-orange" style={{ margin: 0 }}>
+            Karta aktarıldı bayrağı eklenmemiş {pending.list.length} kart harcaması var (toplam {fmt(pending.total)}). Aşağıdaki listeden kontrol edin.
+          </p>
+        )}
         <p className="t-meta" style={{ margin: 0 }}>
           {result.since ? `Son tutan karşılaştırma ${dayNum(result.since)} ${monthShort(result.since)}; o günden beri` : "Hesap açılışından beri"} bu hesapta {result.movements.length} hareket var. Eksik kayıt bunların arasında değilse eklenmemiş bir işlem vardır.
         </p>
@@ -73,18 +120,19 @@ function Check({ state, commit, today, account, onDone }) {
   return (
     <Form onSubmit={compare}>
       <Field label={`${account.name} · bankadaki gerçek bakiye (₺)`} value={text} onChange={setText} inputMode="decimal" placeholder="0,00"
-        hint="Banka uygulamanızdaki güncel bakiyeyi yazın." invalid={!!errors} />
+        hint="Banka uygulamanızdaki güncel bakiyeyi kuruşuyla yazın, örneğin 26.845,44." invalid={!!errors} />
       <ErrorText errors={errors} />
       <Actions submit="Karşılaştır" onCancel={() => onDone(null)} />
     </Form>
   );
 }
 
-export default function BakiyeSheet({ state, commit, today, onClose, onToast }) {
+export default function BakiyeSheet({ state, commit, today, onClose, onToast, onStatement }) {
   const [checking, setChecking] = useState(null);
   const v = balanceView(state, today);
   const b = v.bar;
   const account = v.banks.find(a => a.id === checking);
+  const hasCard = Object.values(state.accounts).some(a => a.type === "credit");
 
   return (
     <Sheet title="Kullanılabilir tutar" onClose={onClose}>
@@ -125,6 +173,9 @@ export default function BakiyeSheet({ state, commit, today, onClose, onToast }) 
             Harcamalar bankadan yapıldığı için referans bankadır. Banka uygulamanızdaki bakiye buradakinden farklıysa eksik ya da yanlış girilmiş bir kayıt var demektir. Kredi kartı borcu bu toplamda yoktur; ekstresi bloke içinde düşülür.
           </p>
         </section>
+
+        {hasCard && <CardTransfers state={state} commit={commit} today={today} onToast={onToast} />}
+        {hasCard && onStatement && <button type="button" className="v3-link" style={{ alignSelf: "flex-start", minHeight: 44, padding: 0 }} onClick={onStatement}>Kart ekstresiyle eşitle</button>}
 
         <div className="v3-actions" style={{ marginTop: 0 }}>
           <button type="button" className="v3-submit" onClick={onClose}>Kapat</button>

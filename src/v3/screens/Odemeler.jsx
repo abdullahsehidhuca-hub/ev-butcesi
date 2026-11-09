@@ -59,7 +59,7 @@ export default function Odemeler({ state, today, onPay, onAdd }) {
         {onAdd && <button type="button" className="t-sub c-blue" style={{ minHeight: 44, fontWeight: 500 }} onClick={onAdd}>Ödeme ekle</button>}
       </header>
       <nav className="row between" style={{ padding: "0 4px" }} aria-label="Dönem">
-        <button type="button" className="t-sub c-blue" style={{ minHeight: 44 }} onClick={() => setPeriod(prevPeriod(period))} aria-label={`Önceki dönem: ${periodLabel(prevPeriod(period))}`}>‹ {monthOf(prevPeriod(period))}</button>
+        <button type="button" className="t-sub c-blue" style={{ minHeight: 44, minWidth: 44 }} onClick={() => setPeriod(prevPeriod(period))} aria-label={`Önceki dönem: ${periodLabel(prevPeriod(period))}`}>‹ {monthOf(prevPeriod(period))}</button>
         <span className="b" style={{ fontSize: 17 }} aria-live="polite">{periodLabel(period)}</span>
         <button type="button" className="t-sub c-blue" style={{ minHeight: 44 }} onClick={() => setPeriod(nextPeriod(period))} aria-label={`Sonraki dönem: ${periodLabel(nextPeriod(period))}`}>{monthOf(nextPeriod(period))} ›</button>
       </nav>

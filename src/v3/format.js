@@ -5,16 +5,20 @@ import { toMinor, periodRange } from "../core/index.js";
 
 export const MONTHS = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
 const SYMBOL = { TRY: "₺", USD: "$", EUR: "€", XAU: "gr" };
-const NUM = new Intl.NumberFormat("tr-TR", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+// Tam lira sade yazılır ("14.550"); kuruş varsa ekstrelerdeki gibi her zaman iki basamak ("12,50").
+// Kuruş hiçbir zaman yuvarlanmaz: tutar kuruş cinsinden tam sayı olarak saklanır.
+const WHOLE = new Intl.NumberFormat("tr-TR", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+const CENTS = new Intl.NumberFormat("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export const symbolOf = currency => SYMBOL[currency] || currency;
-export const fmtNumber = minor => NUM.format(minor / 100);
-// "14.550 ₺", "48.265,44 ₺"
+export const fmtNumber = minor => (Math.round(minor) % 100 ? CENTS : WHOLE).format(minor / 100);
+// "14.550 ₺", "48.265,44 ₺", "12,50 ₺"
 export const fmtMoney = (minor, currency = "TRY") => `${fmtNumber(minor)} ${symbolOf(currency)}`;
 // "+3.200 ₺" / "-1.420 ₺"
 export const fmtSigned = (minor, currency = "TRY") => `${minor > 0 ? "+" : minor < 0 ? "-" : ""}${fmtMoney(Math.abs(minor), currency)}`;
 
-// Kullanıcının yazdığı tutarı kuruşa çevirir; geçersizse null.
+// Kullanıcının yazdığı tutarı kuruşa çevirir; geçersizse null. Virgülden sonra en fazla iki
+// basamak kabul edilir; üçüncü basamak yazılırsa yuvarlanmaz, geçersiz sayılır.
 // "1.234,56" → 123456 · "345" → 34500 · "12,5" ve "12.5" → 1250 · "1.250" → 125000 (binlik ayraç)
 export function parseAmount(text) {
   let s = String(text ?? "").replace(/[\s₺]/g, "");
