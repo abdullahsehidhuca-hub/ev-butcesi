@@ -56,12 +56,16 @@ test("davetle katılma akışı çalışır ve kod tek kullanımlıktır", async
   await ok(req("PUT", "invitations/123456", ADMIN, { familyId: ADMIN, name: "Kadriye", email: "k@x", used: false }), "davet oluşturma");
   await ok(req("GET", "invitations/123456", null), "kodla tek davet okunur (girişten önce)");
   await denied(req("PUT", "invitations/123456", STRANGER, { familyId: STRANGER, used: false }), "daveti ele geçirme");
-  await ok(req("PUT", `families/${ADMIN}/members/${MEMBER}`, MEMBER, { name: "Kadriye", email: "k@x", role: "member", inviteCode: "123456" }), "üye kaydı");
+  // Üye kaydı tek başına yazılamaz; kodun kullanıldı işaretiyle aynı atomik yazımda gitmeli.
+  await denied(req("PUT", `families/${ADMIN}/members/${MEMBER}`, MEMBER, { name: "Kadriye", email: "k@x", role: "member", inviteCode: "123456" }), "üye kaydı tek başına");
+  await denied(req("PUT", "invitations/123456/used", MEMBER, true), "üye olmadan kodu yakma");
+  await ok(req("PATCH", "", MEMBER, { [`families/${ADMIN}/members/${MEMBER}`]: { name: "Kadriye", email: "k@x", role: "member", inviteCode: "123456" }, "invitations/123456/used": true }), "atomik katılım");
   await ok(req("PUT", `userFamilies/${MEMBER}`, MEMBER, { familyId: ADMIN, code: "123456", role: "member" }), "userFamilies");
-  await ok(req("PUT", "invitations/123456/used", MEMBER, true), "davet kullanıldı");
   await ok(req("PUT", "nameIndex/kadriye", MEMBER, { email: "k@x", familyId: ADMIN, uid: MEMBER }), "isim kaydı");
   // Aynı kodu ikinci kez kullanmak reddedilir.
   await denied(req("PUT", `families/${ADMIN}/members/${STRANGER}`, STRANGER, { name: "X", role: "member", inviteCode: "123456" }), "kullanılmış kod");
+  await denied(req("PATCH", "", STRANGER, { [`families/${ADMIN}/members/${STRANGER}`]: { name: "X", role: "member", inviteCode: "123456" }, "invitations/123456/used": true }), "kullanılmış kodla atomik katılım");
+  await denied(req("PUT", "invitations/123456/used", MEMBER, true), "kullanılmış kodu yeniden işaretleme");
   await denied(req("PUT", "invitations/123456/used", STRANGER, false), "kodu yeniden açma");
 });
 

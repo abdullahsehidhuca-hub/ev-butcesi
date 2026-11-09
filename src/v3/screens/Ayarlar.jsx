@@ -1,5 +1,6 @@
 // Ayarlar (taslak C6): Apple Ayarlar düzeninde gruplu liste. Satırlar mevcut v3 çekmecelerini açar;
 // dokunulmayan satır düğme değildir. Görünüm satırı temayı değiştirir.
+// Metinler uygulamayı ilk kez kullanan kişiye yazılır: geliştirme sürümlerinden (v3, eski uygulama) söz edilmez.
 import { useRef } from "react";
 import { Tile, Icon } from "../components/ui.jsx";
 import { balanceOf } from "../../core/index.js";
@@ -30,16 +31,17 @@ function Row({ icon, color, title, sub, value, onClick, tint, danger, href }) {
 }
 
 // Bulut satırı: durum, açıklama ve (gerekiyorsa) yapılacak iş.
-function cloudRow(cloud = { status: "off" }, memberCount) {
+// Giriş ve aile kurma çekmecesi (HesapSheet) buradan açılır.
+function cloudRow(cloud = { status: "off" }, memberCount, open) {
   switch (cloud.status) {
     case "synced": return { title: "Aile hesabında eşitleniyor", sub: `${memberCount > 1 ? `${memberCount} üye · ` : ""}değişiklikler anında herkese yansır` };
     case "offline": return { title: "Çevrimdışı", sub: "Değişiklikler bu cihazda bekliyor; bağlantı gelince eşitlenir" };
     case "loading": return { title: "Bulut bağlanıyor…", sub: "Bu arada veriler bu cihazda saklanıyor" };
-    case "signedOut": return { title: "Aile hesabına giriş yapılmadı", sub: "Eski sürümden bir kez giriş yapın, sonra bu adrese dönün", href: "/" };
-    case "noFamily": return { title: "Aile kaydı bulunamadı", sub: "Eski sürümde aile oluşturun ya da davet koduyla katılın", href: "/" };
+    case "signedOut": return { title: "Aile hesabına giriş yapın", sub: "Verileriniz tüm cihazlarınızda ve aile üyelerinizde eşitlenir", tint: true, onClick: () => open({ name: "login" }) };
+    case "noFamily": return { title: "Aile hesabı kurun", sub: "Yeni aile oluşturun ya da davet koduyla katılın", tint: true, onClick: () => open({ name: "login" }) };
     case "needsUpload": return { title: "Bu cihazdaki veri buluta yüklenmedi", sub: "Güncel ekranındaki uyarıdan aile hesabına yükleyin" };
     case "error": return { title: "Bulutla eşitlenemedi", sub: "Veriler bu cihazda saklanıyor; düzenli yedek alın", danger: true };
-    default: return { title: "Örnek veri · buluta yazılmaz", sub: "Yalnız bu bilgisayarda, gerçek veriden ayrı" };
+    default: return { title: "Örnek veri · buluta yazılmaz", sub: "Yalnız bu cihazda, gerçek veriden ayrı" };
   }
 }
 
@@ -107,16 +109,15 @@ export default function Ayarlar({ state, today, open, theme, onTheme, backup, cl
       <span className="t-cap">Veri ve görünüm</span>
       <section className="list" style={group} aria-label="Veri ve görünüm">
         <Row icon="moon" color="indigo" title="Görünüm" value={THEMES.find(t => t[0] === theme)?.[1]} onClick={nextTheme} />
-        <Row icon="cloud" color="cyan" {...cloudRow(cloud, Object.keys(members).length)} />
+        <Row icon="cloud" color="cyan" {...cloudRow(cloud, Object.keys(members).length, open)} />
         {backup && <>
-          <Row icon="export" color="green" title="Yedek indir" sub="Tüm v3 verisi tek dosyada (JSON)" onClick={backup.exportJson} />
-          <Row icon="repeat" color="orange" title="Yedekten geri yükle" sub={cloud?.status === "synced" ? "Aile hesabındaki v3 verisinin yerine geçer; önce sorar" : "Bu cihazdaki v3 verisinin yerine geçer; önce sorar"} onClick={() => fileRef.current?.click()} />
+          <Row icon="export" color="green" title="Yedek indir" sub="Tüm verileriniz tek dosyada (JSON)" onClick={backup.exportJson} />
+          <Row icon="repeat" color="orange" title="Yedekten geri yükle" sub={cloud?.status === "synced" ? "Aile hesabındaki verinin yerine geçer; önce sorar" : "Bu cihazdaki verinin yerine geçer; önce sorar"} onClick={() => fileRef.current?.click()} />
           <Row icon="export" color="teal" title="İşlemleri CSV olarak indir" sub={`${Object.keys(state.transactions).length} işlem · Excel ve Numbers ile açılır`} onClick={backup.exportCsv} />
           <input ref={fileRef} type="file" accept="application/json,.json" hidden aria-hidden="true" tabIndex={-1}
             onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) backup.restore(f); }} />
         </>}
-        <Row icon="alert" color="red" title="Tüm verileri sil" sub="Yalnız bu sürümün verisi; eski uygulama etkilenmez" danger onClick={() => open({ name: "reset" })} />
-        <Row icon="back" color="gray" title="Eski sürüme dön" sub="Yayındaki uygulama değişmedi" href="/" />
+        <Row icon="alert" color="red" title="Tüm verileri sil" sub={cloud?.status === "synced" ? "Aile hesabındaki tüm veriler silinir; önce sorar" : "Bu cihazdaki tüm veriler silinir; önce sorar"} danger onClick={() => open({ name: "reset" })} />
       </section>
     </>
   );

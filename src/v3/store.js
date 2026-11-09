@@ -75,7 +75,7 @@ export function parseBackup(text) {
   let data;
   try { data = JSON.parse(text); } catch { throw new Error("Dosya okunamadı: geçerli bir yedek değil."); }
   const s = data?.app === "ev-butcesi-v3" ? data.state : null;
-  if (!s) throw new Error("Bu dosya Ev Bütçesi v3 yedeği değil.");
+  if (!s) throw new Error("Bu dosya bir Ev Bütçesi yedeği değil.");
   if (s.schemaVersion !== SCHEMA_VERSION) throw new Error("Yedek farklı bir sürümden; geri yüklenemez.");
   for (const k of ["accounts", "categories", "obligations", "transactions"]) {
     if (!s[k] || typeof s[k] !== "object" || Array.isArray(s[k])) throw new Error("Yedek eksik ya da bozuk.");

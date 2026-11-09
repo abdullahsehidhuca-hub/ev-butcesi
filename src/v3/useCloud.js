@@ -23,6 +23,7 @@ export function useCloud({ enabled, stateRef, replaceState, baseKey, localCopyKe
   const [members, setMembers] = useState({});
   const [user, setUser] = useState(null);
   const [familyId, setFamilyId] = useState(null);
+  const [nonce, setNonce] = useState(0);
   const base = useRef(null);
   const online = useRef(true);
   const target = useRef(null);
@@ -74,7 +75,10 @@ export function useCloud({ enabled, stateRef, replaceState, baseKey, localCopyKe
       }, e => { setError(e?.message || String(e)); setStatus("error"); });
     });
     return () => { alive = false; stopAuth(); stopData(); stopConn(); };
-  }, [enabled]);
+  }, [enabled, nonce]);
+
+  // Aile kurulunca ya da katılınca oturum değişmez; bağlantı yeniden kurulup aile okunur.
+  const reload = useCallback(() => setNonce(n => n + 1), []);
 
   // Her yerel değişiklikten sonra çağrılır: son görülen buluttan farkı yazar.
   const push = useCallback(state => {
@@ -90,5 +94,5 @@ export function useCloud({ enabled, stateRef, replaceState, baseKey, localCopyKe
     set(target.current, toCloud(stateRef.current)).catch(e => { setError(e?.message || String(e)); setStatus("error"); });
   }, []);
 
-  return { status, error, members, user, familyId, push, upload };
+  return { status, error, members, user, familyId, push, upload, reload };
 }

@@ -112,7 +112,7 @@ export default function Ozet({ state, today, members = {}, overrides, open, onRe
       {missing?.length > 0 && (
         <div className="v3-alert" role="status">
           <strong>{missing.join(", ")} kuru eksik</strong>
-          Dövizli kalemler bu rakamlara katılmadı. Kur girişi sonraki sürümde.
+          Dövizli kalemler bu rakamlara katılmadı.
         </div>
       )}
 

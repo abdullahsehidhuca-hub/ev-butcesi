@@ -18,6 +18,7 @@ import CozSheet from "./screens/CozSheet.jsx";
 import BakiyeSheet from "./screens/BakiyeSheet.jsx";
 import KapatSheet from "./screens/KapatSheet.jsx";
 import { TxListSheet, TxEditSheet } from "./screens/IslemlerSheet.jsx";
+import HesapSheet from "./screens/HesapSheet.jsx";
 import { PaySheet, AccountSheet, CategorySheet, ObligationSheet, InstallmentSheet, PayDaySheet, ResetSheet } from "./Sheets.jsx";
 import "./v3.css";
 
@@ -57,7 +58,7 @@ export default function V3App({ sample }) {
   userRef.current = cloud.user?.uid || null;
   const synced = cloud.status === "synced" || cloud.status === "offline";
 
-  useEffect(() => { document.title = "Ev Bütçesi — v3"; }, []);
+  useEffect(() => { document.title = "Ev Bütçesi"; }, []);
 
   // Her değişiklik bu cihaza yazılır; ilk açılışta yazılmaz.
   useEffect(() => {
@@ -149,7 +150,7 @@ export default function V3App({ sample }) {
       let next;
       try { next = parseBackup(await file.text()); } catch (e) { setToast(e.message); return; }
       const n = Object.keys(next.transactions).length;
-      const where = synced ? "Aile hesabındaki v3 verisinin (tüm üyeler için)" : "Bu cihazdaki v3 verisinin";
+      const where = synced ? "Aile hesabındaki verinin (tüm üyeler için)" : "Bu cihazdaki verinin";
       if (!confirm(`Yedekte ${Object.keys(next.accounts).length} hesap ve ${n} işlem var. ${where} yerine geçsin mi?`)) return;
       commit(() => next);
       setToast("Yedek geri yüklendi");
@@ -173,7 +174,7 @@ export default function V3App({ sample }) {
         {sample && (
           <div className="v3-alert" role="status">
             <strong>Örnek veri · bugün 26 Kasım 2026 sayılıyor</strong>
-            Yalnız bu bilgisayarda, gerçek v3 verisinden ayrı tutulur. Değişiklikleri deneyebilirsiniz.
+            Yalnız bu cihazda, gerçek veriden ayrı tutulur. Değişiklikleri deneyebilirsiniz.
             <span className="row" style={{ gap: 16, flexWrap: "wrap" }}>
               <button type="button" className="v3-link" style={{ padding: 0 }} onClick={reloadSample}>Baştan yükle</button>
               <a className="v3-link" href="/v3">Gerçek veriye geç</a>
@@ -188,16 +189,16 @@ export default function V3App({ sample }) {
         )}
         {cloud.status === "needsUpload" && (
           <div className="v3-alert" role="status">
-            <strong>Bu cihazdaki v3 verisi henüz aile hesabında değil</strong>
-            Yüklerseniz aynı hesapla giren aile üyeleri de görür ve değiştirebilir. Eski uygulamanın verisi etkilenmez.
+            <strong>Bu cihazdaki veri henüz aile hesabında değil</strong>
+            Yüklerseniz aile üyeleriniz de görür ve değiştirebilir.
             <button type="button" className="v3-link" style={{ padding: 0 }}
-              onClick={() => { if (confirm("Bu cihazdaki v3 verisi aile hesabına yüklensin mi?")) cloud.upload(); }}>Aile hesabına yükle</button>
+              onClick={() => { if (confirm("Bu cihazdaki veri aile hesabına yüklensin mi?")) cloud.upload(); }}>Aile hesabına yükle</button>
           </div>
         )}
         {cloud.status === "error" && (
           <div className="v3-alert is-error" role="alert">
             <strong>Bulutla eşitlenemedi</strong>
-            Değişiklikler bu cihazda saklanmaya devam ediyor. {/permission|izin/i.test(cloud.error || "") ? "Veritabanı kuralları v3 yoluna izin vermiyor olabilir." : "Bağlantıyı kontrol edip sayfayı yenileyin."}
+            Değişiklikler bu cihazda saklanmaya devam ediyor. {/permission|izin/i.test(cloud.error || "") ? "Bu aile hesabına yazma izniniz yok; aile yöneticisine başvurun." : "Bağlantıyı kontrol edip sayfayı yenileyin."}
           </div>
         )}
         {saveFailed && (
@@ -229,6 +230,7 @@ export default function V3App({ sample }) {
       {sheet?.name === "installment" && <InstallmentSheet {...props} />}
       {sheet?.name === "payday" && <PayDaySheet {...props} />}
       {sheet?.name === "reset" && <ResetSheet {...props} synced={synced} />}
+      {sheet?.name === "login" && !sample && <HesapSheet cloud={cloud} onClose={close} onDone={msg => { setSheet(null); setToast(msg); cloud.reload(); }} />}
       {toast && <div className="toast" role="status">{toast}</div>}
     </div>
   );

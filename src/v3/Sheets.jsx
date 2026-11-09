@@ -308,8 +308,8 @@ export function ResetSheet({ commit, onClose, synced }) {
   return (
     <Sheet title="Tüm verileri sil" onClose={onClose}>
       <p className="v3-sheet-text">{synced
-        ? "Aile hesabındaki v3 hesapları, kategorileri, ödemeleri ve harcamaları tüm üyeler için silinir. Geri alınamaz; önce yedek indirin. Eski uygulamanın verisi etkilenmez."
-        : "Bu cihazdaki hesaplar, kategoriler, ödemeler ve harcamalar silinir. Geri alınamaz. Eski uygulamanın verisi etkilenmez."}</p>
+        ? "Aile hesabındaki hesaplar, kategoriler, ödemeler ve harcamalar tüm üyeler için silinir. Geri alınamaz; önce yedek indirin."
+        : "Bu cihazdaki hesaplar, kategoriler, ödemeler ve harcamalar silinir. Geri alınamaz; önce yedek indirin."}</p>
       <Form onSubmit={save}><Actions submit="Sil" onCancel={onClose} danger /></Form>
     </Sheet>
   );
