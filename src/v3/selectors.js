@@ -27,8 +27,9 @@ export function mainAccountId(state) {
   return income?.accountId || state.settings?.defaultAccountId || Object.keys(state.accounts)[0];
 }
 
-// Kartın son ödeme tarihi. Motorda henüz yok; hesapta paymentDay alanı varsa kullanılır.
-const cardDueDate = (account, period, payDay) => account.paymentDay ? dateInPeriod(period, account.paymentDay, payDay) : periodRange(period, payDay).end;
+// Kartın son ödeme tarihi: kesim günü girilmişse motorun hesapladığı ekstre tarihi, yoksa hesaptaki
+// paymentDay, o da yoksa dönemin son günü.
+const cardDueDate = (account, period, payDay, card) => card?.dueDate || (account.paymentDay ? dateInPeriod(period, account.paymentDay, payDay) : periodRange(period, payDay).end);
 
 // Dönemin ödeme kalemleri: yükümlülükler + kredi kartı ekstresi, tarih sırasıyla.
 export function paymentsOf(state, period) {
@@ -47,7 +48,7 @@ export function paymentsOf(state, period) {
     if (c.charges <= 0) continue;
     const acc = state.accounts[c.accountId];
     items.push({ key: `c:${c.accountId}:${period}`, type: "card", accountId: c.accountId, period, name: `${c.name} ekstresi`, kind: "card", icon: "card", color: "pink",
-      date: cardDueDate(acc, period, payDay), amount: c.charges, paid: c.due === 0, auto: false, open: c.due });
+      date: cardDueDate(acc, period, payDay, c), amount: c.charges, paid: c.due === 0, auto: false, open: c.due });
   }
   return items.sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name, "tr"));
 }
@@ -202,7 +203,7 @@ export function transactionsView(state, { period = "all", query = "" } = {}) {
     .filter(t => period === "all" || txPeriod(t, payDay) === period)
     .filter(t => !q || words(t).includes(q))
     .sort((a, b) => b.date.localeCompare(a.date) || (b.createdAt || "").localeCompare(a.createdAt || ""));
-  const signed = t => t.type === "income" || t.type === "refund" ? t.amount : t.type === "transfer" ? 0 : -t.amount;
+  const signed = t => t.type === "income" || t.type === "refund" ? t.amount : t.type === "transfer" || t.type === "exchange" ? 0 : -t.amount;
   return { list, periods, net: sum(list.filter(t => t.currency === "TRY").map(signed)), closed: p => !!state.closedPeriods?.[p] };
 }
 
@@ -244,7 +245,7 @@ export function balanceView(state, today) {
   const bank = sum(banks.map(b => b.balance));
   const blockedItems = paymentsOf(state, o.period).filter(i => !i.paid && !i.auto && i.open > 0);
   const blocked = sum(blockedItems.map(i => i.open));
-  return { available: o.safe, bank, banks, blocked, blockedItems, afterBlocked: bank - blocked, bar: o.salaryBar };
+  return { available: o.safe, bank, banks, blocked, blockedItems, afterBlocked: bank - blocked, bar: o.salaryBar, period: o.period, summary: o.summary };
 }
 
 // Hesap bakiyeleri ve TL hesapların toplamı (kredi kartı borcu eksi olarak düşer).

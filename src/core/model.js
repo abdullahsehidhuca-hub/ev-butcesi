@@ -17,7 +17,10 @@ export const SCHEMA_VERSION = 2;
 
 export const ACCOUNT_TYPES = ["bank", "cash", "credit", "debit"];
 // refund: iade — harcamanın kategorisinden düşer, para hesaba geri girer.
-export const TX_TYPES = ["expense", "income", "transfer", "refund"];
+// exchange: farklı para birimli hesaplar arası alım-satım (TL ile döviz/altın alma, birikimi bozdurma).
+//   accountId'den amount (kendi biriminde) çıkar, toAccountId'ye toAmount (onun biriminde) girer.
+//   Gelir ya da gider değildir; bütçeyi yalnız toBudget işaretliyse (birikimden serbest tutara) etkiler.
+export const TX_TYPES = ["expense", "income", "transfer", "refund", "exchange"];
 export const OBLIGATION_KINDS = ["fixed", "installment", "debt", "income"];
 
 export function emptyState() {
@@ -29,13 +32,17 @@ export function emptyState() {
     transactions: {},
     obligations: {},
     closedPeriods: {},
-    merchantLabels: {}
+    merchantLabels: {},
+    goals: {},
+    carryovers: {}
   };
 }
 
 // account: { id, name, type, currency, cutoffDay? (kredi kartı hesap kesim günü),
 //   opening?: { date, balance } (bu tarihin BAŞINDAKİ bakiye, kuruş; kartta borç eksi yazılır) }
 // category: { id, name, icon?, budget? (aylık, kuruş), keywords? (etiketleme), archived? }
+// goal: birikim hedefi / acil durum fonu (src/core/savings.js)
+// carryovers: { dönem: devreden kararı } (src/core/carryover.js)
 // merchantLabels: { satıcı anahtarı: categoryId } — kullanıcı düzeltmelerinden öğrenilir
 // transaction: { id, type, date, amount, currency, accountId, toAccountId?, categoryId?,
 //   note?, obligationId?, period? (yükümlülüğün hangi dönemine ait olduğu),
@@ -59,6 +66,13 @@ export function validateTransaction(state, t) {
     err(e, !!state.accounts[t.toAccountId], "hedef hesap bulunamadı");
     err(e, t.toAccountId !== t.accountId, "aynı hesaba aktarım yapılamaz");
     err(e, state.accounts[t.toAccountId]?.currency === state.accounts[t.accountId]?.currency, "farklı para birimli hesaplar arası aktarım desteklenmiyor");
+  }
+  if (t.type === "exchange") {
+    const to = state.accounts[t.toAccountId];
+    err(e, !!to, "hedef hesap bulunamadı");
+    err(e, !to || to.currency !== state.accounts[t.accountId]?.currency, "aynı para birimli hesaplar arasında aktarım kullanın");
+    err(e, !to || to.type !== "credit", "kredi kartına döviz/altın aktarılamaz");
+    err(e, isMinor(t.toAmount) && t.toAmount > 0, "alınan miktar sıfırdan büyük olmalı");
   }
   if (t.categoryId != null) err(e, !!state.categories[t.categoryId], "kategori bulunamadı");
   if (t.obligationId != null) {
@@ -122,8 +136,10 @@ export function addAccount(state, a) {
   return putRecord(state, "accounts", a);
 }
 
-export function addTransaction(state, t) {
+// Kapalı döneme yeni kayıt eklenmez: dönemin rakamları dondurulduğu için kayıt hiçbir yere yansımazdı.
+export function addTransaction(state, t, { allowClosed = false } = {}) {
   const e = validateTransaction(state, t);
+  if (!e.length) guardClosedTx(state, t, allowClosed);
   if (e.length) throw new ValidationError(e);
   return putRecord(state, "transactions", t);
 }
@@ -178,10 +194,13 @@ export function updateTransaction(state, id, changes, { allowClosed = false } = 
   return putRecord(state, "transactions", next);
 }
 
-export function deleteTransaction(state, id, { allowClosed = false } = {}) {
+// Devreden kararıyla oluşan kayıt (carryover) tek başına silinmez; karar geri alınınca silinir
+// (src/core/carryover.js undoCarryover). Yoksa karar kaydı sahipsiz kalırdı.
+export function deleteTransaction(state, id, { allowClosed = false, allowCarryover = false } = {}) {
   const old = state.transactions[id];
   if (!old) return state;
   guardClosedTx(state, old, allowClosed);
+  if (old.carryover && !allowCarryover) throw new ValidationError(["bu kayıt devreden kararıyla oluştu; silmek için devreden kararını geri alın"]);
   return removeRecord(state, "transactions", id);
 }
 
@@ -207,8 +226,9 @@ export function deleteAccount(state, id) {
 }
 
 // Ödemesi girilmiş yükümlülük silinmez; sonlandırılır (geçmiş korunur).
-export function deleteObligation(state, id) {
+export function deleteObligation(state, id, { allowCarryover = false } = {}) {
   if (txs(state).some(t => t.obligationId === id)) throw new ValidationError(["ödemesi girilmiş kalem silinemez; sonlandırın"]);
+  if (state.obligations[id]?.carriedFrom?.carryover && !allowCarryover) throw new ValidationError(["bu borç devreden kararıyla oluştu; silmek için devreden kararını geri alın"]);
   return removeRecord(state, "obligations", id);
 }
 

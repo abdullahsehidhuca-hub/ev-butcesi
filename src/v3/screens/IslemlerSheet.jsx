@@ -1,9 +1,11 @@
 // Tüm işlemler (eski uygulamadaki "Aylık işlem geçmişi" karşılığı): dönem süzgeci, arama, düzenleme ve silme.
 // Düzenleme çekirdekteki updateTransaction / deleteTransaction ile yapılır; kapalı dönemin kaydı değişmez.
+// Döviz/altın alım-satımında çıkan tutar ve alınan miktar ayrı düzenlenir. Devreden kararıyla oluşan kayıt
+// silinince karar da geri alınır (undoCarryover) ve dönem yeniden karar bekler.
 import { useState } from "react";
-import { updateTransaction, deleteTransaction, txPeriod, isCardExpense, markCardTransferred } from "../../core/index.js";
+import { updateTransaction, deleteTransaction, undoCarryover, txPeriod, isCardExpense, markCardTransferred } from "../../core/index.js";
 import { Sheet, Field, SelectField, ErrorText, Actions, Form } from "../ui.jsx";
-import { parseAmount, amountText } from "../format.js";
+import { parseAmount, amountText, symbolOf } from "../format.js";
 import { transactionsView, periodLabel, fmt } from "../selectors.js";
 import { TxRow } from "./Ozet.jsx";
 
@@ -32,7 +34,7 @@ export function TxListSheet({ state, onClose, onEdit, members = {}, initial }) {
 }
 
 const byName = (a, b) => a.name.localeCompare(b.name, "tr");
-const TYPE = { expense: "Harcama", income: "Gelir", refund: "İade", transfer: "Aktarım" };
+const TYPE = { expense: "Harcama", income: "Gelir", refund: "İade", transfer: "Aktarım", exchange: "Döviz/altın alım-satımı" };
 
 // "Karta aktarıldı" onay kutusu: kredi kartı harcamasının karşılığı bankadan karta aktarıldı mı.
 function TransferCheck({ checked, onChange, since }) {
@@ -55,6 +57,7 @@ export function TxEditSheet({ state, commit, onClose, id, onToast, today }) {
   const [categoryId, setCategoryId] = useState(t?.categoryId || "");
   const [accountId, setAccountId] = useState(t?.accountId || "");
   const [toAccountId, setToAccountId] = useState(t?.toAccountId || "");
+  const [toAmount, setToAmount] = useState(t?.toAmount ? amountText(t.toAmount) : "");
   const [transferred, setTransferred] = useState(!!t?.cardTransferredAt);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [errors, setErrors] = useState(null);
@@ -71,7 +74,9 @@ export function TxEditSheet({ state, commit, onClose, id, onToast, today }) {
   const period = txPeriod(t, state.settings.payDay);
   const closed = !!state.closedPeriods?.[period];
   const ob = t.obligationId && state.obligations[t.obligationId];
-  const transfer = t.type === "transfer";
+  const transfer = t.type === "transfer" || t.type === "exchange";
+  const exchange = t.type === "exchange";
+  const unit = id => symbolOf(state.accounts[id]?.currency || t.currency);
   const hasCategory = !ob && !t.adjustment && (t.type === "expense" || t.type === "refund");
   // Seçili hesap kredi kartıysa bayrak gösterilir (hesap değiştirildikçe güncellenir).
   const cardExpense = isCardExpense(state, { ...t, accountId });
@@ -112,6 +117,11 @@ export function TxEditSheet({ state, commit, onClose, id, onToast, today }) {
     const changes = { amount: minor, date, note: note.trim() || undefined, accountId, currency: state.accounts[accountId]?.currency || t.currency };
     if (hasCategory) changes.categoryId = categoryId || null;
     if (transfer) changes.toAccountId = toAccountId;
+    if (exchange) {
+      const into = parseAmount(toAmount);
+      if (!into) return setErrors([`alınan miktarı girin (${unit(toAccountId)})`]);
+      changes.toAmount = into;
+    }
     const errs = commit(s => {
       let next = updateTransaction(s, id, changes);
       const nt = next.transactions[id];
@@ -123,21 +133,24 @@ export function TxEditSheet({ state, commit, onClose, id, onToast, today }) {
     if (errs) setErrors(errs); else { onToast?.("İşlem güncellendi"); onClose(); }
   };
   const remove = () => {
-    const errs = commit(s => deleteTransaction(s, id));
-    if (errs) setErrors(errs); else { onToast?.("İşlem silindi"); onClose(); }
+    const errs = commit(s => t.carryover ? undoCarryover(s, t.carryover) : deleteTransaction(s, id));
+    if (errs) setErrors(errs); else { onToast?.(t.carryover ? "İşlem silindi; devreden kararı geri alındı" : "İşlem silindi"); onClose(); }
   };
 
   return (
     <Sheet title={title} onClose={onClose}>
+      {t.carryover && <p className="v3-sheet-text">Bu kayıt {periodLabel(t.carryover)} devredeni kararıyla oluştu. Silerseniz karar da geri alınır ve devreden yeniden karar bekler.</p>}
       {ob && <p className="v3-sheet-text">{ob.name} için {periodLabel(period)} dönemine ait {t.type === "income" ? "gelir kaydı. Silerseniz yeniden beklenen gelir olarak görünür." : "ödeme. Silerseniz kalem yeniden ödenecek olarak görünür."}</p>}
       <Form onSubmit={save}>
-        <Field label="Tutar (₺)" value={amount} onChange={setAmount} inputMode="decimal" placeholder="0,00" invalid={!!errors && !parseAmount(amount)} />
+        <Field label={exchange ? `Çıkan tutar (${unit(accountId)})` : `Tutar (${unit(accountId)})`} value={amount} onChange={setAmount} inputMode="decimal" placeholder="0,00" invalid={!!errors && !parseAmount(amount)} />
         <Field label="Tarih" type="date" value={date} onChange={setDate}
           hint={ob ? "Tarih değişse de ödeme ait olduğu dönemde kalır." : "Tarih başka bir döneme düşerse işlem o döneme geçer."} />
         <Field label="Açıklama" value={note} onChange={setNote} placeholder="Örn: Market alışverişi" />
         {hasCategory && <SelectField label="Kategori" value={categoryId} onChange={setCategoryId} options={categories} />}
         <SelectField label={transfer ? "Çıkan hesap" : t.type === "income" ? "Yatan hesap" : "Hesap"} value={accountId} onChange={setAccountId} options={accounts} />
         {transfer && <SelectField label="Giden hesap" value={toAccountId} onChange={setToAccountId} options={accounts} />}
+        {exchange && <Field label={`Alınan miktar (${unit(toAccountId)})`} value={toAmount} onChange={setToAmount} inputMode="decimal" placeholder="0"
+          hint="Giden hesaba giren miktar, kendi cinsinden." invalid={!!errors && !parseAmount(toAmount)} />}
         {cardExpense && <TransferCheck checked={transferred} onChange={setTransferred} since={t.cardTransferredAt} />}
         <ErrorText errors={errors} />
         <Actions submit="Kaydet" onCancel={onClose} />

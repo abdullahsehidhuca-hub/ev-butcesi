@@ -12,7 +12,7 @@
 import { emptyState, SCHEMA_VERSION } from "../core/index.js";
 
 export const cloudPath = familyId => `families/${familyId}/v3`;
-export const COLLECTIONS = ["accounts", "categories", "transactions", "obligations", "closedPeriods", "merchantLabels"];
+export const COLLECTIONS = ["accounts", "categories", "transactions", "obligations", "closedPeriods", "merchantLabels", "goals", "carryovers"];
 
 // Realtime Database anahtarlarında . # $ [ ] / kullanılamaz; % ile kaçırılır.
 const BAD = /[.#$[\]/%]/g;
@@ -50,10 +50,13 @@ export function fromCloud(tree) {
   const base = emptyState();
   const t = tree || {};
   const state = { ...base, schemaVersion: t.schemaVersion ?? SCHEMA_VERSION, settings: { ...base.settings, ...t.settings } };
+  if (t.settings?.cardBudgetModes) state.settings.cardBudgetModes = arr(t.settings.cardBudgetModes);
   for (const c of COLLECTIONS) {
     state[c] = Object.fromEntries(Object.entries(t[c] || {}).map(([k, v]) => [decodeKey(k), v]));
   }
   for (const [id, o] of Object.entries(state.obligations)) state.obligations[id] = { ...o, skips: arr(o.skips), changes: arr(o.changes) };
+  for (const [id, g] of Object.entries(state.goals)) state.goals[id] = { ...g, accountIds: arr(g.accountIds) };
+  for (const [id, a] of Object.entries(state.accounts)) if (a.budgetModes) state.accounts[id] = { ...a, budgetModes: arr(a.budgetModes) };
   for (const [p, s] of Object.entries(state.closedPeriods)) {
     state.closedPeriods[p] = {
       ...s,
@@ -62,7 +65,11 @@ export function fromCloud(tree) {
       spending: { total: 0, ...s.spending, byCategory: s.spending?.byCategory || {} },
       budgets: { reserved: 0, ...s.budgets, items: arr(s.budgets?.items) },
       remaining: s.remaining ?? 0, safeToSpend: s.safeToSpend ?? 0,
-      cards: arr(s.cards), missingRates: arr(s.missingRates), decisions: arr(s.decisions), rates: s.rates || {}
+      cards: arr(s.cards), missingRates: arr(s.missingRates), decisions: arr(s.decisions), rates: s.rates || {},
+      cardBudget: { blocked: 0, load: 0, pending: 0, ...s.cardBudget, cards: arr(s.cardBudget?.cards).map(c => ({
+        ...c, blockedItems: arr(c.blockedItems), loadItems: arr(c.loadItems), pendingItems: arr(c.pendingItems), statements: arr(c.statements)
+      })) },
+      carry: { in: 0, fromSavings: 0, ...s.carry }
     };
   }
   return state;

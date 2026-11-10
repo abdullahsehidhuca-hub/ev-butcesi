@@ -48,8 +48,8 @@ export function buildSampleState() {
 
   const tx = (t) => { s = addTransaction(s, { id: `t${++n}`, currency: "TRY", createdAt: now(t.date).toISOString(), ...t }); };
   const exp = (date, amount, categoryId, note, by = "u-a", accountId = "maas") => tx({ type: "expense", date, amount: TL(amount), categoryId, note, accountId, createdBy: by });
-  // Geçen dönem karta yazılan harcama (bu dönem ekstreye gelir).
-  exp("2026-10-20", 3740, "ev", "Teknosa", "u-a", "bonus");
+  // Geçen dönem, 28 Ekim hesap kesiminden sonra karta yazılan harcama (10 Aralık'ta ödenen ekstreye girer).
+  exp("2026-10-30", 3740, "ev", "Teknosa", "u-a", "bonus");
   tx({ type: "transfer", date: "2026-11-16", amount: TL(20000), accountId: "maas", toAccountId: "birikim", note: "Birikime aktarım", createdBy: "u-a" });
   exp("2026-11-17", 2300, "market", "Migros");
   exp("2026-11-18", 1500, "giyim", "LC Waikiki", "u-k");

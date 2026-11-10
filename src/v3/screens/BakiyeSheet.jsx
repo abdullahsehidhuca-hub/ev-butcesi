@@ -2,11 +2,12 @@
 // Bankadaki tutar / Bloke edilen tutar kutularının karşılığı). Bankadaki tutar uygulamanın kayıtlarına
 // göre hesaplanır; bankadaki gerçek bakiyeyle karşılaştırma (reconcile) eksik ya da hatalı kaydı gösterir.
 import { useState } from "react";
-import { reconcile, recordReconciliation, adjustBalance, cardTransferSummary, markCardTransferred } from "../../core/index.js";
+import { reconcile, recordReconciliation, adjustBalance, cardTransferSummary, markCardTransferred, carryoverOf } from "../../core/index.js";
 import { Sheet, Field, Actions, ErrorText, Form } from "../ui.jsx";
 import { parseBalance } from "../Sheets.jsx";
 import { newId } from "../store.js";
-import { balanceView, fmt, dayNum, monthShort } from "../selectors.js";
+import { balanceView, periodLabel, prevPeriod, fmt, dayNum, monthShort } from "../selectors.js";
+import { choiceText } from "./DevredenSheet.jsx";
 
 function Line({ label, value, note, strong, tone }) {
   return (
@@ -127,12 +128,18 @@ function Check({ state, commit, today, account, onDone }) {
   );
 }
 
-export default function BakiyeSheet({ state, commit, today, onClose, onToast, onStatement }) {
+export default function BakiyeSheet({ state, commit, today, onClose, onToast, onStatement, onToBudget, onCarryover }) {
   const [checking, setChecking] = useState(null);
   const v = balanceView(state, today);
   const b = v.bar;
   const account = v.banks.find(a => a.id === checking);
   const hasCard = Object.values(state.accounts).some(a => a.type === "credit");
+  const carry = v.summary.carry || { in: 0, fromSavings: 0 };
+  const cardLoad = v.summary.cardBudget?.load || 0;
+  const estimate = carryoverOf(state, v.period).amount;
+  // Son kapanan dönemin devredeni ve kararı (geri almak / değiştirmek için).
+  const lastClosed = Object.keys(state.closedPeriods || {}).sort().at(-1);
+  const last = lastClosed ? carryoverOf(state, lastClosed) : null;
 
   return (
     <Sheet title="Kullanılabilir tutar" onClose={onClose}>
@@ -148,9 +155,21 @@ export default function BakiyeSheet({ state, commit, today, onClose, onToast, on
             <Line label="Aylık bütçe (gelir)" value={`+${fmt(b.income)}`} note={b.received < b.income ? `${fmt(b.received)} alındı · ${fmt(b.income - b.received)} bekleniyor` : "Tamamı alındı"} />
             <Line label="Düzenli ödemeler" value={fmt(-b.obligations)} note={b.pending > 0 ? `${fmt(b.pending)} henüz ödenmedi` : "Hepsi ödendi ya da otomatik"} />
             <Line label="Harcandı" value={fmt(-b.spent)} />
+            {cardLoad > 0 && <Line label="Kart ekstresi" value={fmt(-cardLoad)} note="Ödendiği ayın bütçesinden ödenen kartların bu dönemki ekstresi" />}
+            {carry.in > 0 && <Line label={`${periodLabel(prevPeriod(v.period)).split(" ")[0]} açığı`} value={fmt(-carry.in)} note="Önceki dönemin açığı bu dönemden düşülsün dendi" />}
+            {carry.fromSavings > 0 && <Line label="Birikimden aktarılan" value={`+${fmt(carry.fromSavings)}`} note="Gelir değil; birikimden serbest tutara aktarıldı" />}
             <Line label="Bütçelere ayrılan" value={fmt(-b.reserved)} note="Kategori limitlerinin henüz harcanmamış kısmı" />
             <div className="sum-line"><Line label="Kullanılabilir" value={fmt(b.safe)} strong /></div>
+            <Line label="Tahmini devreden" value={`~${fmt(estimate)}`} tone={estimate < 0 ? "c-red" : undefined}
+              note="Dönem kapanınca kesinleşir. Serbest tutara eklenmez; kapanışta birikime aktarma ya da açığı karşılama kararı sorulur." />
           </dl>
+          {last && last.amount !== 0 && (
+            <dl style={{ margin: 0 }}>
+              <Line label={`${periodLabel(last.period)} devredeni`} value={fmt(last.amount)} tone={last.amount < 0 ? "c-red" : undefined} note={choiceText(last.decision)} />
+            </dl>
+          )}
+          {last && last.amount !== 0 && onCarryover && <button type="button" className="v3-link" style={{ alignSelf: "flex-start", minHeight: 44, padding: 0 }} onClick={() => onCarryover(last.period)}>{last.pending ? "Devreden için karar ver" : "Devreden kararını gör ya da değiştir"}</button>}
+          {onToBudget && <button type="button" className="v3-link" style={{ alignSelf: "flex-start", minHeight: 44, padding: 0 }} onClick={onToBudget}>Birikimden serbest tutara aktar</button>}
         </section>
 
         <section aria-label="Bankadaki tutar">

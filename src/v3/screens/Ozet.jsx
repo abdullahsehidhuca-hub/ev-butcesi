@@ -2,7 +2,9 @@
 // Ana rakam "kullanılabilir" tutardır: gelir − düzenli ödemeler − harcama − bütçelere ayrılan.
 // Dokununca bankadaki tutar, bloke ve bankayla karşılaştırma çekmecesi açılır (BakiyeSheet).
 // Hesap yoksa 3 adımlı karşılama gösterilir.
+// Kredi kartı varsa altında tek satır "Kart blokesi" durur; dokununca kart kart döküm açılır (BlokeSheet).
 import { useState } from "react";
+import { pendingCarryover, formatUnits } from "../../core/index.js";
 import { Icon, Tile, DateBadge, Avatar, Check } from "../components/ui.jsx";
 import { overview, upcoming, recent, forecast, paymentsView, accountsView, balanceView, closeCandidate, categoryName, periodLabel, fmt, fmtNum, dayNum, monthShort, monthLong } from "../selectors.js";
 
@@ -75,6 +77,9 @@ export default function Ozet({ state, today, members = {}, overrides, open, onRe
   const memberList = Object.values(members);
   const missing = o.summary.missingRates;
   const closing = closeCandidate(state, today);
+  const carry = closing ? null : pendingCarryover(state);
+  const cb = o.summary.cardBudget;
+  const hasCard = Object.values(state.accounts).some(a => a.type === "credit");
 
   return (
     <>
@@ -95,6 +100,14 @@ export default function Ozet({ state, today, members = {}, overrides, open, onRe
           <strong>{periodLabel(closing.period)} dönemini kapatın{closing.waiting > 0 ? ` (+${closing.waiting} dönem daha bekliyor)` : ""}</strong>
           {closing.open.length ? `${closing.open.length} ödeme açık kaldı: taşı, ertele ya da yok say.` : "Açık ödeme yok; dönemi tek dokunuşla dondurun."}
           <span className="t-sub c-blue" style={{ fontWeight: 600 }}>Ay kapatmaya başla</span>
+        </button>
+      )}
+
+      {carry && (
+        <button type="button" className="v3-alert" style={{ textAlign: "left", width: "100%" }} onClick={() => open({ name: "carryover", period: carry.period })}>
+          <strong>{periodLabel(carry.period)} devredeni karar bekliyor · {fmt(carry.amount)}</strong>
+          {carry.amount > 0 ? "Artan para serbest tutara eklenmedi: birikime aktarın ya da yok sayın." : "Açık kalan tutarın nasıl karşılanacağını seçin."}
+          <span className="t-sub c-blue" style={{ fontWeight: 600 }}>Karar ver</span>
         </button>
       )}
 
@@ -153,6 +166,22 @@ export default function Ozet({ state, today, members = {}, overrides, open, onRe
           <span className="t-sub c-blue" style={{ marginLeft: "auto", fontWeight: 500 }}>Döküm</span>
           <Icon name="chev" size={14} style={{ color: "var(--label3)" }} />
         </button>
+        {hasCard && cb && (
+          <button type="button" className="why-btn" onClick={() => open({ name: "blocked" })} aria-label={`Kart blokesi ${fmt(cb.blocked)}. Kart kart dökümü göster`}>
+            <span className="stack gap2">
+              <span className="t-meta">Kart blokesi</span>
+              <span className="num t-body b c-orange">{fmt(cb.blocked)}</span>
+            </span>
+            {(cb.load > 0 || cb.pending > 0) && (
+              <span className="stack gap2">
+                <span className="t-meta">{cb.load > 0 ? "Bu dönem ekstre" : "Gelecek dönem"}</span>
+                <span className="num t-body b">{fmt(cb.load > 0 ? cb.load : cb.pending)}</span>
+              </span>
+            )}
+            <span className="t-sub c-blue" style={{ marginLeft: "auto", fontWeight: 500 }}>Kartlar</span>
+            <Icon name="chev" size={14} style={{ color: "var(--label3)" }} />
+          </button>
+        )}
       </section>
 
       <Accounts state={state} today={today} onManage={onOpenSettings} />
@@ -216,7 +245,7 @@ export function TxRow({ t, state, member, onClick }) {
   const acc = id => state.accounts[id]?.name;
   const ob = t.obligationId && state.obligations[t.obligationId];
   const c = state.categories[t.categoryId];
-  const transfer = t.type === "transfer";
+  const transfer = t.type === "transfer" || t.type === "exchange";
   const plus = t.type === "income" || t.type === "refund";
   const when = `${dayNum(t.date)} ${monthShort(t.date)}`;
   const [title, sub, icon, color] = transfer
@@ -231,7 +260,7 @@ export function TxRow({ t, state, member, onClick }) {
         <span className="t-body ellipsis">{title}</span>
         <span className="t-meta ellipsis">{sub}</span>
       </span>
-      <span className={`num t-body b${plus ? " c-green" : ""}`}>{transfer ? "" : plus ? "+" : "−"}{fmt(t.amount)}</span>
+      <span className={`num t-body b${plus ? " c-green" : ""}`}>{transfer ? "" : plus ? "+" : "−"}{t.currency && t.currency !== "TRY" ? formatUnits(t.amount, t.currency) : fmt(t.amount)}</span>
       {member && <Avatar member={member} size={24} />}
     </>
   );

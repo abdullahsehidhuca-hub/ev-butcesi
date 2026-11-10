@@ -20,6 +20,10 @@ import KapatSheet from "./screens/KapatSheet.jsx";
 import { TxListSheet, TxEditSheet } from "./screens/IslemlerSheet.jsx";
 import HesapSheet from "./screens/HesapSheet.jsx";
 import EkstreSheet from "./screens/EkstreSheet.jsx";
+import DevredenSheet from "./screens/DevredenSheet.jsx";
+import BlokeSheet from "./screens/BlokeSheet.jsx";
+import BirikimAktarSheet from "./screens/BirikimAktarSheet.jsx";
+import KartOdemeSheet from "./screens/KartOdemeSheet.jsx";
 import { PaySheet, AccountSheet, CategorySheet, ObligationSheet, InstallmentSheet, PayDaySheet, ResetSheet } from "./Sheets.jsx";
 import "./v3.css";
 
@@ -218,14 +222,22 @@ export default function V3App({ sample }) {
 
       {sheet?.name === "quick" && <EkleSheet {...props} onNeedAccount={() => setSheet({ name: "account" })} onSaved={a => setToast(`${fmt(a)} eklendi`)} />}
       {sheet?.name === "resolve" && <CozSheet state={state} today={todayDate} overrides={overrides} onClose={close} onApply={apply} />}
-      {sheet?.name === "balance" && <BakiyeSheet {...props} onToast={setToast} onStatement={() => setSheet({ name: "statement", back: { name: "balance" } })} />}
+      {sheet?.name === "balance" && <BakiyeSheet {...props} onToast={setToast} onStatement={() => setSheet({ name: "statement", back: { name: "balance" } })}
+        onToBudget={() => setSheet({ name: "toBudget", back: { name: "balance" } })}
+        onCarryover={p => setSheet({ name: "carryover", period: p, back: { name: "balance" } })} />}
       {sheet?.name === "statement" && <EkstreSheet {...props} onClose={closeTo(sheet.back)} onToast={setToast} />}
       {sheet?.name === "pay" && <PaySheet {...props} onClose={closeTo(sheet.back)} period={sheet.period} target={sheet.target} />}
       {sheet?.name === "txlist" && <TxListSheet state={state} members={members} initial={sheet.filter} onClose={close}
         onEdit={(id, filter) => setSheet({ name: "tx", id, back: { name: "txlist", filter } })} />}
       {sheet?.name === "tx" && <TxEditSheet {...props} key={sheet.id} id={sheet.id} onClose={closeTo(sheet.back)} onToast={setToast} />}
       {sheet?.name === "close" && <KapatSheet {...props} onToast={setToast}
-        onPay={(item, p) => pay({ type: "obligation", obligationId: item.obligationId, period: p }, { name: "close" })} />}
+        onPay={(item, p) => pay({ type: "obligation", obligationId: item.obligationId, period: p }, { name: "close" })}
+        onCarryover={p => setSheet({ name: "carryover", period: p })} />}
+      {sheet?.name === "carryover" && <DevredenSheet {...props} key={sheet.period} period={sheet.period} onToast={setToast} onClose={closeTo(sheet.back)}
+        onFixRecords={p => setSheet({ name: "txlist", filter: { period: p } })} />}
+      {sheet?.name === "blocked" && <BlokeSheet {...props} onClose={closeTo(sheet.back)} />}
+      {sheet?.name === "toBudget" && <BirikimAktarSheet {...props} onClose={closeTo(sheet.back)} onToast={setToast} />}
+      {sheet?.name === "cardmode" && <KartOdemeSheet {...props} onToast={setToast} />}
       {sheet?.name === "account" && <AccountSheet {...props} />}
       {sheet?.name === "category" && <CategorySheet {...props} />}
       {sheet?.name === "obligation" && <ObligationSheet {...props} kind={sheet.kind} />}

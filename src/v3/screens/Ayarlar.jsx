@@ -5,6 +5,7 @@ import { useRef } from "react";
 import { Tile, Icon } from "../components/ui.jsx";
 import { balanceOf } from "../../core/index.js";
 import { fmt, mainAccountId } from "../selectors.js";
+import { globalModeAt } from "./KartOdemeSheet.jsx";
 
 const THEMES = [["system", "Sistem"], ["light", "Açık"], ["dark", "Koyu"]];
 const KIND = { fixed: "Sabit ödeme", installment: "Taksit", debt: "Borç", income: "Gelir" };
@@ -74,6 +75,10 @@ export default function Ayarlar({ state, today, open, theme, onTheme, backup, cl
             sub={join(ACCOUNT_TYPE[a.type], a.currency !== "TRY" && a.currency, a.cutoffDay && `Kesim günü ${a.cutoffDay}`, state.settings.defaultAccountId === a.id && "Varsayılan")}
             value={a.currency === "TRY" ? fmt(balanceOf(state, a.id, today)) : null} />
         ))}
+        {accounts.some(a => a.type === "credit") && (
+          <Row icon="card" color="pink" title="Kart ekstresi hangi bütçeden" sub="Genel varsayılan; kart bazında değiştirilebilir"
+            value={globalModeAt(state, today) === "pay" ? "Ödendiği ay" : "Harcandığı ay"} onClick={() => open({ name: "cardmode" })} />
+        )}
         <Row icon="plus" color="blue" title="Hesap ekle" tint onClick={() => open({ name: "account" })} />
       </section>
 

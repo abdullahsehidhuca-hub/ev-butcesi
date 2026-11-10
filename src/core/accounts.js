@@ -19,6 +19,10 @@ export function effectOn(t, accountId) {
     if (t.accountId === accountId) return -t.amount;
     if (t.toAccountId === accountId) return t.amount;
   }
+  if (t.type === "exchange") {
+    if (t.accountId === accountId) return -t.amount;
+    if (t.toAccountId === accountId) return t.toAmount;
+  }
   return 0;
 }
 

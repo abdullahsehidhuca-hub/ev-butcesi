@@ -5,6 +5,8 @@ import { toBase, sum } from "./money.js";
 import { periodOf, prevPeriod, nextPeriod, addPeriods } from "./period.js";
 import { occurrencesIn } from "./schedule.js";
 import { addObligation, skipObligation, ValidationError } from "./model.js";
+import { statementsDueIn, statementCharges } from "./cardStatement.js";
+import { cardBudget } from "./cardBudget.js";
 
 const payDayOf = state => state.settings?.payDay || 1;
 
@@ -32,6 +34,12 @@ function liveSummary(state, period, rates) {
   const inPeriod = p => all.filter(t => txPeriod(t, payDay) === p);
   const txs = inPeriod(period);
 
+  // Kart ödeme ayarı B ("ödendiği ayın bütçesinden") olan kart kalemleri bu dönemin harcama/ödeme
+  // toplamına girmez; ekstresinin ödendiği dönemde cardBudget.load olarak düşülür (src/core/cardBudget.js).
+  const cb = cardBudget(state, period, base);
+  const deferredTx = new Set(cb.cards.flatMap(c => c.deferred.filter(i => i.txId).map(i => i.txId)));
+  const deferredOb = new Set(cb.cards.flatMap(c => c.deferred.filter(i => i.obligationId).map(i => i.obligationId)));
+
   // Yükümlülük ödemeleri: ödenen tutar gerçekleşen maliyettir (fatura tutarı plandan farklı olabilir).
   // Kısmi ödeme (partial) kalemi kapatmaz; kalan tutar açık kalır.
   const paidBy = {};
@@ -50,7 +58,8 @@ function liveSummary(state, period, rates) {
     const auto = oc.kind !== "income" && state.accounts[oc.accountId]?.type === "credit";
     const settled = auto || finalBy.has(oc.obligationId);
     const open = settled ? 0 : Math.max(0, planned - paid);
-    return { ...oc, planned, paid, auto, settled, cost: settled && paid > 0 ? paid : Math.max(planned, paid), open };
+    const deferred = auto && deferredOb.has(oc.obligationId);
+    return { ...oc, planned, paid, auto, settled, cost: settled && paid > 0 ? paid : Math.max(planned, paid), open, ...(deferred ? { deferred } : {}) };
   });
   const incomeItems = items.filter(i => i.kind === "income");
   const outItems = items.filter(i => i.kind !== "income");
@@ -66,7 +75,7 @@ function liveSummary(state, period, rates) {
   // Serbest harcamalar (yükümlülüğe bağlı olmayan giderler), kategori bazında; iadeler düşülür.
   const byCategory = {};
   for (const t of txs) {
-    if ((t.type !== "expense" && t.type !== "refund") || t.obligationId) continue;
+    if ((t.type !== "expense" && t.type !== "refund") || t.obligationId || deferredTx.has(t.id)) continue;
     const k = t.adjustment ? "_adjustment" : (t.categoryId || "_none");
     const sign = t.type === "refund" ? -1 : 1;
     byCategory[k] = (byCategory[k] || 0) + sign * base(t.amount, t.currency);
@@ -79,13 +88,22 @@ function liveSummary(state, period, rates) {
     .map(c => ({ categoryId: c.id, budget: c.budget, spent: byCategory[c.id] || 0, left: Math.max(0, c.budget - (byCategory[c.id] || 0)) }));
   const reserved = sum(budgets.map(b => b.left));
 
-  const obligationsTotal = sum(outItems.map(i => i.cost));
+  const obligationsTotal = sum(outItems.filter(i => !i.deferred).map(i => i.cost));
   const obligationsOpen = sum(outItems.map(i => i.open));
-  const remaining = incomeTotal - obligationsTotal - spendingTotal;
 
-  // Kredi kartı: önceki dönemde karta yazılan giderler ile karttan otomatik çekilen
-  // yükümlülükler (taksit, abonelik) bu dönem ödenir; bu dönem karta yapılan aktarımlar düşülür.
-  // (Hesap kesim gününe göre ekstre ayrımı sonraki adımda.)
+  // Devreden (src/core/carryover.js): önceki dönemin açığı "sonraki ay bütçemden düşülsün" seçildiyse
+  // bu dönemden düşülür. Birikimden serbest tutara aktarım (toBudget işaretli aktarım) bu döneme eklenir.
+  // İkisi de gelir ya da gider değildir; ayrı satır olarak raporlanır.
+  const prevCarry = state.carryovers?.[prevPeriod(period)];
+  const carryIn = prevCarry?.choice === "nextBudget" ? Math.max(0, -prevCarry.amount) : 0;
+  const fromSavings = sum(txs.filter(t => t.toBudget && (t.type === "transfer" || t.type === "exchange"))
+    .map(t => t.type === "exchange" ? base(t.toAmount, state.accounts[t.toAccountId]?.currency) : base(t.amount, t.currency)));
+  const remaining = incomeTotal - obligationsTotal - spendingTotal - cb.load - carryIn + fromSavings;
+
+  // Kredi kartı: hesap kesim günü (cutoffDay) girilmişse son ödeme tarihi bu döneme düşen
+  // ekstre(ler) ödenir; ekstre = kesim penceresindeki harcamalar − iadeler + karttan otomatik
+  // çekilen yükümlülükler (src/core/cardStatement.js). Kesim günü yoksa önceki dönemde karta
+  // yazılanlar bu dönem ödenir. Her iki durumda bu dönem karta yapılan aktarımlar düşülür.
   const prev = prevPeriod(period);
   const prevTxs = inPeriod(prev);
   const prevLinked = new Set(prevTxs.filter(t => t.obligationId).map(t => t.obligationId));
@@ -95,8 +113,16 @@ function liveSummary(state, period, rates) {
       - sum(prevTxs.filter(t => t.type === "refund" && t.accountId === a.id).map(t => base(t.amount, t.currency)));
     const automatic = sum(prevOccurrences.filter(o => o.accountId === a.id).map(o => base(o.amount, o.currency)));
     const payments = sum(txs.filter(t => t.type === "transfer" && t.toAccountId === a.id).map(t => base(t.amount, t.currency)));
-    const charges = charged + automatic;
-    return { accountId: a.id, name: a.name, charges: Math.max(0, charges), payments, due: Math.max(0, charges - payments) };
+    let charges = charged + automatic;
+    let statements = null;
+    if (a.cutoffDay) {
+      statements = statementsDueIn(a, period, payDay).map(st => ({ ...st, ...statementCharges(state, a, st, base) }));
+      charges = sum(statements.map(st => st.total));
+    }
+    return {
+      accountId: a.id, name: a.name, charges: Math.max(0, charges), payments, due: Math.max(0, charges - payments),
+      ...(statements ? { statements, dueDate: statements[statements.length - 1]?.dueDate || null } : {})
+    };
   });
 
   return {
@@ -109,6 +135,11 @@ function liveSummary(state, period, rates) {
     remaining,
     safeToSpend: remaining - reserved,
     cards,
+    cardBudget: {
+      blocked: cb.blocked, load: cb.load, pending: cb.pending,
+      cards: cb.cards.map(({ deferred, ...c }) => c)
+    },
+    carry: { in: carryIn, fromSavings },
     missingRates: [...missing].sort()
   };
 }

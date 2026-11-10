@@ -2,6 +2,8 @@
 // karar alır ve çekirdekteki closePeriod ile dönemi dondurur. Kararlar:
 //  carry: sonraki döneme tek seferlik kalem olarak taşı · defer: bu dönemi atla (taksit/borçta takvim uzar)
 //  drop: yok say (ödendi ama girilmedi ya da gerek kalmadı)
+// Kapanıştan sonra devreden (artan ya da açık kalan para) için karar ekranı açılır (DevredenSheet);
+// devreden yeni dönemin serbest tutarına eklenmez.
 import { useState } from "react";
 import { closePeriod } from "../../core/index.js";
 import { Sheet, ErrorText, Actions, Form } from "../ui.jsx";
@@ -14,7 +16,7 @@ const CHOICES = {
 };
 const choicesFor = item => item.kind === "installment" || item.kind === "debt" ? ["carry", "defer", "drop"] : ["carry", "drop"];
 
-export default function KapatSheet({ state, commit, onClose, today, onToast, onPay }) {
+export default function KapatSheet({ state, commit, onClose, today, onToast, onPay, onCarryover }) {
   const c = closeCandidate(state, today);
   const [decisions, setDecisions] = useState({});
   const [errors, setErrors] = useState(null);
@@ -31,11 +33,13 @@ export default function KapatSheet({ state, commit, onClose, today, onToast, onP
   const s = c.summary;
   const next = periodLabel(nextPeriod(c.period));
   const carried = c.open.filter(i => (decisions[i.obligationId] || "carry") === "carry");
+  // Taşınan ya da ertelenen ödeme sonraki dönemde yeniden gider sayılır; devredene geri eklenir.
+  const carryover = s.remaining + c.open.filter(i => (decisions[i.obligationId] || "carry") !== "drop").reduce((a, i) => a + i.open, 0);
   const save = () => {
     const errs = commit(st => closePeriod(st, c.period, { decisions, closedAt: new Date().toISOString() }));
     if (errs) return setErrors(errs);
     onToast?.(`${periodLabel(c.period)} kapatıldı`);
-    onClose();
+    if (carryover !== 0 && onCarryover) onCarryover(c.period); else onClose();
   };
   const line = (label, value, cls = "") => (
     <div className="row between" style={{ minHeight: 32 }}><span className="t-sub">{label}</span><span className={`num t-body b ${cls}`}>{value}</span></div>
@@ -52,6 +56,8 @@ export default function KapatSheet({ state, commit, onClose, today, onToast, onP
         {line("Düzenli ödemeler", `−${fmt(s.obligations.total)}`)}
         {line("Harcamalar", `−${fmt(s.spending.total)}`)}
         {line("Dönem sonucu", fmt(s.remaining), s.remaining < 0 ? "c-red" : "")}
+        {line(carryover < 0 ? "Devreden açık" : "Devreden", fmt(carryover), carryover < 0 ? "c-red" : "")}
+        {carryover !== 0 && <p className="t-meta" style={{ margin: "4px 0 0" }}>Serbest tutara eklenmez. Dönemi kapatınca ne yapılacağını seçeceksiniz.</p>}
       </section>
 
       {c.open.length > 0 ? (

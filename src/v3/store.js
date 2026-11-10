@@ -85,7 +85,7 @@ export function parseBackup(text) {
 }
 
 // İşlemler CSV (Excel/Numbers için noktalı virgül, ondalık virgül). Tutarlar kuruştan çevrilir.
-const TX_TYPE = { expense: "Gider", income: "Gelir", refund: "İade", transfer: "Aktarım" };
+const TX_TYPE = { expense: "Gider", income: "Gelir", refund: "İade", transfer: "Aktarım", exchange: "Döviz/altın alım-satımı" };
 const cell = v => { const t = String(v ?? ""); return /[";\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
 export function transactionsCsv(state) {
   const head = ["Tarih", "Tür", "Tutar", "Para birimi", "Hesap", "Hedef hesap", "Kategori", "Düzenli ödeme", "Açıklama"];
