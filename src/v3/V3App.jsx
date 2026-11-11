@@ -7,6 +7,7 @@ import { computePeriod, periodOf, quickAdd, today, ValidationError } from "../co
 import { loadState, saveState, loadPref, savePref, newId, exportBackup, parseBackup, transactionsCsv, STORAGE_KEY, PLAN_KEY, THEME_KEY, BACKUP_KEY, CLOUD_BASE_KEY, LOCAL_COPY_KEY, SAMPLE_KEY, SAMPLE_PLAN_KEY } from "./store.js";
 import { useCloud } from "./useCloud.js";
 import { stampCreatedBy } from "./sync.js";
+import { convertLegacy, isLegacyData } from "./legacyImport.js";
 import { mainAccountId, daysBetween, addDays, fmt } from "./selectors.js";
 import { TabBar, TABS } from "./components/ui.jsx";
 import Ozet from "./screens/Ozet.jsx";
@@ -38,8 +39,8 @@ const tabFromHash = () => {
 // sample: yalnız geliştirmede /v3?ornek ile gelir (src/main.jsx). Örnek veri ayrı anahtarda tutulur,
 // tarih örneğin senaryosuna sabitlenir; gerçek v3 verisi okunmaz ve yazılmaz.
 export default function V3App({ sample }) {
-  const stateKey = sample ? SAMPLE_KEY : STORAGE_KEY;
-  const planKey = sample ? SAMPLE_PLAN_KEY : PLAN_KEY;
+  const stateKey = sample ? sample.STATE_KEY || SAMPLE_KEY : STORAGE_KEY;
+  const planKey = sample ? sample.PLAN_KEY || SAMPLE_PLAN_KEY : PLAN_KEY;
   const [loaded] = useState(() => {
     const stored = loadState(undefined, stateKey);
     let fresh = false;
@@ -154,14 +155,24 @@ export default function V3App({ sample }) {
       setToast("Yedek indirildi");
     },
     exportCsv: () => { download(`ev-butcesi-islemler-${todayDate}.csv`, transactionsCsv(stateRef.current), "text/csv;charset=utf-8"); setToast("CSV indirildi"); },
+    // v3 yedeği aynen; eski uygulamanın yedeği (ev-butcesi-YYYY.MM.DD.json) dönüştürülerek yüklenir.
     restore: async file => {
-      let next;
-      try { next = parseBackup(await file.text()); } catch (e) { setToast(e.message); return; }
+      let next, legacy = null;
+      try {
+        const text = await file.text();
+        let raw = null;
+        try { raw = JSON.parse(text); } catch { /* parseBackup anlaşılır hata verir */ }
+        if (isLegacyData(raw)) { legacy = convertLegacy(raw, { today: todayDate, userId: userRef.current }); next = legacy.state; }
+        else next = parseBackup(text);
+      } catch (e) { setToast(e.message); return; }
       const n = Object.keys(next.transactions).length;
       const where = synced ? "Aile hesabındaki verinin (tüm üyeler için)" : "Bu cihazdaki verinin";
-      if (!confirm(`Yedekte ${Object.keys(next.accounts).length} hesap ve ${n} işlem var. ${where} yerine geçsin mi?`)) return;
+      const intro = legacy
+        ? `Eski uygulamanın yedeği: ${legacy.counts.accounts} hesap, ${legacy.counts.obligations} düzenli ödeme / taksit ve ${n} işlem aktarılacak.${legacy.warnings.length ? ` ${legacy.warnings.length} kayıt aktarılamadı (${legacy.warnings[0]})` : ""}`
+        : `Yedekte ${Object.keys(next.accounts).length} hesap ve ${n} işlem var.`;
+      if (!confirm(`${intro} ${where} yerine geçsin mi?`)) return;
       commit(() => next);
-      setToast("Yedek geri yüklendi");
+      setToast(legacy ? "Eski uygulamanın verisi aktarıldı" : "Yedek geri yüklendi");
     }
   };
   const common = { state, today: todayDate, members, overrides, open: setSheet };
@@ -181,7 +192,7 @@ export default function V3App({ sample }) {
       <main className="v3-scroll" ref={scroll} key={tab}>
         {sample && (
           <div className="v3-alert" role="status">
-            <strong>Örnek veri · bugün 26 Kasım 2026 sayılıyor</strong>
+            <strong>{sample.SAMPLE_LABEL || "Örnek veri"} · bugün {new Date(`${todayDate}T12:00:00`).toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" })} sayılıyor</strong>
             Yalnız bu cihazda, gerçek veriden ayrı tutulur. Değişiklikleri deneyebilirsiniz.
             <span className="row" style={{ gap: 16, flexWrap: "wrap" }}>
               <button type="button" className="v3-link" style={{ padding: 0 }} onClick={reloadSample}>Baştan yükle</button>

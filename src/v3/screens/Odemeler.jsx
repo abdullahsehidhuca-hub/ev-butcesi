@@ -120,7 +120,7 @@ export default function Odemeler({ state, today, onPay, onAdd, onItem, onTrial }
 
 function subline(it) {
   if (it.paid) return "Ödendi";
-  if (it.auto) return `Taksit ${it.index}/${it.total} · karttan otomatik`;
+  if (it.auto) return it.total ? `Taksit ${it.index}/${it.total} · karttan otomatik` : "Karttan otomatik";
   if (it.type === "card") return "Ekstre · son ödeme";
   if (it.total) return `Taksit ${it.index}/${it.total}`;
   if (it.open < it.amount) return `Kısmi · kalan ${fmt(it.open)}`;

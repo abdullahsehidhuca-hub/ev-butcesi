@@ -211,7 +211,7 @@ export default function Ozet({ state, today, members = {}, overrides, open, onRe
                 <Tile icon={it.icon} color={it.color} />
                 <span className="stack grow gap2">
                   <span className="t-body ellipsis">{it.name}</span>
-                  <span className="t-meta ellipsis">{income ? (it.date < today ? "Alındı mı?" : `Gelir · ${daysText(today, it.date)}`) : it.auto ? `Taksit ${it.index}/${it.total} · otomatik` : it.type === "card" ? "Ekstre · son ödeme" : daysText(today, it.date)}</span>
+                  <span className="t-meta ellipsis">{income ? (it.date < today ? "Alındı mı?" : `Gelir · ${daysText(today, it.date)}`) : it.auto ? (it.total ? `Taksit ${it.index}/${it.total} · otomatik` : "Karttan otomatik") : it.type === "card" ? "Ekstre · son ödeme" : daysText(today, it.date)}</span>
                 </span>
                 <span className={`num t-body b${income ? " c-green" : ""}`}>{income ? "+" : ""}{fmt(it.auto ? it.amount : it.open)}</span>
                 {it.auto ? <span className="auto-tag">oto</span> : <Check on={false} onClick={() => onPay(it)} label={`${it.name} ${income ? "alındı" : "ödendi"} olarak işaretle`} />}

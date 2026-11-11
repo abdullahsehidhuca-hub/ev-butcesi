@@ -4,13 +4,15 @@ import ReactDOM from "react-dom/client";
 // Kök adres (/) ve /v3 yeni arayüzü (src/v3) açar; eski uygulama /eski adresinde kalır (11 Kasım 2026:
 // onaylı tasarım depoya alındı, ana ekran uygulamasının başlangıç adresi / olduğu için kök v3'e verildi).
 // İki arayüz de ayrı paket olarak tembel yüklenir; böylece biri açılırken diğerinin kodu indirilmez.
-// Yalnız geliştirmede: /v3?ornek örnek aile verisiyle açılır (ayrı anahtarda; gerçek veriye dokunmaz).
-// import.meta.env.DEV üretim derlemesinde false olduğu için örnek veri canlı pakete girmez.
-const sampleMode = import.meta.env.DEV && new URLSearchParams(window.location.search).has("ornek");
+// Yalnız geliştirmede: /?ornek örnek aile verisiyle, /?ornek=yedek depo dışı yedek/ klasöründeki eski uygulama
+// yedeğiyle açılır (ayrı anahtarda; gerçek veriye dokunmaz). import.meta.env.DEV üretim derlemesinde false
+// olduğu için örnek ve yedek verisi canlı pakete girmez.
+const sampleKind = import.meta.env.DEV ? new URLSearchParams(window.location.search).get("ornek") : null;
+const sampleMode = sampleKind != null;
 const V3App = lazy(async () => {
   const app = await import("./v3/V3App.jsx");
   if (!sampleMode) return app;
-  const sample = await import("./v3/sampleData.js");
+  const sample = sampleKind === "yedek" ? (await import("./v3/sampleBackup.js")).load() : await import("./v3/sampleData.js");
   return { default: () => <app.default sample={sample} /> };
 });
 const App = lazy(() => import("./App.jsx"));

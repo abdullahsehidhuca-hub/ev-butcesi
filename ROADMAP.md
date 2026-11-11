@@ -7,6 +7,7 @@ plandan sapıyorsa önce burada gerekçesiyle güncellenir.
 İlk durum tespiti: `logs/2026-11-06-durum-tespiti-yol-haritasi.md`
 Ticari sürüm değerlendirmesi ve eksik listesi: `docs/URUN-DEGERLENDIRME.md`
 Son devir notu (yeni işlere referans): `logs/2026-11-06-devir-durum-ve-yol-haritasi.md`
+Faz 1–2 kapanış denetimi ve Faz 3 kapsamı: `docs/RAPOR-FAZ-DURUMU-2026-11-11.md`
 
 ## Hedef
 Mağazada (App Store / Google Play) satılabilecek, herkesin kullanabileceği bir aile
@@ -27,7 +28,8 @@ Durum işaretleri: [x] tamam · [~] kısmen · [ ] bekliyor
 - [~] AI uç noktalarında (`api/`) Firebase token'ını sunucuda doğrulama — 2026-11-06.
       Eksik: kalıcı kullanım sayacı; canlı ortamda gerçek girişle deneme.
       Öncelik düşürüldü (Abdullah, 2026-11-06): önce temel işlevler.
-- [ ] Veritabanı kurallarını depoya alma ve gözden geçirme
+- [~] Veritabanı kurallarını depoya alma ve gözden geçirme — dosya depoda (`database.rules.json`, `firebase.json`, 2026-11-09).
+      Eksik: kuralların kayıt kayıt eşitleme modeline göre gözden geçirildiğine dair kayıt yok (Faz 3 "çok aileli kullanım" ile birlikte).
 - [x] Çevrimdışı açılışta eski verinin buluta yazılmasını ve yankı yazmayı durdurma — 2026-11-06
 
 ## Faz 1 — Yeni veri modeli ve hesap motoru (`src/core/`)
@@ -36,8 +38,9 @@ Durum işaretleri: [x] tamam · [~] kısmen · [ ] bekliyor
 - [x] Tutar değişikliği ileriye dönük (`changes`) — 2026-11-06
 - [x] Dönem kapatma = dondurma; devir kararları (taşı / ertele / vazgeç) — 2026-11-06
 - [x] İleriye dönük projeksiyon (gelecek aylar, biten taksitler) — 2026-11-06
-- [~] Kredi kartı borcu: önceki dönem harcaması + karttan otomatik yükümlülükler — 2026-11-06.
-      Eksik: hesap kesim gününe göre ekstre ayrımı.
+- [x] Kredi kartı borcu: önceki dönem harcaması + karttan otomatik yükümlülükler — 2026-11-06.
+      Kesim gününe göre ekstre ayrımı ve son ödeme günü — 2026-11-10 (`src/core/cardStatement.js`: kesim penceresi,
+      son ödeme tarihi, dönemde ödenecek ekstreler; `src/core/cardBudget.js`: ekstre hangi bütçeden; `tests/card-statement-savings.test.js`).
 - [x] Hızlı giriş: varsayılan hesap, sık kullanılanlar (widget kaynağı), tek dokunuş "ödendi" — 2026-11-06
 - [x] Otomatik testler: `npm test` — 2026-11-06
 - [x] Taksitli alışveriş: kuruş farkı ilk taksitte, toplam birebir; kalan taksit borcu — 2026-11-06
@@ -53,12 +56,15 @@ Durum işaretleri: [x] tamam · [~] kısmen · [ ] bekliyor
 - [x] Bütünlük kuralları — 2026-11-06: kısmi ödeme, iade, kapalı döneme karşı korumalı
       düzenleme/silme, kullanımdaki kaydı silmeme (arşiv/sonlandırma), maaş günü değişikliğinde
       eski işlemlerin ay değiştirmemesi (`tests/integrity.test.js`)
-- İptal — eski veriden dönüştürücü: eski veriler aktarılmayacak (Abdullah, 2026-11-06)
+- [x] Eski veriden dönüştürücü — 2026-11-06'da iptal edilmişti (Abdullah); 2026-11-11'de Abdullah gerçek yedeğini verip ekranların
+      bu veriyle dolmasını istedi. `src/v3/legacyImport.js` Ayarlar > Yedekten geri yükle'ye bağlandı; aylık bütçe → Maaş geliri,
+      TL birikim havuzu → Birikim hesabı aktarımları, "karta aktarıldı" bayrağı → cardTransferredAt + bankadan karta aktarım.
+      Geliştirmede `/?ornek=yedek` (depo dışı `yedek/` klasörü) ve simülatöre yükleme: `scripts/yedek-simulator.mjs`.
 
 ## Faz 2 — Sade arayüz (önce mockup, onaydan sonra kod)
-- [~] Taslak v1 — 2026-11-06: `mockups/v2-taslak.html` (ana ekran, + Ekle, ay kapatma,
-      yükleniyor / ilk açılış / bağlantı yok). Arayüz UI/UX ajanıyla yeniden planlanacak
-      (Abdullah, 2026-11-06); taslak başlangıç noktasıdır.
+- [x] Taslak v1 — 2026-11-06: `mockups/v2-taslak.html` (ana ekran, + Ekle, ay kapatma,
+      yükleniyor / ilk açılış / bağlantı yok). Başlangıç noktası olarak görevini tamamladı; yerini
+      onaylı v3 tasarımı aldı (aşağıdaki madde). Dosya tarihçe için duruyor.
 - [x] v3 arayüzü, `src/core`'a bağlı — 2026-11-07 (`src/v3/`). İlk görsel 7 Kasım'da onaylanmadı; 8 Kasım'da
       Abdullah'ın C tasarımı uygulandı. **Onaylı tasarım 11 Kasım 2026'da depoya alındı**: `mockups/v3-tasarim/`
       (`a.png` görünüm + `kaynak/` görsel dil paketi, doğrulama notu `BENIOKU.md`). Sekmeler onaylı sıraya alındı
@@ -66,17 +72,22 @@ Durum işaretleri: [x] tamam · [~] kısmen · [ ] bekliyor
 - [x] Tek "+ Ekle" akışı ve sık kullanılan kategori kısayolları — 2026-11-07 (hızlı harcama çekmecesi; açıklamadan kategori önerisi)
 - [x] Ana ekran 3 soru: Bu ay ne kadar kaldı? Yaklaşan ödemeler? Plana göre neredeyim? — 2026-11-08 (Serbest, Yaklaşan, hız rozeti; Döküm)
 - [x] Ay kapatma ekranı (devir kararları) — 2026-11-10 (`KapatSheet`, `DevredenSheet`; karar geri alınabilir)
-- [~] Erişilebilirlik: yazı ≥15 px (ikincil satırlar 13 px, bilinçli), dokunma alanı ≥44 px, odak görünür — 2026-11-08.
-      Eksik: `index.html` viewport'ta yakınlaştırma kapalı (`user-scalable=no`); Faz 3 öncesi açılmalı.
+- [x] Erişilebilirlik: yazı ≥15 px (ikincil satırlar 13 px, bilinçli), dokunma alanı ≥44 px, odak görünür — 2026-11-08.
+      Yakınlaştırma kilidi (`user-scalable=no`) kaldırıldı — 2026-11-11 (giriş alanları 16 px olduğu için iOS odakta kendiliğinden yakınlaştırmaz).
 - [x] Rapor: dönem seçici (geçmiş aylar), son 6 ay harcama trendi, hedefler — 2026-11-11
 - [x] Taksit denemesi ("bu taksiti alırsam ne olur") — 2026-11-11 (`src/v3/screens/TaksitDeneSheet.jsx`)
 - [ ] Ödeme bildirimleri (PWA'da sınırlı; Faz 3 ile birlikte)
-- [ ] Safari ve gerçek iPhone'da elle tur (Chrome 360 / 390 / 1280 px denendi)
+- [~] Safari ve gerçek iPhone'da tur — 2026-11-11: iOS 26.5 Simülatöründe (gerçek WebKit) dört sekme örnek veriyle açılıp
+      OCR ile doğrulandı (`scripts/ios-simulator-tur.mjs`); Capacitor kabuğunda temiz kurulum ve Özet / Ayarlar görüldü.
+      Eksik: Abdullah'ın simülatörde ya da telefonda elle gezmesi ve bulgu bildirmesi (yatay taşma gözle teyit).
 
 ## Faz 3 — Mağaza ve widget
 Widget (ana ekran kısayolu ve "bu ay kalan" göstergesi) PWA ile yapılamaz; uygulamanın
 yerel bir kabukla paketlenmesi gerekir.
-- [ ] Capacitor ile iOS/Android paketleme (aynı web kodu)
+- [~] Capacitor ile iOS/Android paketleme (aynı web kodu) — iOS başladı 2026-11-11: Capacitor 8.6 (SPM), `ios/` Xcode
+      projesi, `capacitor.config.json` (`com.evbutcesi.app`), `npm run ios:sim` döngüsü simülatörde çalışıyor.
+      Eksik: marka simgesi / açılış ekranı, TestFlight (Developer Program + API anahtarı), Google girişi yerine eklenti ya da
+      Apple ile Giriş, Android. Rehber: `docs/IOS-SIMULATOR-VE-TESTFLIGHT-REHBERI.md`.
 - [ ] iOS widget (WidgetKit) ve Android widget: çekirdeğin ürettiği özet + sık kullanılanlar
 - [ ] Mağaza gereklilikleri: gizlilik politikası, KVKK aydınlatma metni, uygulama içinden hesap silme,
       Google girişinin yanında Apple ile Giriş
@@ -103,3 +114,10 @@ yerel bir kabukla paketlenmesi gerekir.
 - 2026-11-11 · İş #61: onaylı tasarım depoya alındı (`mockups/v3-tasarim/`), sekmeler ve etiketler hizalandı, kök adres
   v3'e verildi (`/eski` eski uygulama), Birikim (varlık, kur, al / sat, hedef, acil fon), Taksit dene, Rapor dönem
   seçici ve trend. 127 test geçiyor.
+- 2026-11-11 · İş #62: `agent/62` dalı main'e hizalandı (agent/52'nin işi #61 ile zaten main'deydi). Faz 1–2 kapanış
+  denetimi yapıldı, eski üç işaret düzeltildi; rapor: `docs/RAPOR-FAZ-DURUMU-2026-11-11.md`. Devamında Faz 2 kalite
+  maddeleri (yakınlaştırma kilidi kaldırıldı, simülatör Safari turu) ve Faz 3 Capacitor iOS kurulumu; bundan sonra her iş
+  `npm run ios:sim` ile simülatörde gösterilir (Abdullah, 2026-11-11). Sonraki tur: eski yedek içe aktarma bağlandı, yedek
+  verisiyle tüm ekranlar Chrome (360 / 390 px) ve iOS Simülatörü Safari + Capacitor kabuğunda görüldü; gerçek veriyle çıkan
+  iki hata düzeltildi (süresiz kart kalemlerinde "Taksit n/null", Rapor halkasında çift "Diğer" anahtarı). Vercel'den
+  çıkma isteği teyit bekliyor (bkz. `docs/IOS-SIMULATOR-VE-TESTFLIGHT-REHBERI.md` 7. bölüm).

@@ -2,10 +2,14 @@
 // localStorage bilmez; girdi eski yedek dosyasının (ev-butcesi-YYYY.MM.DD.json) içeriğidir.
 // Kayıtlar core fonksiyonlarıyla eklenir; çevrilemeyen kayıt atlanır ve uyarılarda raporlanır,
 // hiçbir şey sessizce kaybolmaz. Hesap açılış bakiyeleri bilinmediği için 0 yazılır; kullanıcı
-// v3'te bakiye düzeltmesiyle gerçek bakiyeyi girer.
+// v3'te bakiye düzeltmesiyle gerçek bakiyeyi girer. Eski uygulamadaki aylık bütçe (monthlyBudget)
+// v3'te "Maaş" gelir kalemidir ve yedekteki her ay için alınmış sayılır; ay kapanışında birikime
+// ayrılan TL tutarlar "Birikim" hesabına aktarım olarak geçer. Eski "karta aktarıldı" bayrağı (ccTransferred)
+// v3'te harcamanın cardTransferredAt tarihi olur ve o gün bankadan karta aynı tutarda aktarım yazılır; böylece
+// banka ve kart bakiyeleri eski uygulamadaki gerçek akışı yansıtır (2026-11-11, Abdullah'ın yedeğiyle).
 
 import {
-  emptyState, addAccount, addObligation, addTransaction, putRecord, payObligation,
+  emptyState, addAccount, addObligation, addTransaction, putRecord, payObligation, changeObligationAmount, markCardTransferred, isCardExpense,
   toMinor, isDate, isPeriodKey, periodOf, periodRange, today as todayOf
 } from "../core/index.js";
 
@@ -77,8 +81,25 @@ export function convertLegacy(data, { today = todayOf(), userId = null } = {}) {
     } catch (err) { warn(`Sabit gider "${e.name || e.id}" aktarılamadı: ${err.message}`); }
   }
 
+  // Aylık bütçe → "Maaş" gelir kalemi (maaş gününde); ay bütçesi farklıysa o dönemden itibaren değişir.
+  const salary = toMinor(set.monthlyBudget || 0);
+  const salaryId = salary > 0 ? "eski-maas" : null;
+  if (salaryId) {
+    try {
+      s = addObligation(s, { id: salaryId, kind: "income", name: "Maaş", amount: salary, currency: "TRY", accountId: "eski-hesap", startPeriod: first, dueDay: payDay });
+      counts.obligations++;
+      let last = salary;
+      for (const mk of months) {
+        const b = toMinor(data.months[mk]?.budget || 0);
+        if (b > 0 && b !== last) { s = changeObligationAmount(s, salaryId, mk, b); last = b; }
+      }
+    } catch (err) { warn(`Aylık bütçe maaş olarak aktarılamadı: ${err.message}`); }
+  }
+
   // Kart taksitleri.
+  const plans = {};
   for (const p of list(data.installmentPlans)) {
+    if (p?.id) plans[p.id] = p;
     const amount = toMinor(p?.monthlyPayment || 0);
     const count = parseInt(p?.months, 10);
     if (!p?.id || !(amount > 0) || !(count > 0) || !isPeriodKey(p.startMonth)) { warn(`Taksit "${p?.note || p?.id || "?"}" eksik bilgili olduğu için atlandı.`); continue; }
@@ -131,6 +152,13 @@ export function convertLegacy(data, { today = todayOf(), userId = null } = {}) {
       tx({ id: `eski-fatura-${mk}-${safeId(b.id)}`, type: "expense", date: dateFor(b.date, mk), period: mk, amount: b.amount, accountId: b.paymentMethod === "cc" ? cardAccount(b.cardId) : "eski-hesap", note: b.name || "Fatura" }, `${mk} faturası "${b.name || ""}"`);
     }
     if (list(md.debitCardEntries).length || list(md.cardEntries).length) warn(`${mk} döneminde konfor kartı/banka kartı girişleri var; bunlar aktarılmadı.`);
+    // Eski uygulamada bütçe her ay hazır sayılırdı: maaş o dönem için alınmış yazılır.
+    if (salaryId) {
+      try {
+        s = payObligation(s, salaryId, mk, { date: startOf(mk) }, { id: `eski-maas-${mk}`, now: new Date(createdAt), userId }).state;
+        counts.payments++;
+      } catch (err) { warn(`${mk} maaşı aktarılamadı: ${err.message}`); }
+    }
     // Ödenmiş sabit giderler → yükümlülük ödemesi.
     for (const [eid, oid] of Object.entries(fixedIds)) {
       if (!md.fixedPaid?.[eid]) continue;
@@ -139,9 +167,55 @@ export function convertLegacy(data, { today = todayOf(), userId = null } = {}) {
         counts.payments++;
       } catch (err) { warn(`${mk} sabit gider ödemesi aktarılamadı: ${err.message}`); }
     }
+    // "Karta aktarıldı" bayrakları: single-<harcama>, fixed-<sabit gider>, inst-<taksit planı>.
+    for (const [key, f] of Object.entries(md.ccTransferred || {})) {
+      if (!f?.transferred) continue;
+      const date = isDate(f.date) ? f.date : startOf(mk);
+      let t = null, amount = null, card = null;
+      if (key.startsWith("single-")) t = s.transactions[`eski-kk-${mk}-${safeId(key.slice(7))}`] || null;
+      else if (key.startsWith("fixed-")) {
+        const eid = key.slice(6), oid = fixedIds[eid];
+        if (!oid) continue;
+        const pid = `eski-odeme-${mk}-${safeId(eid)}`;
+        if (!s.transactions[pid]) {
+          try { s = payObligation(s, oid, mk, { date: startOf(mk) }, { id: pid, now: new Date(createdAt), userId }).state; counts.payments++; }
+          catch (err) { warn(`${mk} karta aktarılan sabit gider ödenmiş yazılamadı: ${err.message}`); continue; }
+        }
+        t = s.transactions[pid];
+      } else if (key.startsWith("inst-")) {
+        const p = plans[key.slice(5)];
+        if (!p) continue;
+        amount = toMinor(p.monthlyPayment || 0); card = cardAccount(p.cardId);
+      }
+      if (t) {
+        if (!isCardExpense(s, t)) continue;
+        amount = t.amount; card = t.accountId;
+        s = markCardTransferred(s, t.id, date);
+      }
+      if (!(amount > 0) || s.accounts[card]?.type !== "credit") continue;
+      try {
+        s = addTransaction(s, { id: `eski-aktarim-${mk}-${safeId(key)}`, type: "transfer", date, period: periodOf(date, payDay), amount, currency: "TRY", accountId: "eski-hesap", toAccountId: card, note: "Karta aktarıldı", createdAt, ...(userId ? { createdBy: userId } : {}) });
+        counts.transactions++;
+      } catch (err) { warn(`${mk} karta aktarım kaydı yazılamadı: ${err.message}`); }
+    }
   }
   // undefined alanları temizle (buluta ve localStorage'a yazılırken sorun çıkmasın).
   s = { ...s, transactions: JSON.parse(JSON.stringify(s.transactions)) };
-  if (list(data.savings?.TRY).length || list(data.savings?.USD).length || list(data.savings?.EUR).length || list(data.savings?.XAU).length) warnings.push("Birikim havuzu aktarılmadı; v3'te birikim hesabı olarak elle girilmeli.");
+  // TL birikim havuzu → "Birikim" hesabı; ay kapanışında ayrılan tutarlar banka hesabından aktarımdır.
+  const tlSavings = list(data.savings?.TRY).filter(x => x && toMinor(x.amount || 0) > 0);
+  if (tlSavings.length) {
+    try {
+      s = addAccount(s, { id: "eski-birikim", name: "Birikim", type: "bank", currency: "TRY", opening });
+      counts.accounts++;
+      for (const x of tlSavings) {
+        const sell = x.type === "sell";
+        const date = isDate(x.date) ? x.date : today;
+        tx({ id: `eski-birikim-${safeId(x.id || x.date || counts.transactions)}`, type: "transfer", date, period: periodOf(date, payDay), amount: x.amount,
+          accountId: sell ? "eski-birikim" : "eski-hesap", toAccountId: sell ? "eski-hesap" : "eski-birikim", note: x.note || (sell ? "Birikimden çekildi" : "Birikime ayrıldı") }, `Birikim kaydı "${x.note || x.date || ""}"`);
+      }
+    } catch (err) { warn(`Birikim hesabı aktarılamadı: ${err.message}`); }
+  }
+  if (list(data.savings?.USD).length || list(data.savings?.EUR).length || list(data.savings?.XAU).length) warnings.push("Döviz / altın birikimi aktarılmadı; v3'te Birikim ekranından elle girilmeli.");
+  s = { ...s, transactions: JSON.parse(JSON.stringify(s.transactions)) };
   return { state: s, warnings, counts };
 }

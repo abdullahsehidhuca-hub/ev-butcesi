@@ -37,3 +37,11 @@ lerna-debug.log*
 public/ocr/
 .vercel
 .env*
+
+# Simülatör ekran görüntüleri ve Xcode türev çıktıları
+logs/*.png
+ios/App/build/
+ios/App/DerivedData/
+
+# Kişisel yedek dosyaları (gerçek mali veri; depoya girmez)
+yedek/

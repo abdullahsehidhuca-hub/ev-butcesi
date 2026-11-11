@@ -149,7 +149,7 @@ export default function Ayarlar({ state, today, open, theme, onTheme, backup, cl
         <Row icon="cloud" color="cyan" {...cloudRow(cloud, Object.keys(members).length, open)} />
         {backup && <>
           <Row icon="export" color="green" title="Yedek indir" sub="Tüm verileriniz tek dosyada (JSON)" onClick={backup.exportJson} />
-          <Row icon="repeat" color="orange" title="Yedekten geri yükle" sub={cloud?.status === "synced" ? "Aile hesabındaki verinin yerine geçer; önce sorar" : "Bu cihazdaki verinin yerine geçer; önce sorar"} onClick={() => fileRef.current?.click()} />
+          <Row icon="repeat" color="orange" title="Yedekten geri yükle" sub={cloud?.status === "synced" ? "v3 ya da eski uygulama yedeği; aile hesabındaki verinin yerine geçer, önce sorar" : "v3 ya da eski uygulama yedeği; bu cihazdaki verinin yerine geçer, önce sorar"} onClick={() => fileRef.current?.click()} />
           <Row icon="export" color="teal" title="İşlemleri CSV olarak indir" sub={`${Object.keys(state.transactions).length} işlem · Excel ve Numbers ile açılır`} onClick={backup.exportCsv} />
           <input ref={fileRef} type="file" accept="application/json,.json" hidden aria-hidden="true" tabIndex={-1}
             onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) backup.restore(f); }} />
