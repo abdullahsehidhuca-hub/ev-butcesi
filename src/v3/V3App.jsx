@@ -24,6 +24,9 @@ import DevredenSheet from "./screens/DevredenSheet.jsx";
 import BlokeSheet from "./screens/BlokeSheet.jsx";
 import BirikimAktarSheet from "./screens/BirikimAktarSheet.jsx";
 import KartOdemeSheet from "./screens/KartOdemeSheet.jsx";
+import BirikimSheet, { AlSatSheet, HedefSheet } from "./screens/BirikimSheet.jsx";
+import TaksitDeneSheet from "./screens/TaksitDeneSheet.jsx";
+import { AccountEditSheet, CategoryEditSheet, ObligationEditSheet } from "./screens/TanimSheet.jsx";
 import { PaySheet, AccountSheet, CategorySheet, ObligationSheet, InstallmentSheet, PayDaySheet, ResetSheet } from "./Sheets.jsx";
 import "./v3.css";
 
@@ -213,8 +216,11 @@ export default function V3App({ sample }) {
           </div>
         )}
         {tab === "home" && <Ozet {...common} onResolve={() => setSheet({ name: "resolve" })} onPay={pay} onOpenPayments={() => go("plan")} onOpenSettings={() => go("settings")} backupDue={backupDue} />}
-        {tab === "report" && <Rapor {...common} />}
-        {tab === "plan" && <Odemeler {...common} onPay={pay} onAdd={Object.keys(state.accounts).length ? () => setSheet({ name: "obligation", kind: "fixed" }) : null} />}
+        {tab === "report" && <Rapor {...common} onCategory={(categoryId, p) => setSheet({ name: "txlist", filter: { period: p, categoryId } })}
+          onGoal={id => setSheet({ name: "goal", id })} onSavings={() => setSheet({ name: "savings" })} />}
+        {tab === "plan" && <Odemeler {...common} onPay={pay} onAdd={Object.keys(state.accounts).length ? () => setSheet({ name: "obligation", kind: "fixed" }) : null}
+          onTrial={Object.keys(state.accounts).length ? () => setSheet({ name: "trial" }) : null}
+          onItem={it => setSheet(it.type === "card" ? { name: "blocked" } : { name: "obligationEdit", id: it.obligationId })} />}
         {tab === "settings" && <Ayarlar {...common} theme={theme} onTheme={setTheme} backup={backup} cloud={sample ? { status: "off" } : cloud} />}
       </main>
 
@@ -238,10 +244,18 @@ export default function V3App({ sample }) {
       {sheet?.name === "blocked" && <BlokeSheet {...props} onClose={closeTo(sheet.back)} />}
       {sheet?.name === "toBudget" && <BirikimAktarSheet {...props} onClose={closeTo(sheet.back)} onToast={setToast} />}
       {sheet?.name === "cardmode" && <KartOdemeSheet {...props} onToast={setToast} />}
-      {sheet?.name === "account" && <AccountSheet {...props} />}
+      {sheet?.name === "savings" && <BirikimSheet {...props} onToast={setToast} open={sh => setSheet({ ...sh, back: sh.back || { name: "savings" } })}
+        onToBudget={() => setSheet({ name: "toBudget", back: { name: "savings" } })} />}
+      {sheet?.name === "move" && <AlSatSheet {...props} mode={sheet.mode} onToast={setToast} onClose={closeTo(sheet.back)} />}
+      {sheet?.name === "goal" && <HedefSheet {...props} key={sheet.id || "new"} id={sheet.id} preset={sheet.preset} onToast={setToast} onClose={closeTo(sheet.back)} />}
+      {sheet?.name === "trial" && <TaksitDeneSheet {...props} onSave={initial => setSheet({ name: "installment", initial })} />}
+      {sheet?.name === "account" && <AccountSheet {...props} onClose={closeTo(sheet.back)} />}
       {sheet?.name === "category" && <CategorySheet {...props} />}
       {sheet?.name === "obligation" && <ObligationSheet {...props} kind={sheet.kind} />}
-      {sheet?.name === "installment" && <InstallmentSheet {...props} />}
+      {sheet?.name === "accountEdit" && <AccountEditSheet {...props} key={sheet.id} id={sheet.id} onToast={setToast} />}
+      {sheet?.name === "categoryEdit" && <CategoryEditSheet {...props} key={sheet.id} id={sheet.id} onToast={setToast} />}
+      {sheet?.name === "obligationEdit" && <ObligationEditSheet {...props} key={sheet.id} id={sheet.id} onToast={setToast} />}
+      {sheet?.name === "installment" && <InstallmentSheet {...props} initial={sheet.initial} />}
       {sheet?.name === "payday" && <PayDaySheet {...props} />}
       {sheet?.name === "reset" && <ResetSheet {...props} synced={synced} />}
       {sheet?.name === "login" && !sample && <HesapSheet cloud={cloud} onClose={close} onDone={msg => { setSheet(null); setToast(msg); cloud.reload(); }} />}

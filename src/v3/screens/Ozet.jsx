@@ -1,4 +1,4 @@
-// Güncel (taslak C1 · Özet): özet kart + hesaplar şeridi + tek liste. İleriye dönük uyarı listenin ilk satırıdır.
+// Özet (taslak C1): özet kart + hesaplar şeridi + tek liste. İleriye dönük uyarı listenin ilk satırıdır.
 // Ana rakam "kullanılabilir" tutardır: gelir − düzenli ödemeler − harcama − bütçelere ayrılan.
 // Dokununca bankadaki tutar, bloke ve bankayla karşılaştırma çekmecesi açılır (BakiyeSheet).
 // Hesap yoksa 3 adımlı karşılama gösterilir.
@@ -43,7 +43,7 @@ function Accounts({ state, today, onManage }) {
     <section className="stack gap8" aria-label="Hesaplar">
       <div className="row between" style={{ padding: "0 4px" }}>
         <span className="t-cap" style={{ padding: 0 }}>Hesaplar · net <span className="num" style={{ letterSpacing: 0 }}>{fmt(total)}</span></span>
-        <button type="button" className="t-sub c-blue" style={{ minHeight: 44, minWidth: 44, fontWeight: 500 }} onClick={onManage}>Yönet</button>
+        <button type="button" className="t-sub c-blue" style={{ minHeight: 44, minWidth: 44, fontWeight: 500 }} onClick={onManage}>Birikim ›</button>
       </div>
       <ul className="accts">
         {list.map(a => (
@@ -85,7 +85,7 @@ export default function Ozet({ state, today, members = {}, overrides, open, onRe
     <>
       <header className="row between" style={{ alignItems: "flex-end", padding: "0 4px" }}>
         <div className="stack">
-          <span className="t-meta b">{dayNum(o.start)} {monthShort(o.start)} – {dayNum(o.end)} {monthShort(o.end)} · {o.day}. gün · bitişe {o.daysLeft} gün</span>
+          <span className="t-meta b">{dayNum(o.start)} {monthShort(o.start)} – {dayNum(o.end)} {monthShort(o.end)} · {o.day}. gün</span>
           <h1 className="t-title" style={{ margin: 0 }}>{monthLong(o.start)}</h1>
         </div>
         {memberList.length > 1 && (
@@ -130,7 +130,7 @@ export default function Ozet({ state, today, members = {}, overrides, open, onRe
       )}
 
       <section className="card" aria-label="Bu dönem özeti">
-        <div className="row between baseline"><span className="t-sub b">Kullanılabilir</span><span className="t-sub">günde {fmt(o.perDay)}</span></div>
+        <div className="row between baseline"><span className="t-sub b">Serbest</span><span className="t-sub">günde {fmt(o.perDay)}</span></div>
         <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
           <span className={`num t-big${o.safe < 0 ? " c-red" : ""}`}>{fmt(o.safe)}</span>
           {o.pace.plan > 0 && (
@@ -160,7 +160,7 @@ export default function Ozet({ state, today, members = {}, overrides, open, onRe
             <button type="button" className="t-sub c-blue" style={{ minHeight: 44, fontWeight: 600 }} onClick={() => open({ name: "obligation", kind: "income" })}>Maaş ekle</button>
           </div>
         )}
-        <button type="button" className="why-btn" onClick={() => open({ name: "balance" })} aria-label={`Kullanılabilir tutarın dökümü: bankada ${fmt(bv.bank)}, bloke ${fmt(bv.blocked)}`}>
+        <button type="button" className="why-btn" onClick={() => open({ name: "balance" })} aria-label={`Serbest tutarın dökümü: bankada ${fmt(bv.bank)}, bloke ${fmt(bv.blocked)}`}>
           <span className="stack gap2"><span className="t-meta">Bankada</span><span className="num t-body b">{fmt(bv.bank)}</span></span>
           <span className="stack gap2"><span className="t-meta">Bloke</span><span className="num t-body b c-orange">{fmt(bv.blocked)}</span></span>
           <span className="t-sub c-blue" style={{ marginLeft: "auto", fontWeight: 500 }}>Döküm</span>
@@ -184,7 +184,7 @@ export default function Ozet({ state, today, members = {}, overrides, open, onRe
         )}
       </section>
 
-      <Accounts state={state} today={today} onManage={onOpenSettings} />
+      <Accounts state={state} today={today} onManage={() => open({ name: "savings" })} />
 
       <div className="seg" role="group" aria-label="Liste">
         <button type="button" aria-pressed={list === "upcoming"} onClick={() => setList("upcoming")}>Yaklaşan · {up.length}</button>

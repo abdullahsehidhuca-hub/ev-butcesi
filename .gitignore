@@ -35,3 +35,5 @@ lerna-debug.log*
 
 # OCR motor dosyaları (scripts/copy-ocr.mjs ile node_modules tan kopyalanır)
 public/ocr/
+.vercel
+.env*

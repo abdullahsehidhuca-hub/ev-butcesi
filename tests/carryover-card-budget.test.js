@@ -186,6 +186,23 @@ test("Artı devreden → döviz birikimi: miktar devredenle eşleşmek zorunda d
   assert.equal(computePeriod(s, "2026-11").remaining, TL(30000));
 });
 
+test("Artı devreden → döviz birikimi, devredenin bir kısmıyla: kalan TL hesapta kalır, hedef ve geri alma o kadar", () => {
+  let s = closedOctober(TL(27700)); // devreden 2.300 ₺
+  s = decideCarryover(s, "2026-10", { choice: "saving", fromAccountId: "bank", toAccountId: "eur", units: 3000, tlAmount: TL(1500) }, { id: "x3", date: "2026-11-02", now });
+  const t = s.transactions.x3;
+  assert.equal(t.amount, TL(1500));
+  assert.equal(t.toAmount, 3000);
+  assert.match(t.note, /1\.500/);
+  assert.equal(s.carryovers["2026-10"].tlAmount, TL(1500));
+  assert.equal(s.goals[CARRYOVER_GOAL_ID].target, TL(1500));
+  assert.equal(computePeriod(s, "2026-11").remaining, TL(30000)); // serbest tutara eklenmez
+  // Devredeni aşan tutar reddedilir.
+  assert.throws(() => decideCarryover(closedOctober(TL(27700)), "2026-10", { choice: "saving", fromAccountId: "bank", toAccountId: "eur", units: 1, tlAmount: TL(2301) }, { id: "x4", date: "2026-11-02", now }), ValidationError);
+  const u = undoCarryover(s, "2026-10");
+  assert.equal(u.transactions.x3, undefined);
+  assert.equal(u.goals[CARRYOVER_GOAL_ID], undefined);
+});
+
 test("Artı devreden → sonra karar ver, ardından yok say", () => {
   let s = closedOctober(TL(5000));
   s = decideCarryover(s, "2026-10", { choice: "later" }, { now });

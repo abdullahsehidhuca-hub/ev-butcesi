@@ -5,13 +5,16 @@
 
 import {
   computePeriod, projection, occurrencesIn, balanceOf, favorites, txPeriod,
-  periodOf, periodRange, dateInPeriod, nextPeriod, prevPeriod, addPeriods, periodDistance, sum
+  periodOf, periodRange, dateInPeriod, nextPeriod, prevPeriod, addPeriods, periodDistance, sum,
+  assetsSummary, goalProgress, emergencyFundTarget, ratesOf, addInstallmentPurchase, splitInstallments, installmentLoad
 } from "../core/index.js";
 
 const payDayOf = state => state.settings?.payDay || 1;
 const DAY = 86400000;
 const toUTC = d => { const [y, m, dd] = d.split("-").map(Number); return Date.UTC(y, m - 1, dd); };
 export const daysBetween = (a, b) => Math.round((toUTC(b) - toUTC(a)) / DAY);
+// Tahmini tutarlar tam liraya yuvarlanır; kuruş yalnız gerçek kayıtlarda gösterilir.
+const toLira = minor => Math.round(minor / 100) * 100;
 export const addDays = (d, n) => new Date(toUTC(d) + n * DAY).toISOString().slice(0, 10);
 
 const MONTHS = ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"];
@@ -126,7 +129,7 @@ export function resolveOptions(state, today, overrides = {}) {
     const acc = state.accounts[neg.key.split(":")[1]];
     if (acc?.minPaymentRate) {
       const item = fc.points.find(pt => pt.key === neg.key);
-      const minPay = Math.round(-item.delta * acc.minPaymentRate);
+      const minPay = toLira(-item.delta * acc.minPaymentRate);
       const salary = nextSalaryDate(state, today);
       const plan = [{ date: item.date, amount: minPay }, { date: salary, amount: -item.delta - minPay }];
       const split = forecast(state, today, { overrides: { ...overrides, [neg.key]: plan } });
@@ -147,14 +150,14 @@ export function overview(state, today) {
   const daysLeft = Math.max(1, totalDays - day + 1);
   const plan = sum(s.budgets.items.map(b => b.budget));
   const budgetedSpent = sum(s.budgets.items.map(b => b.spent));
-  const expected = Math.round(plan * day / totalDays);
+  const expected = toLira(plan * day / totalDays);
   const paid = s.obligations.total - s.obligations.open;
   return {
     period, start, end, day, totalDays, daysLeft,
     // safe: bütçelere ayrılan (henüz harcanmamış) pay da düşülmüş ana rakam; free: yalnız gelir − ödemeler − harcama.
     free: s.remaining, safe: s.safeToSpend, reserved: s.budgets.reserved,
-    perDay: Math.floor(Math.max(0, s.safeToSpend) / daysLeft),
-    pace: { plan, spent: budgetedSpent, expected, diff: budgetedSpent - expected, projected: Math.round(budgetedSpent / day * totalDays) },
+    perDay: Math.floor(Math.max(0, s.safeToSpend) / daysLeft / 100) * 100,
+    pace: { plan, spent: budgetedSpent, expected, diff: toLira(budgetedSpent - expected), projected: toLira(budgetedSpent / day * totalDays) },
     salaryBar: { income: s.income.total, received: s.income.received, obligations: s.obligations.total, paid, pending: s.obligations.open, spent: s.spending.total, reserved: s.budgets.reserved, free: s.remaining, safe: s.safeToSpend },
     summary: s
   };
@@ -192,7 +195,7 @@ export function recent(state, limit = 8) {
 // Tüm işlemler: dönem süzgeci ("all" ya da "YYYY-MM") ve arama (açıklama, kategori, hesap, düzenli ödeme adı, tutar).
 // periods: kayıt bulunan dönemler, yeniden eskiye.
 const fold = t => String(t ?? "").toLocaleLowerCase("tr-TR");
-export function transactionsView(state, { period = "all", query = "" } = {}) {
+export function transactionsView(state, { period = "all", query = "", categoryId = "all" } = {}) {
   const payDay = payDayOf(state);
   const all = Object.values(state.transactions);
   const periods = [...new Set(all.map(t => txPeriod(t, payDay)))].sort().reverse();
@@ -201,6 +204,7 @@ export function transactionsView(state, { period = "all", query = "" } = {}) {
     state.obligations[t.obligationId]?.name, fmtNum(t.amount), String(t.amount / 100)].map(fold).join(" ");
   const list = all
     .filter(t => period === "all" || txPeriod(t, payDay) === period)
+    .filter(t => categoryId === "all" || (categoryId === "_none" ? t.categoryId == null && t.type === "expense" : t.categoryId === categoryId))
     .filter(t => !q || words(t).includes(q))
     .sort((a, b) => b.date.localeCompare(a.date) || (b.createdAt || "").localeCompare(a.createdAt || ""));
   const signed = t => t.type === "income" || t.type === "refund" ? t.amount : t.type === "transfer" || t.type === "exchange" ? 0 : -t.amount;
@@ -270,32 +274,88 @@ export function paymentsView(state, period) {
 }
 
 // Rapor ekranı: kategori dağılımı (halka), 6 ay (çubuk), limitler ve öneriler.
-export function report(state, today, months = 6) {
+// period: seçili dönem (varsayılan bugünkü dönem). Geçmiş dönemde rakamlar dönemin tamamıdır (kapalıysa
+// dondurulmuş özet); "ay sonunda kalan" planı her zaman bugünkü dönemden ileriye bakar.
+export function report(state, today, months = 6, period = null) {
   const o = overview(state, today);
-  const s = o.summary;
+  const payDay = payDayOf(state);
+  const p = period && period <= o.period ? period : o.period;
+  const current = p === o.period;
+  const s = current ? o.summary : computePeriod(state, p);
+  const { start, end } = periodRange(p, payDay);
+  const totalDays = current ? o.totalDays : daysBetween(start, end) + 1;
+  const day = current ? o.day : totalDays;
   const cats = state.categories;
   const parts = Object.entries(s.spending.byCategory)
     .filter(([k, v]) => v > 0 && !k.startsWith("_"))
     .map(([k, v]) => ({ categoryId: k, name: cats[k]?.name || "Diğer", value: v }))
     .sort((a, b) => b.value - a.value);
   const top = parts.slice(0, 4);
-  const rest = sum(parts.slice(4).map(p => p.value));
+  const rest = sum(parts.slice(4).map(x => x.value));
   if (rest > 0) top.push({ categoryId: "_rest", name: "Diğer", value: rest });
   const proj = projection(state, o.period, months).map(m => ({ period: m.period, income: m.income, obligations: m.obligations, budgets: m.budgets, free: m.free, ending: m.ending }));
-  const prev = computePeriod(state, prevPeriod(o.period));
+  const prev = computePeriod(state, prevPeriod(p));
   // Tüm kategoriler tutarıyla (halkadaki "Diğer" birleştirmesi olmadan) ve önceki dönemle karşılaştırma.
   const rows = Object.entries(s.spending.byCategory)
     .filter(([, v]) => v !== 0)
     .map(([k, v]) => ({ categoryId: k, name: categoryName(state, k), value: v, prev: prev.spending.byCategory[k] || 0 }))
     .sort((a, b) => b.value - a.value);
-  const limits = s.budgets.items.map(b => ({ ...b, name: cats[b.categoryId]?.name, projected: Math.round(b.spent / o.day * o.totalDays), expected: Math.round(b.budget * o.day / o.totalDays) }));
+  const limits = s.budgets.items.map(b => ({ ...b, name: cats[b.categoryId]?.name,
+    projected: current ? toLira(b.spent / day * totalDays) : b.spent, expected: current ? toLira(b.budget * day / totalDays) : b.budget }));
   const insights = [];
-  for (const l of limits) if (l.projected > l.budget) insights.push({ tone: "warn", categoryId: l.categoryId, title: `${l.name} limiti aşılacak`, detail: `Bu hızla ${fmt(l.projected)}, limit ${fmt(l.budget)}` });
+  if (current) for (const l of limits) if (l.projected > l.budget) insights.push({ tone: "warn", categoryId: l.categoryId, title: `${l.name} limiti aşılacak`, detail: `Bu hızla ${fmt(l.projected)}, limit ${fmt(l.budget)}` });
   for (const m of proj) if (m.free < 0) {
     const later = proj.find(x => x.period > m.period && x.free >= 0);
     insights.push({ tone: "danger", title: `${periodLabel(m.period).split(" ")[0]} döneminde ${fmt(-m.free)} açık`, detail: later ? `${periodLabel(later.period).split(" ")[0]} döneminde kapanıyor` : "Plan sonrası da açık sürüyor" });
   }
-  return { total: s.spending.total, prevTotal: prev.spending.total, obligations: s.obligations.total, rows, parts: top, projection: proj, limits, insights, pace: o.pace, day: o.day, totalDays: o.totalDays };
+  const plan = sum(s.budgets.items.map(b => b.budget));
+  const budgetedSpent = sum(s.budgets.items.map(b => b.spent));
+  const pace = current ? o.pace : { plan, spent: budgetedSpent, expected: plan, diff: budgetedSpent - plan, projected: budgetedSpent };
+  return { period: p, current, closed: !!s.closed, total: s.spending.total, prevTotal: prev.spending.total, obligations: s.obligations.total, rows, parts: top, projection: proj, limits, insights, pace, day, totalDays };
+}
+
+// Son `count` dönemin harcaması (serbest harcama ve düzenli ödemeler), eskiden yeniye; bugünkü dönem sondadır.
+// Kapalı dönemler dondurulmuş özetten gelir.
+export function spendingTrend(state, today, count = 6) {
+  const current = periodOf(today, payDayOf(state));
+  return Array.from({ length: count }, (_, i) => {
+    const period = addPeriods(current, i - count + 1);
+    const s = computePeriod(state, period);
+    return { period, spent: s.spending.total, obligations: s.obligations.total, income: s.income.total, current: period === current };
+  });
+}
+
+// Birikim ekranı: varlıklar (kur ile TL karşılığı), kurlar, hedefler ve acil durum fonu önerisi.
+export function savingsView(state, today) {
+  const payDay = payDayOf(state);
+  const period = periodOf(today, payDay);
+  const rates = ratesOf(state);
+  const assets = assetsSummary(state, today, { rates });
+  const goals = Object.values(state.goals || {}).filter(g => !g.archived)
+    .map(g => ({ ...goalProgress(state, g.id, today, { rates }), accountIds: g.accountIds || [], targetDate: g.targetDate || null }))
+    .sort((a, b) => (a.kind === "emergency" ? -1 : 1) - (b.kind === "emergency" ? -1 : 1) || a.name.localeCompare(b.name, "tr"));
+  const emergency = emergencyFundTarget(state, period, { rates });
+  const hasEmergency = goals.some(g => g.kind === "emergency");
+  const main = mainAccountId(state);
+  const savingsAccounts = assets.list.filter(a => a.accountId !== main);
+  return { rates, assets, goals, emergency, hasEmergency, main, savingsAccounts, savingsTotal: sum(savingsAccounts.map(a => a.tl || 0)) };
+}
+
+// Taksit denemesi: "bu taksiti alırsam" — planlanan aylık kalan, taksitli ve taksitsiz. Kayıt yapılmaz.
+export function installmentTrial(state, today, { total, count, accountId, startPeriod = null, months = 6 }) {
+  const payDay = payDayOf(state);
+  const period = periodOf(today, payDay);
+  const { amount, firstAmount } = splitInstallments(total, count);
+  const trial = addInstallmentPurchase(state, { id: "_deneme", name: "Deneme", total, count, accountId, date: today, startPeriod });
+  const before = projection(state, period, months);
+  const after = projection(trial, period, months);
+  const rows = before.map((m, i) => ({ period: m.period, before: m.free, after: after[i].free, delta: after[i].free - m.free, ending: after[i].ending.filter(n => n !== "Deneme") }));
+  const newlyNegative = rows.find(r => r.after < 0 && r.before >= 0) || null;
+  const worst = rows.reduce((w, r) => (r.after < w.after ? r : w), rows[0]);
+  const first = startPeriod || period;
+  const last = addPeriods(first, count - 1);
+  const load = installmentLoad(trial, nextPeriod(period), 3);
+  return { monthly: amount, firstAmount, firstPeriod: first, lastPeriod: last, rows, newlyNegative, worst, loadPerMonth: Math.round(load.total / 3), fits: !newlyNegative && worst.after >= 0 };
 }
 
 export function categoryName(state, key) {
@@ -308,8 +368,12 @@ export function favoritesFor(state, today) {
   return favorites(state, { now: new Date(today + "T12:00:00") });
 }
 
-const FMT = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 0 });
-export const fmt = minor => `${minor < 0 ? "−" : ""}${FMT.format(Math.abs(Math.round(minor / 100)))} ₺`;
-export const fmtNum = minor => `${minor < 0 ? "−" : ""}${FMT.format(Math.abs(Math.round(minor / 100)))}`;
+// Tam lira sade yazılır ("14.550 ₺"); kuruş varsa ekstrelerdeki gibi iki basamakla ("12,50 ₺"), yuvarlanmaz.
+// Tahmini değerler (günlük pay, plana göre hız, asgari ödeme) kaynağında tam liraya yuvarlanır (toLira).
+const WHOLE = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 0 });
+const CENTS = new Intl.NumberFormat("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const absText = minor => { const m = Math.abs(Math.round(minor)); return (m % 100 ? CENTS : WHOLE).format(m / 100); };
+export const fmt = minor => `${minor < 0 ? "−" : ""}${absText(minor)} ₺`;
+export const fmtNum = minor => `${minor < 0 ? "−" : ""}${absText(minor)}`;
 export const fmtK = minor => (minor / 100000).toLocaleString("tr-TR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }).replace("-", "−");
 export { prevPeriod, nextPeriod, addPeriods };

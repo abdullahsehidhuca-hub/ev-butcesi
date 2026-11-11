@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { buildSampleState, SAMPLE_TODAY } from "../src/v3/sampleData.js";
-import { overview, forecast, resolveOptions, paymentsView, report } from "../src/v3/selectors.js";
+import { overview, forecast, resolveOptions, paymentsView, report, fmt, fmtNum } from "../src/v3/selectors.js";
 import { computePeriod } from "../src/core/index.js";
 
 const state = buildSampleState();
@@ -141,4 +141,24 @@ test("Maaş günü değişikliği eski işlemlerin dönemini korur", () => {
   const next = setPayDay(state, 1);
   const after = new Set(transactionsView(next, { period: "2026-11" }).list.map(t => t.id));
   for (const [id, inNov] of before) assert.equal(after.has(id), inNov);
+});
+
+test("Arayüz tutar gösterimi kuruşu yuvarlamaz; tahmini değerler tam liradır", () => {
+  assert.equal(fmt(1455000), "14.550 ₺");
+  assert.equal(fmt(12345), "123,45 ₺");
+  assert.equal(fmt(-45), "−0,45 ₺");
+  assert.equal(fmt(1250), "12,50 ₺");
+  assert.equal(fmtNum(100010), "1.000,10");
+  const o = overview(state, SAMPLE_TODAY);
+  for (const v of [o.perDay, o.pace.expected, o.pace.diff, o.pace.projected]) assert.equal(v % 100, 0);
+  for (const l of report(state, SAMPLE_TODAY).limits) { assert.equal(l.projected % 100, 0); assert.equal(l.expected % 100, 0); }
+});
+
+test("Tüm işlemler: kategori süzgeci yalnız o kategorinin kayıtlarını listeler", () => {
+  const all = transactionsView(state).list;
+  const market = transactionsView(state, { categoryId: "market" }).list;
+  assert.ok(market.length > 0 && market.length < all.length);
+  assert.ok(market.every(t => t.categoryId === "market"));
+  const none = transactionsView(state, { categoryId: "_none" }).list;
+  assert.ok(none.every(t => t.categoryId == null && t.type === "expense"));
 });

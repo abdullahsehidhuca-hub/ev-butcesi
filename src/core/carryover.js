@@ -103,7 +103,8 @@ function convert(amount, fromCur, toCur, rates) {
 
 // Kararı uygular. input.choice zorunlu; seçeneğe göre:
 //  artı saving: { fromAccountId (TL, devredenin durduğu hesap), toAccountId (birikim hesabı), units (birikim
-//     hesabının biriminde alınan miktar), goalId? (yoksa "Devreden birikim" hedefi) }
+//     hesabının biriminde alınan miktar), tlAmount? (dövizde/altında harcanan TL; verilmezse devredenin tamamı),
+//     goalId? (yoksa "Devreden birikim" hedefi) }. Aktarılan TL devredeni aşamaz.
 //  eksi saving: { fromAccountId (birikim hesabı), toAccountId (TL harcama hesabı), units? (dövizde bozdurulan
 //     miktar; verilmezse kurdan hesaplanır) }
 //  debt: { currency, amount (kendi biriminde), dueDate, lender?, accountId (geri ödenecek hesap) }
@@ -128,12 +129,16 @@ export function decideCarryover(state, period, input, { id, date, now = new Date
     const units = input.units;
     if (!(Number.isSafeInteger(units) && units > 0)) fail("birikime aktarılan miktar sıfırdan büyük olmalı");
     if (from.currency !== BASE) fail("devreden TL hesabından aktarılır");
+    // Harcanan TL: TL birikimde alınan miktarın kendisi; döviz/altında verilen tutar ya da devredenin tamamı.
+    const tl = to.currency === BASE ? units : input.tlAmount ?? abs;
+    if (!(Number.isSafeInteger(tl) && tl > 0)) fail("harcanan TL tutarı sıfırdan büyük olmalı");
+    if (tl > abs) fail(`aktarılan tutar devredeni (${formatUnits(abs, BASE)}) aşamaz`);
     const note = to.currency === BASE
-      ? `${monthOf(period)} ayından devreden ${formatUnits(abs, BASE)} birikime aktarıldı`
-      : `${monthOf(period)} ayından devreden ${formatUnits(abs, BASE)} ile ${formatUnits(units, to.currency)} alındı`;
+      ? `${monthOf(period)} ayından devreden ${formatUnits(tl, BASE)} birikime aktarıldı`
+      : `${monthOf(period)} ayından devreden ${formatUnits(tl, BASE)} ile ${formatUnits(units, to.currency)} alındı`;
     if (from.id !== to.id) {
       guardOpen(state, date);
-      const r = moveMoney(next, from, to, { amount: to.currency === BASE ? units : abs, toAmount: units, note, extra: { carryover: period }, meta });
+      const r = moveMoney(next, from, to, { amount: tl, toAmount: units, note, extra: { carryover: period }, meta });
       next = r.state; rec.txId = r.txId;
     }
     // Hedef: seçilen hedef ya da "Devreden birikim" (hedef tutarı aktarılan devredenlerin toplamıdır).
@@ -144,9 +149,9 @@ export function decideCarryover(state, period, input, { id, date, now = new Date
     // Hesap hedefe bu kararla bağlandıysa geri almada çıkarılır.
     if (!(g?.accountIds || []).includes(to.id)) rec.goalAccountAdded = true;
     next = g
-      ? updateGoal(next, goalId, { accountIds, ...(goalId === CARRYOVER_GOAL_ID ? { target: g.target + abs } : {}) })
-      : addGoal(next, { id: CARRYOVER_GOAL_ID, name: "Devreden birikim", target: abs, accountIds, kind: "saving" });
-    Object.assign(rec, { goalId, toAccountId: to.id, units, currency: to.currency, note });
+      ? updateGoal(next, goalId, { accountIds, ...(goalId === CARRYOVER_GOAL_ID ? { target: g.target + tl } : {}) })
+      : addGoal(next, { id: CARRYOVER_GOAL_ID, name: "Devreden birikim", target: tl, accountIds, kind: "saving" });
+    Object.assign(rec, { goalId, toAccountId: to.id, units, tlAmount: tl, currency: to.currency, note });
   } else if (choice === "saving") {
     const from = moneyAccount(state, input.fromAccountId, "birikim hesabı");
     const to = moneyAccount(state, input.toAccountId, "harcama hesabı");
@@ -204,7 +209,7 @@ export function undoCarryover(state, period) {
     const accountIds = rec.goalAccountAdded && !others.some(c => c.toAccountId === rec.toAccountId)
       ? g.accountIds.filter(id => id !== rec.toAccountId) : g.accountIds;
     if (g.id === CARRYOVER_GOAL_ID) {
-      const target = g.target - Math.abs(rec.amount);
+      const target = g.target - (rec.tlAmount ?? Math.abs(rec.amount));
       next = target > 0 ? updateGoal(next, g.id, { target, accountIds }) : deleteGoal(next, g.id);
     } else {
       next = updateGoal(next, g.id, { accountIds });
@@ -225,4 +230,22 @@ export function savingsToBudget(state, { fromAccountId, toAccountId, amount, toA
   const into = from.currency === to.currency ? amount : toAmount ?? convert(amount, from.currency, to.currency, rates);
   if (into == null) fail(`${from.currency} kuru eksik; hesaba giren tutarı girin`);
   return moveMoney(state, from, to, { amount, toAmount: into, note: "Birikimden serbest tutara aktarım", extra: { toBudget: true }, meta: { id, date, now, userId } }).state;
+}
+
+// Birikim ekranı: iki para hesabı arasında para hareketi. Aynı para biriminde aktarım (TL birikime para
+// ayırma), farklı birimde döviz/altın alım-satımı (exchange). Gelir ya da gider değildir ve serbest tutara
+// dokunmaz; o iş savingsToBudget'ındır. toAmount: hedef birimde giren miktar (farklı birimde zorunlu;
+// verilmezse kurdan hesaplanır, kur yoksa hata). Kredi kartı iki tarafta da olamaz; kapalı döneme yazılmaz.
+export function moveFunds(state, { fromAccountId, toAccountId, amount, toAmount, note, id, date, now = new Date(), userId = null, rates = ratesOf(state) }) {
+  const from = moneyAccount(state, fromAccountId, "kaynak hesap");
+  const to = moneyAccount(state, toAccountId, "hedef hesap");
+  if (from.id === to.id) fail("kaynak ve hedef hesap aynı olamaz");
+  if (!(Number.isSafeInteger(amount) && amount > 0)) fail("tutar sıfırdan büyük olmalı");
+  guardOpen(state, date);
+  const into = from.currency === to.currency ? amount : toAmount ?? convert(amount, from.currency, to.currency, rates);
+  if (into == null) fail(`${from.currency === BASE ? to.currency : from.currency} kuru eksik; alınan miktarı girin`);
+  if (!(Number.isSafeInteger(into) && into > 0)) fail("alınan miktar sıfırdan büyük olmalı");
+  const label = from.currency === to.currency ? "Birikime aktarım" : to.currency === BASE ? `${formatUnits(amount, from.currency)} bozduruldu` : `${formatUnits(into, to.currency)} alındı`;
+  const r = moveMoney(state, from, to, { amount, toAmount: into, note: String(note || "").trim() || label, meta: { id, date, now, userId } });
+  return { state: r.state, txId: r.txId };
 }

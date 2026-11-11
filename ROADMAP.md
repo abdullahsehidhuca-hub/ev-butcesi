@@ -47,8 +47,9 @@ Durum işaretleri: [x] tamam · [~] kısmen · [ ] bekliyor
 - [x] Para birimi kuralı: işlem hesabın para biriminde; dövizli borç TL hesaptan gerçek TL ile — 2026-11-06
 - [x] Denetim düzeltmeleri — 2026-11-06: karttaki taksit kart bakiyesine yansır ve ay kapatmada
       devredilmez; ayrı girilen maaş çift sayılmaz; Türkçe karakterli etiketleme (`src/core/labels.js`)
-- [ ] Birikim / döviz / altın varlıkları ve hedefler
-- [ ] Kayıt kayıt senkron katmanı (Firebase; tüm veriyi tek parça ezmeden)
+- [x] Birikim / döviz / altın varlıkları ve hedefler — motor 2026-11-09 (`src/core/savings.js`), arayüz 2026-11-11
+      (`src/v3/screens/BirikimSheet.jsx`: varlıklar, kur girişi, al / sat / bozdur, hedefler, acil durum fonu önerisi). Altın yalnız gram.
+- [x] Kayıt kayıt senkron katmanı (Firebase; tüm veriyi tek parça ezmeden) — 2026-11-08 (`src/v3/sync.js`, `src/v3/useCloud.js`)
 - [x] Bütünlük kuralları — 2026-11-06: kısmi ödeme, iade, kapalı döneme karşı korumalı
       düzenleme/silme, kullanımdaki kaydı silmeme (arşiv/sonlandırma), maaş günü değişikliğinde
       eski işlemlerin ay değiştirmemesi (`tests/integrity.test.js`)
@@ -58,13 +59,19 @@ Durum işaretleri: [x] tamam · [~] kısmen · [ ] bekliyor
 - [~] Taslak v1 — 2026-11-06: `mockups/v2-taslak.html` (ana ekran, + Ekle, ay kapatma,
       yükleniyor / ilk açılış / bağlantı yok). Arayüz UI/UX ajanıyla yeniden planlanacak
       (Abdullah, 2026-11-06); taslak başlangıç noktasıdır.
-- [~] v3 arayüzü /v3 adresinde, `src/core`'a bağlı — 2026-11-07 (`src/v3/`). Veri bağlantısı çalışıyor;
-      **görsel tasarım Abdullah tarafından onaylanmadı** (2026-11-07): kutu içinde kutu, web/trend
-      araştırması yok, belirgin "yapay zekâ tasarımı" görünümü. Görsel yeniden yapılacak; `main`'e alınmaz.
-- [~] Tek "+ Ekle" akışı ve sık kullanılan kategori kısayolları — 2026-11-07 (hızlı harcama çekmecesi)
-- [~] Ana ekran 3 soru: Bu ay ne kadar kaldı? Yaklaşan ödemeler? Plana göre neredeyim?
-- [ ] Ay kapatma ekranı (devir kararları)
-- [ ] Erişilebilirlik: yazı ≥15 px, dokunma alanı ≥44 px, yakınlaştırma açık
+- [x] v3 arayüzü, `src/core`'a bağlı — 2026-11-07 (`src/v3/`). İlk görsel 7 Kasım'da onaylanmadı; 8 Kasım'da
+      Abdullah'ın C tasarımı uygulandı. **Onaylı tasarım 11 Kasım 2026'da depoya alındı**: `mockups/v3-tasarim/`
+      (`a.png` görünüm + `kaynak/` görsel dil paketi, doğrulama notu `BENIOKU.md`). Sekmeler onaylı sıraya alındı
+      (Özet · Ödemeler · Rapor · Ayarlar), ana rakam "Serbest". Kök adres (/) v3'e verildi; eski uygulama `/eski`.
+- [x] Tek "+ Ekle" akışı ve sık kullanılan kategori kısayolları — 2026-11-07 (hızlı harcama çekmecesi; açıklamadan kategori önerisi)
+- [x] Ana ekran 3 soru: Bu ay ne kadar kaldı? Yaklaşan ödemeler? Plana göre neredeyim? — 2026-11-08 (Serbest, Yaklaşan, hız rozeti; Döküm)
+- [x] Ay kapatma ekranı (devir kararları) — 2026-11-10 (`KapatSheet`, `DevredenSheet`; karar geri alınabilir)
+- [~] Erişilebilirlik: yazı ≥15 px (ikincil satırlar 13 px, bilinçli), dokunma alanı ≥44 px, odak görünür — 2026-11-08.
+      Eksik: `index.html` viewport'ta yakınlaştırma kapalı (`user-scalable=no`); Faz 3 öncesi açılmalı.
+- [x] Rapor: dönem seçici (geçmiş aylar), son 6 ay harcama trendi, hedefler — 2026-11-11
+- [x] Taksit denemesi ("bu taksiti alırsam ne olur") — 2026-11-11 (`src/v3/screens/TaksitDeneSheet.jsx`)
+- [ ] Ödeme bildirimleri (PWA'da sınırlı; Faz 3 ile birlikte)
+- [ ] Safari ve gerçek iPhone'da elle tur (Chrome 360 / 390 / 1280 px denendi)
 
 ## Faz 3 — Mağaza ve widget
 Widget (ana ekran kısayolu ve "bu ay kalan" göstergesi) PWA ile yapılamaz; uygulamanın
@@ -91,3 +98,8 @@ yerel bir kabukla paketlenmesi gerekir.
 - 2026-11-06 · İş #20 kapanış: devir notu yazıldı, `agent/20` dalı push edildi (main'e birleştirilmedi).
 - 2026-11-07 · İş #23: v3 arayüzü /v3 adresinde (`src/v3/`), yeni motora bağlı; eski uygulama değişmedi.
   `tests/v3.test.js` eklendi, toplam 43 test geçiyor. Ayrıntı: `logs/2026-11-07-v3-arayuz-ilk-surum.md`.
+- 2026-11-08…10 · İşler #35–#52: C tasarımı, bulut eşitleme, kart kesim / bloke, ekstre eşitleme (OCR), ay kapatma ve
+  devreden kararları, tanım düzenleme çekmeceleri. Durum raporu: `docs/RAPOR-DURUM-2026-11-11.md`.
+- 2026-11-11 · İş #61: onaylı tasarım depoya alındı (`mockups/v3-tasarim/`), sekmeler ve etiketler hizalandı, kök adres
+  v3'e verildi (`/eski` eski uygulama), Birikim (varlık, kur, al / sat, hedef, acil fon), Taksit dene, Rapor dönem
+  seçici ve trend. 127 test geçiyor.

@@ -1,10 +1,10 @@
 // Ayarlar (taslak C6): Apple Ayarlar düzeninde gruplu liste. Satırlar mevcut v3 çekmecelerini açar;
-// dokunulmayan satır düğme değildir. Görünüm satırı temayı değiştirir.
+// hesap, kategori ve düzenli ödeme satırları düzenleme çekmecesini (TanimSheet) açar. Görünüm satırı temayı değiştirir.
 // Metinler uygulamayı ilk kez kullanan kişiye yazılır: geliştirme sürümlerinden (v3, eski uygulama) söz edilmez.
 import { useRef } from "react";
 import { Tile, Icon } from "../components/ui.jsx";
-import { balanceOf } from "../../core/index.js";
-import { fmt, mainAccountId } from "../selectors.js";
+import { balanceOf, amountFor, periodOf } from "../../core/index.js";
+import { fmt, mainAccountId, savingsView } from "../selectors.js";
 import { globalModeAt } from "./KartOdemeSheet.jsx";
 
 const THEMES = [["system", "Sistem"], ["light", "Açık"], ["dark", "Koyu"]];
@@ -40,7 +40,7 @@ function cloudRow(cloud = { status: "off" }, memberCount, open) {
     case "loading": return { title: "Bulut bağlanıyor…", sub: "Bu arada veriler bu cihazda saklanıyor" };
     case "signedOut": return { title: "Aile hesabına giriş yapın", sub: "Verileriniz tüm cihazlarınızda ve aile üyelerinizde eşitlenir", tint: true, onClick: () => open({ name: "login" }) };
     case "noFamily": return { title: "Aile hesabı kurun", sub: "Yeni aile oluşturun ya da davet koduyla katılın", tint: true, onClick: () => open({ name: "login" }) };
-    case "needsUpload": return { title: "Bu cihazdaki veri buluta yüklenmedi", sub: "Güncel ekranındaki uyarıdan aile hesabına yükleyin" };
+    case "needsUpload": return { title: "Bu cihazdaki veri buluta yüklenmedi", sub: "Özet ekranındaki uyarıdan aile hesabına yükleyin" };
     case "error": return { title: "Bulutla eşitlenemedi", sub: "Veriler bu cihazda saklanıyor; düzenli yedek alın", danger: true };
     default: return { title: "Örnek veri · buluta yazılmaz", sub: "Yalnız bu cihazda, gerçek veriden ayrı" };
   }
@@ -50,9 +50,12 @@ export default function Ayarlar({ state, today, open, theme, onTheme, backup, cl
   const fileRef = useRef(null);
   const accounts = Object.values(state.accounts);
   const categories = Object.values(state.categories).filter(c => !c.archived).sort(byName);
+  const archived = Object.values(state.categories).filter(c => c.archived).sort(byName);
   const obligations = Object.values(state.obligations).sort(byName);
+  const period = periodOf(today, state.settings.payDay);
   const hasAccount = accounts.length > 0;
   const main = hasAccount ? mainAccountId(state) : null;
+  const sv = hasAccount ? savingsView(state, today) : null;
   const nextTheme = () => onTheme(THEMES[(THEMES.findIndex(t => t[0] === theme) + 1) % THEMES.length][0]);
   const group = { "--inset": "58px" };
 
@@ -72,8 +75,9 @@ export default function Ayarlar({ state, today, open, theme, onTheme, backup, cl
             icon={a.type === "credit" ? "card" : a.type === "cash" ? "cash" : "wallet"}
             color={a.type === "credit" ? "pink" : a.id === main ? "indigo" : a.type === "cash" ? "teal" : "blue"}
             title={a.name}
-            sub={join(ACCOUNT_TYPE[a.type], a.currency !== "TRY" && a.currency, a.cutoffDay && `Kesim günü ${a.cutoffDay}`, state.settings.defaultAccountId === a.id && "Varsayılan")}
-            value={a.currency === "TRY" ? fmt(balanceOf(state, a.id, today)) : null} />
+            sub={join(ACCOUNT_TYPE[a.type], a.currency !== "TRY" && a.currency, a.cutoffDay && `Kesim ${a.cutoffDay}`, a.paymentDay && `son ödeme ${a.paymentDay}`, state.settings.defaultAccountId === a.id && "Varsayılan")}
+            value={a.currency === "TRY" ? fmt(balanceOf(state, a.id, today)) : null}
+            onClick={() => open({ name: "accountEdit", id: a.id })} />
         ))}
         {accounts.some(a => a.type === "credit") && (
           <Row icon="card" color="pink" title="Kart ekstresi hangi bütçeden" sub="Genel varsayılan; kart bazında değiştirilebilir"
@@ -82,14 +86,41 @@ export default function Ayarlar({ state, today, open, theme, onTheme, backup, cl
         <Row icon="plus" color="blue" title="Hesap ekle" tint onClick={() => open({ name: "account" })} />
       </section>
 
+      {hasAccount && (
+        <>
+          <span className="t-cap">Birikim ve hedefler</span>
+          <section className="list" style={group} aria-label="Birikim ve hedefler">
+            <Row icon="spark" color="green" title="Birikim, döviz ve altın" sub={sv.assets.missingRates.length ? `${sv.assets.missingRates.join(", ")} kuru eksik` : sv.savingsAccounts.length ? `${sv.savingsAccounts.length} hesap · kur girişi, al / sat` : "Birikim hesabı ekleyin, kur girin, döviz / altın alın"}
+              value={sv.savingsAccounts.length ? fmt(sv.savingsTotal) : null} onClick={() => open({ name: "savings" })} />
+            {sv.goals.map(g => (
+              <Row key={g.goalId} icon={g.kind === "emergency" ? "alert" : "spark"} color={g.kind === "emergency" ? "red" : "green"} title={g.name}
+                sub={g.reached ? "Hedefe ulaşıldı" : `%${g.percent} · ${fmt(g.left)} kaldı${g.monthlyNeeded != null && !g.overdue ? ` · ayda ${fmt(g.monthlyNeeded)}` : ""}`}
+                value={fmt(g.target)} onClick={() => open({ name: "goal", id: g.goalId })} />
+            ))}
+            <Row icon="plus" color="green" title={sv.hasEmergency ? "Hedef ekle" : "Hedef ya da acil durum fonu ekle"} tint onClick={() => open({ name: "goal" })} />
+          </section>
+        </>
+      )}
+
       <span className="t-cap">Kategoriler ve limitler</span>
       <section className="list" style={group} aria-label="Kategoriler">
         {categories.map(c => (
           <Row key={c.id} icon={c.icon || "tag"} color={c.color || "purple"} title={c.name}
-            sub={c.keywords?.length ? `Tanıma: ${c.keywords.join(", ")}` : null} value={c.budget ? `${fmt(c.budget)} /ay` : null} />
+            sub={c.keywords?.length ? `Tanıma: ${c.keywords.join(", ")}` : null} value={c.budget ? `${fmt(c.budget)} /ay` : null}
+            onClick={() => open({ name: "categoryEdit", id: c.id })} />
         ))}
         <Row icon="plus" color="blue" title="Kategori ekle" tint onClick={() => open({ name: "category" })} />
       </section>
+      {archived.length > 0 && (
+        <details className="why" style={{ padding: "0 4px" }}>
+          <summary className="t-sub">Arşivlenmiş kategoriler · {archived.length}</summary>
+          <section className="list" style={group} aria-label="Arşivlenmiş kategoriler">
+            {archived.map(c => (
+              <Row key={c.id} icon={c.icon || "tag"} color="gray" title={c.name} sub="Arşivde · listelerde görünmez" onClick={() => open({ name: "categoryEdit", id: c.id })} />
+            ))}
+          </section>
+        </details>
+      )}
 
       <span className="t-cap">Düzenli ödemeler ve gelirler</span>
       <section className="list" style={group} aria-label="Düzenli ödemeler ve gelirler">
@@ -98,7 +129,8 @@ export default function Ayarlar({ state, today, open, theme, onTheme, backup, cl
             color={o.color || (o.kind === "income" ? "green" : o.kind === "fixed" ? "orange" : "teal")}
             title={o.name}
             sub={join(KIND[o.kind], state.accounts[o.accountId]?.name, o.count ? `${o.count} taksit` : o.dueDay && `Her ayın ${o.dueDay}. günü`, o.endPeriod && "Sonlandırıldı")}
-            value={`${o.kind === "income" ? "+" : ""}${fmt(o.amount)}`} />
+            value={`${o.kind === "income" ? "+" : ""}${fmt(amountFor(o, period))}`}
+            onClick={() => open({ name: "obligationEdit", id: o.id })} />
         ))}
         {hasAccount ? (
           <>

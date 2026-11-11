@@ -3,8 +3,8 @@
   "short_name": "Ev Bütçesi",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#EBE3DB",
-  "theme_color": "#0C6B63",
+  "background_color": "#F2F2F7",
+  "theme_color": "#F2F2F7",
   "icons": [
     {
       "src": "/icon-192.png",

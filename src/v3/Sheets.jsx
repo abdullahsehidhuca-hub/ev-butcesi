@@ -16,6 +16,9 @@ const activeCategories = state => Object.values(state.categories).filter(c => !c
 const accountOptions = (list, empty) => [...(empty ? [{ value: "", label: empty }] : []), ...list.map(a => ({ value: a.id, label: a.name }))];
 const categoryOptions = state => [{ value: "", label: "Kategorisiz" }, ...activeCategories(state).map(c => ({ value: c.id, label: c.name }))];
 const DAYS = Array.from({ length: 31 }, (_, i) => ({ value: String(i + 1), label: `${i + 1}` }));
+const DAYS_OPT = [{ value: "", label: "Belirtilmedi" }, ...DAYS];
+// Kayıt saati: tarih uygulamanın bugün değerinden (today), saat cihazdan; örnek veri kipinde de doğru güne yazılır.
+const nowOn = day => new Date(`${day}T${new Date().toTimeString().slice(0, 8)}`);
 
 // Bakiye gibi sıfır ya da eksi olabilen tutar: boş → 0, "-1.250" → -125000, geçersiz → null.
 export function parseBalance(text) {
@@ -29,7 +32,7 @@ export function parseBalance(text) {
 // ── Hızlı harcama ──────────────────────────────────────────────────────────────
 // Tutar → kategori → Kaydet. Hesap, kategoride en son kullanılandan gelir; açıklama
 // yazılırsa kategori önerilir, kullanıcının seçimi öğrenilir.
-export function QuickAddSheet({ state, commit, onClose, onNeedAccount }) {
+export function QuickAddSheet({ state, commit, onClose, onNeedAccount, today }) {
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
   const [categoryId, setCategoryId] = useState(null);
@@ -60,7 +63,7 @@ export function QuickAddSheet({ state, commit, onClose, onNeedAccount }) {
     if (!minor) return setErrors([AMOUNT_HINT]);
     const text = note.trim();
     const errs = commit(s => {
-      let next = quickAdd(s, { amount: minor, categoryId, accountId: account, note: text }, { id: newId() }).state;
+      let next = quickAdd(s, { amount: minor, categoryId, accountId: account, note: text }, { id: newId(), now: nowOn(today) }).state;
       if (categoryId && text) next = learnCategory(next, text, categoryId);
       return next;
     });
@@ -89,7 +92,7 @@ export function QuickAddSheet({ state, commit, onClose, onNeedAccount }) {
 
 // ── Ödendi / alındı ve kart ödemesi ────────────────────────────────────────────
 // target: { type: "obligation", item } (computePeriod kalemi) ya da { type: "card", card }
-export function PaySheet({ state, commit, onClose, period, target }) {
+export function PaySheet({ state, commit, onClose, period, target, today }) {
   const isCard = target.type === "card";
   const item = target.item;
   const income = !isCard && item.kind === "income";
@@ -106,8 +109,8 @@ export function PaySheet({ state, commit, onClose, period, target }) {
     const minor = parseAmount(amount);
     if (!minor) return setErrors([AMOUNT_HINT]);
     const errs = commit(s => isCard
-      ? quickAdd(s, { type: "transfer", amount: minor, accountId, toAccountId: target.card.accountId, note: title }, { id: newId() }).state
-      : payObligation(s, item.obligationId, period, { amount: minor, accountId, partial }, { id: newId() }).state);
+      ? quickAdd(s, { type: "transfer", amount: minor, accountId, toAccountId: target.card.accountId, note: title }, { id: newId(), now: nowOn(today) }).state
+      : payObligation(s, item.obligationId, period, { amount: minor, accountId, partial }, { id: newId(), now: nowOn(today) }).state);
     if (errs) setErrors(errs); else onClose();
   };
 
@@ -147,6 +150,8 @@ export function AccountSheet({ state, commit, onClose, today }) {
   const [type, setType] = useState("bank");
   const [currency, setCurrency] = useState("TRY");
   const [balance, setBalance] = useState("");
+  const [cutoff, setCutoff] = useState("");
+  const [payment, setPayment] = useState("");
   const [errors, setErrors] = useState(null);
   const credit = type === "credit";
 
@@ -156,8 +161,9 @@ export function AccountSheet({ state, commit, onClose, today }) {
     if (minor == null) return setErrors(["bakiyeyi rakamla yazın, örneğin 48.265,44"]);
     const errs = commit(s => {
       const id = newId();
-      // Kartta borç eksi bakiye olarak tutulur (çekirdek kuralı).
-      let next = addAccount(s, { id, name: name.trim(), type, currency, opening: { date: today, balance: credit ? -Math.abs(minor) : minor } });
+      // Kartta borç eksi bakiye olarak tutulur (çekirdek kuralı); kesim ve son ödeme günü isteğe bağlıdır.
+      const card = credit ? { ...(cutoff ? { cutoffDay: Number(cutoff) } : {}), ...(payment ? { paymentDay: Number(payment) } : {}) } : {};
+      let next = addAccount(s, { id, name: name.trim(), type, currency, ...card, opening: { date: today, balance: credit ? -Math.abs(minor) : minor } });
       if (!s.settings.defaultAccountId && !credit) next = { ...next, settings: { ...next.settings, defaultAccountId: id } };
       return next;
     });
@@ -172,6 +178,10 @@ export function AccountSheet({ state, commit, onClose, today }) {
         {!credit && <SelectField label="Para birimi" value={currency} onChange={setCurrency} options={CURRENCY_OPTIONS} />}
         <Field label={credit ? "Güncel kart borcu" : "Bugünkü bakiye"} value={balance} onChange={setBalance} inputMode="decimal" placeholder="0,00"
           hint={credit ? "Bankanın gösterdiği borç; ödenmemiş harcamalar dahil." : "Bankada şu an görünen tutar. Uygulama bu rakamdan devam eder."} />
+        {credit && <>
+          <SelectField label="Hesap kesim günü" value={cutoff} onChange={setCutoff} options={DAYS_OPT} hint="Ekstrenin kesildiği gün; bloke ve ekstre dönemi buna göre hesaplanır. Sonradan da girebilirsiniz." />
+          <SelectField label="Son ödeme günü" value={payment} onChange={setPayment} options={DAYS_OPT} hint="Boş bırakılırsa kesimden 10 gün sonrası sayılır." />
+        </>}
         <ErrorText errors={errors} />
         <Actions submit="Kaydet" onCancel={onClose} />
       </Form>
@@ -251,12 +261,13 @@ export function ObligationSheet({ state, commit, onClose, kind, period }) {
 // ── Taksitli alışveriş ─────────────────────────────────────────────────────────
 const COUNTS = [2, 3, 4, 5, 6, 8, 9, 10, 12, 18, 24, 36].map(n => ({ value: String(n), label: `${n} taksit` }));
 
-export function InstallmentSheet({ state, commit, onClose, today }) {
+// initial: taksit denemesinden (TaksitDeneSheet) gelen ön değerler { total, count, accountId, startPeriod }.
+export function InstallmentSheet({ state, commit, onClose, today, initial }) {
   const accounts = Object.values(state.accounts).sort((a, b) => (b.type === "credit") - (a.type === "credit"));
   const [name, setName] = useState("");
-  const [total, setTotal] = useState("");
-  const [count, setCount] = useState("6");
-  const [accountId, setAccountId] = useState(accounts[0]?.id || "");
+  const [total, setTotal] = useState(initial?.total ? amountText(initial.total) : "");
+  const [count, setCount] = useState(initial?.count ? String(initial.count) : "6");
+  const [accountId, setAccountId] = useState(initial?.accountId && state.accounts[initial.accountId] ? initial.accountId : accounts[0]?.id || "");
   const [categoryId, setCategoryId] = useState("");
   const [errors, setErrors] = useState(null);
 
@@ -264,7 +275,7 @@ export function InstallmentSheet({ state, commit, onClose, today }) {
   const save = () => {
     if (!name.trim()) return setErrors(["ne aldığınızı yazın"]);
     if (!minor) return setErrors(["toplam tutarı girin, örneğin 12.000"]);
-    const errs = commit(s => addInstallmentPurchase(s, { id: newId(), name: name.trim(), total: minor, count: Number(count), accountId, categoryId: categoryId || null, date: today }));
+    const errs = commit(s => addInstallmentPurchase(s, { id: newId(), name: name.trim(), total: minor, count: Number(count), accountId, categoryId: categoryId || null, date: today, startPeriod: initial?.startPeriod || null }));
     if (errs) setErrors(errs); else onClose();
   };
 

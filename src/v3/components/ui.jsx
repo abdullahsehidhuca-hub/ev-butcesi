@@ -70,8 +70,9 @@ export function Avatar({ member, size = 32 }) {
   );
 }
 
-// Mevcut v3 menüsü: Güncel · Analiz · Planlama · Ayarlar (+ ayrı ekle düğmesi).
-export const TABS = [["home", "Güncel", "ozet"], ["report", "Analiz", "pie"], ["plan", "Planlama", "cal"], ["settings", "Ayarlar", "ayarlar"]];
+// Onaylı tasarımdaki menü (mockups/v3-tasarim/a.png): Özet · Ödemeler · Rapor · Ayarlar (+ ayrı ekle düğmesi).
+// Kimlikler adres çubuğundaki #home, #plan, #report, #settings değerleridir; değişmez.
+export const TABS = [["home", "Özet", "ozet"], ["plan", "Ödemeler", "cal"], ["report", "Rapor", "pie"], ["settings", "Ayarlar", "ayarlar"]];
 
 export function TabBar({ tab, onTab, onAdd }) {
   return (

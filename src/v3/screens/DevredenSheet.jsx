@@ -75,6 +75,7 @@ export default function DevredenSheet({ state, commit, onClose, today, period, o
   const [step, setStep] = useState("choose");
   const [kind, setKind] = useState("TRY");
   const [units, setUnits] = useState(amountText(abs));
+  const [tlSpent, setTlSpent] = useState(amountText(abs)); // döviz/altın alımında harcanan TL
   const [toAccountId, setToAccountId] = useState("");
   const [fromAccountId, setFromAccountId] = useState("");
   const [goalId, setGoalId] = useState(CARRYOVER_GOAL_ID);
@@ -158,18 +159,21 @@ export default function DevredenSheet({ state, commit, onClose, today, period, o
   if (surplus) {
     const targets = accounts.filter(a => a.currency === kind);
     const unitsMinor = parseAmount(units);
+    const tlMinor = kind === "TRY" ? unitsMinor : parseAmount(tlSpent);
     const kindLabel = KINDS.find(k => k.value === kind).label;
-    const note = unitsMinor ? (kind === "TRY"
-      ? `${monthOf(period)} ayından devreden ${fmt(abs)} birikime aktarıldı`
-      : `${monthOf(period)} ayından devreden ${fmt(abs)} ile ${formatUnits(unitsMinor, kind)} alındı`) : null;
+    const note = unitsMinor && tlMinor ? (kind === "TRY"
+      ? `${monthOf(period)} ayından devreden ${fmt(tlMinor)} birikime aktarıldı`
+      : `${monthOf(period)} ayından devreden ${fmt(tlMinor)} ile ${formatUnits(unitsMinor, kind)} alındı`) : null;
     const warning = carryoverCardWarning(state, period, { rates });
     const goals = Object.values(state.goals || {}).filter(g => !g.archived && g.id !== CARRYOVER_GOAL_ID);
-    const onKind = k => { const v = k || "TRY"; setKind(v); setUnits(v === "TRY" ? amountText(abs) : ""); setToAccountId(accounts.find(a => a.currency === v && a.id !== main)?.id || NEW); };
+    const onKind = k => { const v = k || "TRY"; setKind(v); setUnits(v === "TRY" ? amountText(abs) : ""); setTlSpent(amountText(abs)); setToAccountId(accounts.find(a => a.currency === v && a.id !== main)?.id || NEW); };
     const save = () => {
       if (!unitsMinor) return setErrors([`alınan miktarı girin (${UNIT[kind]})`]);
+      if (!tlMinor) return setErrors(["harcanan TL tutarını girin"]);
+      if (tlMinor > abs) return setErrors([`aktarılan tutar devredeni (${fmt(abs)}) aşamaz`]);
       const newAccId = toAccountId === NEW ? newId() : null;
       const before = s => newAccId ? addAccount(s, { id: newAccId, name: `${kindLabel.replace(" (gram)", "")} birikim`, type: kind === "XAU" ? "cash" : "bank", currency: kind }) : s;
-      decide({ choice: "saving", fromAccountId, toAccountId: newAccId || toAccountId, units: unitsMinor, goalId: goalId === CARRYOVER_GOAL_ID ? undefined : goalId }, before);
+      decide({ choice: "saving", fromAccountId, toAccountId: newAccId || toAccountId, units: unitsMinor, ...(kind !== "TRY" ? { tlAmount: tlMinor } : {}), goalId: goalId === CARRYOVER_GOAL_ID ? undefined : goalId }, before);
     };
     return (
       <Sheet title="Birikime aktar" onClose={onClose}>
@@ -177,6 +181,10 @@ export default function DevredenSheet({ state, commit, onClose, today, period, o
         <p className="v3-sheet-text">{monthOf(period)} ayından devreden <b className="num">{fmt(abs)}</b> birikime aktarılıyor.</p>
         <Form onSubmit={save}>
           <Chips label="Birikim cinsi" options={KINDS} value={kind} onChange={onKind} wrap />
+          {kind !== "TRY" && (
+            <Field label="Harcanan TL" value={tlSpent} onChange={setTlSpent} inputMode="decimal" placeholder="0,00"
+              hint="Devredenin tamamı ya da bir kısmı. Kalanı TL hesabında kalır; serbest tutara eklenmez." />
+          )}
           <Field label={`Alınan miktar (${UNIT[kind]})`} value={units} onChange={setUnits} inputMode="decimal" placeholder="0"
             hint={kind === "TRY" ? "Devredenin tamamı ya da bir kısmı." : "Aldığınız miktarı kendi cinsinden yazın; devredenle birebir eşleşmesi gerekmez."} invalid={!!errors} />
           <SelectField label="Birikim hesabı" value={toAccountId} onChange={setToAccountId}

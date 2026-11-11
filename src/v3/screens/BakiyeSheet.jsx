@@ -1,4 +1,4 @@
-// Başlıktaki "Kullanılabilir" tutara dokununca açılan döküm (eski uygulamadaki Aylık bütçe /
+// Başlıktaki "Serbest" tutara dokununca açılan döküm (eski uygulamadaki Aylık bütçe /
 // Bankadaki tutar / Bloke edilen tutar kutularının karşılığı). Bankadaki tutar uygulamanın kayıtlarına
 // göre hesaplanır; bankadaki gerçek bakiyeyle karşılaştırma (reconcile) eksik ya da hatalı kaydı gösterir.
 import { useState } from "react";
@@ -114,7 +114,7 @@ function Check({ state, commit, today, account, onDone }) {
           <button type="button" className="v3-cancel" style={{ flex: 1 }} onClick={keep}>Kayıtlara bakacağım</button>
           <button type="button" className="v3-submit" onClick={fix}>Farkı düzeltme olarak kaydet</button>
         </div>
-        <p className="t-meta" style={{ margin: 0 }}>Düzeltme gizli değildir; Analiz'de "Bakiye düzeltme" olarak görünür.</p>
+        <p className="t-meta" style={{ margin: 0 }}>Düzeltme gizli değildir; Rapor'da "Bakiye düzeltme" olarak görünür.</p>
       </div>
     );
   }
@@ -142,14 +142,14 @@ export default function BakiyeSheet({ state, commit, today, onClose, onToast, on
   const last = lastClosed ? carryoverOf(state, lastClosed) : null;
 
   return (
-    <Sheet title="Kullanılabilir tutar" onClose={onClose}>
+    <Sheet title="Serbest tutar" onClose={onClose}>
       <div className="stack" style={{ gap: 18, margin: "0 4px" }}>
         <div className="stack gap2">
           <span className={`num t-big${v.available < 0 ? " c-red" : ""}`}>{fmt(v.available)}</span>
           <span className="t-sub">Bu dönem ödemeler, harcamalar ve bütçe ayrımı düşüldükten sonra serbest kalan.</span>
         </div>
 
-        <section aria-label="Kullanılabilir tutarın hesabı">
+        <section aria-label="Serbest tutarın hesabı">
           <span className="t-cap" style={{ padding: 0 }}>Nasıl hesaplandı</span>
           <dl style={{ margin: 0 }}>
             <Line label="Aylık bütçe (gelir)" value={`+${fmt(b.income)}`} note={b.received < b.income ? `${fmt(b.received)} alındı · ${fmt(b.income - b.received)} bekleniyor` : "Tamamı alındı"} />
@@ -159,7 +159,7 @@ export default function BakiyeSheet({ state, commit, today, onClose, onToast, on
             {carry.in > 0 && <Line label={`${periodLabel(prevPeriod(v.period)).split(" ")[0]} açığı`} value={fmt(-carry.in)} note="Önceki dönemin açığı bu dönemden düşülsün dendi" />}
             {carry.fromSavings > 0 && <Line label="Birikimden aktarılan" value={`+${fmt(carry.fromSavings)}`} note="Gelir değil; birikimden serbest tutara aktarıldı" />}
             <Line label="Bütçelere ayrılan" value={fmt(-b.reserved)} note="Kategori limitlerinin henüz harcanmamış kısmı" />
-            <div className="sum-line"><Line label="Kullanılabilir" value={fmt(b.safe)} strong /></div>
+            <div className="sum-line"><Line label="Serbest" value={fmt(b.safe)} strong /></div>
             <Line label="Tahmini devreden" value={`~${fmt(estimate)}`} tone={estimate < 0 ? "c-red" : undefined}
               note="Dönem kapanınca kesinleşir. Serbest tutara eklenmez; kapanışta birikime aktarma ya da açığı karşılama kararı sorulur." />
           </dl>

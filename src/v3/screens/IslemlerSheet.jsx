@@ -12,22 +12,26 @@ import { TxRow } from "./Ozet.jsx";
 export function TxListSheet({ state, onClose, onEdit, members = {}, initial }) {
   const [period, setPeriod] = useState(initial?.period || "all");
   const [query, setQuery] = useState(initial?.query || "");
-  const v = transactionsView(state, { period, query });
+  const [categoryId, setCategoryId] = useState(initial?.categoryId || "all");
+  const v = transactionsView(state, { period, query, categoryId });
   const memberList = Object.values(members);
   const options = [{ value: "all", label: "Tüm dönemler" }, ...v.periods.map(p => ({ value: p, label: `${periodLabel(p)}${v.closed(p) ? " · kapalı" : ""}` }))];
+  const cats = [{ value: "all", label: "Tüm kategoriler" }, ...Object.values(state.categories).sort(byName).map(c => ({ value: c.id, label: c.archived ? `${c.name} · arşiv` : c.name })), { value: "_none", label: "Kategorisiz harcamalar" }];
+  const title = categoryId !== "all" ? `${cats.find(c => c.value === categoryId)?.label.replace(" · arşiv", "") || "Kategori"} işlemleri` : "Tüm işlemler";
   return (
-    <Sheet title="Tüm işlemler" onClose={onClose}>
+    <Sheet title={title} onClose={onClose}>
       <Field label="Ara" value={query} onChange={setQuery} type="search" placeholder="Açıklama, kategori, hesap ya da tutar" />
       <SelectField label="Dönem" value={period} onChange={setPeriod} options={options} />
+      <SelectField label="Kategori" value={categoryId} onChange={setCategoryId} options={cats} />
       <p className="t-meta" role="status" style={{ margin: "0 4px 8px" }}>
         {v.list.length} işlem{v.list.length ? ` · net ${fmt(v.net)}` : ""}
       </p>
       <section className="list" aria-label="İşlemler" style={{ "--inset": "64px" }}>
         {v.list.map(t => (
           <TxRow key={t.id} t={t} state={state} member={memberList.length > 1 ? members[t.createdBy] : null}
-            onClick={() => onEdit(t.id, { period, query })} />
+            onClick={() => onEdit(t.id, { period, query, categoryId })} />
         ))}
-        {!v.list.length && <p className="t-sub" style={{ margin: 0, padding: 16 }}>{query ? "Aramaya uyan işlem yok." : "Bu dönemde işlem yok."}</p>}
+        {!v.list.length && <p className="t-sub" style={{ margin: 0, padding: 16 }}>{query ? "Aramaya uyan işlem yok." : categoryId !== "all" ? "Bu kategoride işlem yok." : "Bu dönemde işlem yok."}</p>}
       </section>
     </Sheet>
   );

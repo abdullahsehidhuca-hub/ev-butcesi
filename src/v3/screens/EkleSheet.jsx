@@ -74,7 +74,7 @@ export default function EkleSheet({ state, today, members = {}, commit, onClose,
         <div className="sheet-head">
           <button type="button" onClick={onClose}>Vazgeç</button>
           <span className="b" style={{ fontSize: 17 }}>Harcama</span>
-          <button type="submit" aria-disabled={!canAdd} style={{ fontWeight: 600, opacity: canAdd ? 1 : .4 }}>Ekle</button>
+          <button type="submit" aria-disabled={!canAdd} style={{ fontWeight: 600, minWidth: 44, textAlign: "right", opacity: canAdd ? 1 : .4 }}>Ekle</button>
         </div>
 
         <label className="amount">

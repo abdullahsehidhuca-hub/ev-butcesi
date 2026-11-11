@@ -3,6 +3,8 @@
   "outputDirectory": "dist",
   "rewrites": [
     { "source": "/v3", "destination": "/index.html" },
-    { "source": "/v3/", "destination": "/index.html" }
+    { "source": "/v3/", "destination": "/index.html" },
+    { "source": "/eski", "destination": "/index.html" },
+    { "source": "/eski/", "destination": "/index.html" }
   ]
 }
