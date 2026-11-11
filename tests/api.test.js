@@ -1,9 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import advisor from "../api/ai-advisor.js";
-import receipt from "../api/analyze-receipt.js";
-import statement from "../api/analyze-statement.js";
-import { checkFile, getToken } from "../api/_anthropic.js";
+import advisor from "../functions/ai/advisor.js";
+import receipt from "../functions/ai/receipt.js";
+import statement from "../functions/ai/statement.js";
+import { checkFile, getToken } from "../functions/ai/common.js";
+import { usageToday, addUsage } from "../functions/ai/usage.js";
+import vercelAdvisor from "../api/ai-advisor.js";
+import vercelReceipt from "../api/analyze-receipt.js";
+import vercelStatement from "../api/analyze-statement.js";
 
 // Canlı AI servisine istek gitmemesi için anahtar tanımsız tutulur.
 delete process.env.ANTHROPIC_API_KEY;
@@ -40,6 +44,12 @@ for (const [name, handler, body] of [
   });
 }
 
+test("Vercel api/ dosyaları Functions'taki aynı işleyicileri kullanır", () => {
+  assert.equal(vercelAdvisor, advisor);
+  assert.equal(vercelReceipt, receipt);
+  assert.equal(vercelStatement, statement);
+});
+
 test("getToken yalnızca Bearer biçimini kabul eder", () => {
   assert.equal(getToken({ headers: { authorization: "Bearer abc" } }), "abc");
   assert.equal(getToken({ headers: { authorization: "abc" } }), null);
@@ -52,4 +62,12 @@ test("checkFile tür ve boyut sınırı", () => {
   assert.equal(checkFile({ base64: "aGVsbG8=", mediaType: "text/html" }, types, 100), "Desteklenmeyen dosya türü");
   assert.equal(checkFile({ base64: "A".repeat(400), mediaType: "application/pdf" }, types, 100), "Dosya çok büyük");
   assert.equal(checkFile({}, types, 100), "Dosya verisi eksik");
+});
+
+test("günlük kullanım sayacı kullanıcı başına sayar (Functions dışında bellekte)", async () => {
+  assert.equal(await usageToday("test-a"), 0);
+  await addUsage("test-a");
+  await addUsage("test-a");
+  assert.equal(await usageToday("test-a"), 2);
+  assert.equal(await usageToday("test-b"), 0);
 });

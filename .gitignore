@@ -45,3 +45,6 @@ ios/App/DerivedData/
 
 # Kişisel yedek dosyaları (gerçek mali veri; depoya girmez)
 yedek/
+
+# Functions emülatörü için yerel gizli anahtar dosyası (HASSAS)
+functions/.secret.local

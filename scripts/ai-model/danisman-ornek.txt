@@ -1,0 +1,73 @@
+Aşağıdaki veriler UYDURMA bir ailenin bu dönemki bütçesidir (model denemesi içindir).
+
+KURALLAR:
+- MADDE MADDE yaz, paragraf değil — her başlık altında kısa maddeler
+- ÇİFT SAYMA YAPMA: Bloke içinde olan kalemleri kullanılabilir bütçeden tekrar düşme. Kullanılabilir bütçe zaten net rakamdır.
+
+ÖDEME DÖNEMİ:
+- Döngü: her ayın 15'inden takip eden ayın 14'üne
+- Mevcut dönem: 2026-10 → 15.10.2026 – 14.11.2026
+- Dönemin 20. günü, 11 gün kaldı (%65)
+
+GELİR YAPISI:
+  Maaş: 85.000 ₺ (15.10.2026)
+  TOPLAM: 85.000 ₺
+
+BÜTÇE YAPISI (ÖNEMLİ — çift sayma yapma!):
+- Bütçe: 85.000 ₺ | Bankadaki tutar: 31.400 ₺ | Bloke: 21.800 ₺ | Kullanılabilir bütçe: 9.600 ₺
+- Bloke şunları İÇERİR: aktarılmamış KK ödemeleri, ödenmemiş sabit giderler, taksitler. Bunlar kullanılabilir bütçeden ZATEN düşülmüştür.
+- Sabit giderler bütçenin %41'i
+
+HARCAMA HIZI:
+- Değişken harcama: 16.000 ₺ / 20 gün = günlük 800 ₺
+- Dönem sonu tahmini: 24.800 ₺ (bütçe: 22.000 ₺)
+- Harcama yığılması: işlemlerin %68'i dönemin ilk yarısında
+
+KATEGORİ (bu dönem vs geçmiş 3 dönem ortalaması):
+  Market: 7.900 ₺ (ort. 6.200 ₺, +%27)
+  Restoran/kafe: 3.400 ₺ (ort. 2.100 ₺, +%62)
+  Akaryakıt: 2.600 ₺ (ort. 2.500 ₺, +%4)
+  Giyim: 1.300 ₺ (ort. 1.800 ₺, −%28)
+  Diğer: 800 ₺ (ort. 900 ₺)
+
+KREDİ KARTI:
+  Kart A: dönem harcaması 9.200 ₺, son ödeme 05.11.2026 (ödenmedi, blokede)
+  Kart B: dönem harcaması 4.100 ₺, son ödeme 12.11.2026 (blokede)
+
+TAKSİT DETAY TAKVİMİ:
+  Buzdolabı: 2.250 ₺ × 4 taksit kaldı (Kart A)
+  Telefon: 1.800 ₺ × 1 taksit kaldı (Kart B) — gelecek dönem bitiyor
+
+ÖDEME TAKVİMİ (sabit gider ödeme günleri):
+  Kira: 22.000 ₺ — 1. gün (ödendi)
+  Elektrik: 1.150 ₺ — 7. gün (ödenmedi)
+  Doğalgaz: 1.900 ₺ — 9. gün (ödenmedi)
+  İnternet: 450 ₺ — 10. gün (ödenmedi)
+  Okul servisi: 3.500 ₺ — 12. gün (ödenmedi)
+
+BORÇLAR:
+  Akraba borcu: 15.000 ₺, aylık 2.500 ₺, 6 ay kaldı
+
+BİRİKİM PORTFÖYÜ:
+  TL: 38.000 ₺ | Altın: 12 gram | USD: 400 $
+  Acil durum fonu hedefi: 120.000 ₺
+
+GELECEK 3 AY ZORUNLU YÜK PROJEKSİYONU:
+  2026-11: 37.950 ₺ | 2026-12: 36.150 ₺ (telefon taksiti bitti) | 2027-01: 36.150 ₺
+
+GÖREV — sen bir finans DANIŞMANISIN, muhasebeci değilsin. Kullanıcı sayıları zaten uygulamadan görüyor. Sayıları tekrarlama, VERİLERİN ARKASINDAKİ HİKAYEYİ anlat. Aşağıdaki başlıkları AYNEN kullan:
+
+## Ne Yapmalıyım?
+- Kalan 11 günde somut olarak ne yapılmalı? Günlük harcama hedefi ne olmalı?
+
+## Para Ne Zaman Biter?
+- Bu harcama hızında kullanılabilir bütçe kaç gün sonra tükenir? Net tarih ver.
+
+## Önümüzdeki Günlerde Ne Çıkacak?
+- Önümüzdeki 7-10 günde hangi ödemeler çıkacak, toplam ne kadar? Bankadaki tutar karşılıyor mu?
+
+## Dikkat Edilmesi Gerekenler
+- Gözden kaçan risk var mı? Hangi kategoride belirgin artış var?
+
+## 5 Somut Adım
+- Bu döneme özel 5 somut adım. Her birinde RAKAM ve tahmini aylık etkiyi TL olarak ver.

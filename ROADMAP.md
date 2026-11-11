@@ -26,8 +26,11 @@ Durum işaretleri: [x] tamam · [~] kısmen · [ ] bekliyor
 
 ## Faz 0 — Mevcut uygulamada acil koruma
 - [~] AI uç noktalarında (`api/`) Firebase token'ını sunucuda doğrulama — 2026-11-06.
-      Eksik: kalıcı kullanım sayacı; canlı ortamda gerçek girişle deneme.
       Öncelik düşürüldü (Abdullah, 2026-11-06): önce temel işlevler.
+      2026-11-11 (İş #64): uç noktalar Firebase Functions'a taşındı (`functions/`, europe-west1, anahtar gizli depoda, CORS
+      izin listesi, en fazla 3 kopya); kalıcı günlük sayaç veritabanında (`aiUsage/{uid}`); emülatörde denendi (`npm run test:ai`).
+      Eksik: Blaze planı + gizli anahtar + yükleme (Abdullah, `docs/AI-FIREBASE-FUNCTIONS-REHBERI.md`); canlıda deneme;
+      v3 ekranlarına AI girişleri (ekran aşamasında).
 - [~] Veritabanı kurallarını depoya alma ve gözden geçirme — dosya depoda (`database.rules.json`, `firebase.json`, 2026-11-09).
       Eksik: kuralların kayıt kayıt eşitleme modeline göre gözden geçirildiğine dair kayıt yok (Faz 3 "çok aileli kullanım" ile birlikte).
 - [x] Çevrimdışı açılışta eski verinin buluta yazılmasını ve yankı yazmayı durdurma — 2026-11-06
@@ -93,6 +96,8 @@ yerel bir kabukla paketlenmesi gerekir.
       Google girişinin yanında Apple ile Giriş
 - [ ] Çok aileli kullanım: aile başına veri izolasyonu, davet akışı güvenliği
 - [ ] AI özellikleri için maliyet modeli (kota / abonelik)
+      Model seçimi ölçümle yapılacak (2026-11-12): `docs/AI-MODEL-VE-MALIYET-RAPORU.md`, `npm run ai:model-dene`.
+      Resmi fiyatlara göre en ucuz aday Claude Haiku 5.5; doğruluk kullanıcının fiş/ekstreleriyle ölçülmeden kesinleşmez.
 - İptal — mevcut verinin taşınması (Abdullah, 2026-11-06)
 
 ## İş günlüğü
@@ -121,3 +126,14 @@ yerel bir kabukla paketlenmesi gerekir.
   verisiyle tüm ekranlar Chrome (360 / 390 px) ve iOS Simülatörü Safari + Capacitor kabuğunda görüldü; gerçek veriyle çıkan
   iki hata düzeltildi (süresiz kart kalemlerinde "Taksit n/null", Rapor halkasında çift "Diğer" anahtarı). Vercel'den
   çıkma isteği teyit bekliyor (bkz. `docs/IOS-SIMULATOR-VE-TESTFLIGHT-REHBERI.md` 7. bölüm).
+- 2026-11-11 · İş #64: Vercel kaldırılmadan önce AI uç noktaları Firebase Functions'a taşındı (Abdullah'ın onayıyla; önce sunucu,
+  ekranlar sonra). `api/` geçiş için aynı kodu kullanıyor; eski uygulama tam Functions adresini çağırıyor (`src/aiApi.js`).
+  135 test geçiyor; emülatör denetimi geçti. Yükleme Abdullah'ın Blaze planı ve anahtar adımından sonra.
+- 2026-11-12 · İş #64 devamı: AI model karşılaştırması (resmi fiyatlar, gizlilik, yetenek) ve ölçüm betiği
+  (`scripts/ai-model-dene.mjs`, ölçütler `scripts/ai-model/olcut.mjs`, k/n + Clopper-Pearson alt sınırı). Functions yüklemesine
+  kod paketi temizlik ayarı eklendi. Eşitleme verisi gerçek yedekle ölçüldü (4 dönem 77 KB); "değişiklik defteri" önerisi
+  veritabanı kuralı değişikliği gerektirdiği için onay bekliyor.
+- 2026-11-12 · İş #64 düzeltme: kurulum rehberi çalışmıyordu (klasör yolu yok, sıra ve hata yönlendirmesi eksik). Tek komutluk
+  `npm run ai:kurulum` (adım adım denetim, anahtarı gizli sorar, yükler, canlı denetler; `--kontrol` hiçbir şeyi değiştirmez).
+  Model seçimi tek satıra indi (`functions/ai/providers.js` AI_MODEL; Claude/Gemini/DeepSeek/Mistral aynı katmandan, Claude
+  4.7+ düşünme biçimi dahil); deneme betiği üretimle aynı kodu kullanıyor. 145 test geçiyor.
