@@ -1,19 +1,16 @@
-// v3 hesap ve aile işlemleri. Veri biçimi kök uygulamayla aynıdır (userFamilies, families/{id}/members,
-// invitations, nameIndex); veritabanı kuralları (database.rules.json) bu yazımlara göre yazılmıştır.
-import { getApp, getApps, initializeApp } from "firebase/app";
+// v3 hesap ve aile işlemleri. Veri biçimi eski uygulamayla aynıdır (userFamilies, families/{id}/members, invitations);
+// veritabanı kuralları (database.rules.json) bu yazımlara göre yazılmıştır. v3 isimle giriş kullanmaz ve herkese açık
+// isim dizinine (nameIndex: ad → e-posta) yazmaz.
 import {
-  getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendEmailVerification,
+  signInWithEmailAndPassword, createUserWithEmailAndPassword, sendEmailVerification,
   GoogleAuthProvider, signInWithPopup, signOut, updateProfile
 } from "firebase/auth";
-import { getDatabase, ref, get, set, update } from "firebase/database";
-import { firebaseConfig } from "../firebaseConfig.js";
+import { ref, get, set, update } from "firebase/database";
+import { firebase, isNativeShell } from "./firebaseApp.js";
 
-export const firebase = () => {
-  const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
-  return { auth: getAuth(app), db: getDatabase(app) };
-};
-
-const nameKey = n => n.toLocaleLowerCase("tr-TR").replace(/\s+/g, " ").trim().replace(/[.#$\[\]\/]/g, "_");
+export { firebase };
+// Google girişi açılır pencere ister; iOS / Android kabuğunda çalışmaz (yerel eklenti ya da Apple ile Giriş gerekir).
+export const googleAvailable = () => !isNativeShell();
 
 // Firebase hata kodlarını kullanıcıya anlaşılır Türkçe iletiye çevirir.
 export function authMessage(e) {
@@ -30,16 +27,6 @@ export function authMessage(e) {
   }
 }
 
-async function registerName(db, name, email, familyId, uid) {
-  const key = nameKey(name);
-  if (!key) return;
-  try {
-    const existing = (await get(ref(db, `nameIndex/${key}`))).val();
-    if (existing?.uid && existing.uid !== uid) return; // isim başkasına ait; ezilmez
-    await set(ref(db, `nameIndex/${key}`), { email, familyId, uid });
-  } catch { /* isimle giriş isteğe bağlıdır; hata aile kurulumunu durdurmaz */ }
-}
-
 // Yeni aile: kullanıcı yönetici olur, aile kimliği kendi uid'idir.
 export async function createFamily(user, name) {
   const { db } = firebase();
@@ -48,15 +35,44 @@ export async function createFamily(user, name) {
   await set(ref(db, `families/${familyId}/admin`), user.uid);
   await set(ref(db, `families/${familyId}/members/${user.uid}`), { name, email: user.email, role: "admin", joinedAt: new Date().toISOString() });
   await set(ref(db, `userFamilies/${user.uid}`), result);
-  await registerName(db, name, user.email, familyId, user.uid);
   return result;
 }
 
-// Davet kodu geçerliyse davet bilgisini döner; değilse null.
+// Davet kodu: 6 karakter, harf ve rakam karışık (karışan 0/O, 1/I/L yok; 31^6 ≈ 887 milyon olasılık), güvenli rastgele
+// üreteçle. Kod 7 gün geçerlidir ve bir kez kullanılır; kurallar ikisini de denetler.
+const CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+export const INVITE_DAYS = 7;
+export function inviteCode() {
+  let code = "";
+  while (code.length < 6) {
+    for (const b of crypto.getRandomValues(new Uint8Array(12))) {
+      if (b < 248 && code.length < 6) code += CODE_CHARS[b % 31]; // 248 = 31 × 8: her karakter eşit olasılıklı
+    }
+  }
+  return code;
+}
+// Kullanıcının yazdığı kod: boşluk / tire atılır, küçük harf büyütülür (eski uygulamanın rakam kodları da geçer).
+export const normalizeCode = c => String(c ?? "").toLocaleUpperCase("en-US").replace(/[^0-9A-Z]/g, "");
+
+// Aileyi kuran kişi (aile kimliği kendi uid'i) üye için davet kodu üretir. Kurallar yalnız ona izin verir
+// (invitations/$code: familyId === auth.uid). Kod başka bir ailenin davetiyle çakışırsa yenisi denenir.
+export async function createInvitation(user, name, email) {
+  const { db } = firebase();
+  for (let i = 0; i < 5; i++) {
+    const code = inviteCode();
+    if ((await get(ref(db, `invitations/${code}`))).exists()) continue;
+    const now = Date.now();
+    await set(ref(db, `invitations/${code}`), { familyId: user.uid, name: name.trim(), email: email.trim().toLowerCase(), createdAt: new Date(now).toISOString(), expiresAt: now + INVITE_DAYS * 86400000, used: false });
+    return code;
+  }
+  throw new Error("Davet kodu oluşturulamadı; yeniden deneyin.");
+}
+
+// Davet kodu geçerliyse (kullanılmamış, süresi dolmamış) davet bilgisini döner; değilse null.
 export async function lookupInvitation(code) {
   const { db } = firebase();
   const inv = (await get(ref(db, `invitations/${code}`))).val();
-  return inv && inv.used === false && inv.familyId ? inv : null;
+  return inv && inv.used === false && inv.familyId && inv.expiresAt > Date.now() ? inv : null;
 }
 
 // Üye kaydı ve kodun kullanıldı işareti tek atomik yazımda gider (kurallar ikisini birlikte ister).
@@ -68,7 +84,6 @@ export async function joinFamily(user, code, inv, name) {
     [`invitations/${code}/used`]: true,
   });
   await set(ref(db, `userFamilies/${user.uid}`), { familyId: inv.familyId, code, role: "member", name: memberName });
-  await registerName(db, memberName, user.email, inv.familyId, user.uid);
   return { familyId: inv.familyId, role: "member", name: memberName };
 }
 

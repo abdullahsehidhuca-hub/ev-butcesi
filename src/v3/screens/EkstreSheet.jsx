@@ -3,16 +3,20 @@
 // kayıtlarla tam tutar + yakın tarih üzerinden eşleştirilir. Sonuç: kartta olup uygulamada olmayan, uygulamada
 // olup kartta olmayan hareketler ve ekstredeki taksitlerden gelecek ay yükü. "Gelecek ay taksitleri" kipinde
 // banka uygulamasındaki aylık taksit tutarları uygulamadaki kart taksit yüküyle kıyaslanır.
+// PDF ekstre yapay zekâyla okunur (functions/ai/statement.js); oturum gerekir. Sonuç aynı satır biçimine çevrilir
+// (parseAiStatement) ve aynı eşitlemeden geçer. Arayüzde neyin nereye gönderildiği anlatılmaz (Abdullah, 2026-11-12).
 import { useMemo, useState } from "react";
 import {
   parseStatementText, parseStatementCells, reconcileStatement, statementInstallmentPlan, importStatementRows,
-  parseFutureInstallments, compareFutureInstallments
+  parseFutureInstallments, compareFutureInstallments, parseAiStatement
 } from "../../core/index.js";
 import { Sheet, SelectField, ErrorText } from "../ui.jsx";
 import { newId } from "../store.js";
+import { callAi, pdfPayload } from "../ai.js";
 import { fmt, periodLabel, dayNum, monthShort } from "../selectors.js";
 
 const when = d => `${dayNum(d)} ${monthShort(d)}`;
+const noDot = m => String(m || "").replace(/\.$/, "");
 
 function RowLine({ date, text, amount, extra }) {
   return (
@@ -41,7 +45,7 @@ const MODES = [
   { value: "future", label: "Gelecek ay taksitleri" }
 ];
 
-export default function EkstreSheet({ state, commit, today, onClose, onToast }) {
+export default function EkstreSheet({ state, commit, today, onClose, onToast, aiUser, onLogin }) {
   const cards = Object.values(state.accounts).filter(a => a.type === "credit").sort((a, b) => a.name.localeCompare(b.name, "tr"));
   const [accountId, setAccountId] = useState(cards[0]?.id || "");
   const [mode, setMode] = useState("statement");
@@ -98,9 +102,29 @@ export default function EkstreSheet({ state, commit, today, onClose, onToast }) 
       setOcr(null);
     }
   };
+  // PDF ekstre: yapay zekâ yalnız harcama satırlarını döndürür (ödeme ve iadeler gelmez).
+  const onPdf = async file => {
+    setErrors(null); setParsed(null); setFuture(null);
+    if (!aiUser) return setErrors([onLogin
+      ? "PDF ekstreyi okumak için Ayarlar’dan aile hesabına giriş yapın. Satırları kopyalayıp yapıştırabilirsiniz de"
+      : "örnek veri modunda PDF ekstre okunmaz. Satırları kopyalayıp yapıştırabilirsiniz"]);
+    setOcr({ stage: "Ekstre okunuyor, 1–2 dakika sürebilir", progress: null });
+    try {
+      const data = await callAi(aiUser, "analyzeStatement", await pdfPayload(file));
+      const p = parseAiStatement(data.transactions);
+      setText("");
+      setParsed(p);
+      setErrors(p.rows.length ? null : ["ekstrede harcama satırı bulunamadı"]);
+    } catch (e) {
+      setErrors([noDot(e?.message || e)]);
+    } finally {
+      setOcr(null);
+    }
+  };
   const onFile = async file => {
     if (!file) return;
     const name = file.name.toLowerCase();
+    if (mode !== "future" && (file.type === "application/pdf" || /\.pdf$/.test(name))) return onPdf(file);
     if (file.type.startsWith("image/") || /\.(png|jpe?g|heic|webp)$/.test(name)) return onImage(file);
     if (/\.(csv|txt|tsv)$/.test(name)) {
       const raw = await file.text();
@@ -160,22 +184,21 @@ export default function EkstreSheet({ state, commit, today, onClose, onToast }) 
         <p className="v3-hint" id="ekstre-ipucu">
           {futureMode
             ? "Banka uygulamasındaki gelecek dönem taksitleri ekranının görüntüsünü seçin ya da satırları yapıştırın. Okunan metni karşılaştırmadan önce düzeltebilirsiniz."
-            : "Ekran görüntüsü seçin ya da banka uygulamasındaki veya PDF ekstredeki hareket satırlarını yapıştırın. Tutarlar kuruşuyla okunur, yuvarlanmaz. “3/6” gibi yazılan satırlar taksit sayılır."}
-          {" "}Görüntüler bu cihazda okunur, hiçbir yere gönderilmez.
+            : "PDF ekstre ya da ekran görüntüsü seçin, veya banka uygulamasındaki hareket satırlarını yapıştırın. Tutarlar kuruşuyla okunur, yuvarlanmaz. “3/6” gibi yazılan satırlar taksit sayılır."}
         </p>
       </div>
       <div className="row" style={{ gap: 12, flexWrap: "wrap", margin: "0 4px" }}>
         <button type="button" className="pill blue" style={{ minHeight: 44, justifyContent: "center" }} onClick={() => compare()} disabled={!text.trim() || busy}>Karşılaştır</button>
         <label className="v3-link" style={{ minHeight: 44, display: "inline-flex", alignItems: "center", cursor: busy ? "default" : "pointer" }}>
-          Ekran görüntüsü ya da dosya seç
+          PDF, ekran görüntüsü ya da dosya seç
           <input type="file" accept="image/*,.csv,.txt,.tsv,.pdf,.xlsx,.xls" className="visually-hidden" disabled={busy}
             onChange={e => { onFile(e.target.files?.[0]); e.target.value = ""; }} />
         </label>
       </div>
       {ocr && (
         <div style={{ margin: "10px 4px 0" }} role="status" aria-live="polite">
-          <p className="t-meta" style={{ margin: "0 0 6px" }}>{ocr.stage}… %{Math.round((ocr.progress || 0) * 100)}</p>
-          <div className="v3-track" aria-hidden="true"><div className="v3-fill" style={{ width: `${Math.round((ocr.progress || 0) * 100)}%` }} /></div>
+          <p className="t-meta" style={{ margin: "0 0 6px" }}>{ocr.stage}…{ocr.progress != null ? ` %${Math.round(ocr.progress * 100)}` : ""}</p>
+          {ocr.progress != null && <div className="v3-track" aria-hidden="true"><div className="v3-fill" style={{ width: `${Math.round(ocr.progress * 100)}%` }} /></div>}
         </div>
       )}
       <ErrorText errors={errors || result?.error} />

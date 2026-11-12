@@ -22,8 +22,9 @@ function change(now, before) {
 }
 
 // onCategory(categoryId, period): kategori satırına dokununca o kategorinin işlem listesi açılır.
-// onGoal(id): hedef satırı düzenlemeyi, onSavings: Birikim çekmecesini açar.
-export default function Rapor({ state, today, onCategory, onGoal, onSavings }) {
+// onGoal(id): hedef satırı düzenlemeyi, onSavings: Birikim çekmecesini açar. onAdvisor: yapay zekâ danışmanını açar
+// (yalnız bu dönemde gösterilir).
+export default function Rapor({ state, today, onCategory, onGoal, onSavings, onAdvisor }) {
   const current = periodOf(today, state.settings?.payDay || 1);
   const [period, setPeriod] = useState(current);
   const r = report(state, today, 6, period);
@@ -55,6 +56,17 @@ export default function Rapor({ state, today, onCategory, onGoal, onSavings }) {
           ? <span className="t-sub" style={{ minHeight: 44, minWidth: 44, display: "inline-flex", alignItems: "center", justifyContent: "flex-end" }}>Bu dönem</span>
           : <button type="button" className="t-sub c-blue" style={{ minHeight: 44, minWidth: 44 }} onClick={() => setPeriod(nextPeriod(period))} aria-label={`Sonraki dönem: ${periodLabel(nextPeriod(period))}`}>{monthOf(nextPeriod(period))} ›</button>}
       </nav>
+
+      {onAdvisor && r.current && (
+        <button type="button" className="card" onClick={onAdvisor} style={{ flexDirection: "row", alignItems: "center", gap: 14, width: "100%", textAlign: "left", minHeight: 44 }}>
+          <Tile icon="spark" color="indigo" />
+          <span className="stack grow gap2">
+            <span className="t-body b">Yapay zekâ danışmanı</span>
+            <span className="t-sub">Bu dönemi yorumlatın: riskler ve rakamlı öneriler</span>
+          </span>
+          <Icon name="chev" size={16} />
+        </button>
+      )}
 
       {r.insights.length > 0 && <>
         <span className="t-cap">Sana özel</span>

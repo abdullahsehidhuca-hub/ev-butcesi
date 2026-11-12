@@ -139,6 +139,17 @@ export function resolveOptions(state, today, overrides = {}) {
   return opts;
 }
 
+// Kurulum adımları: hesap, maaş, sabit ödemeler. Karşılama ilk hesap eklenince kaybolmaz;
+// üç adım tamamlanana ya da kullanıcı "Başla" diyene (settings.setupDone) kadar kalır. Sabit ödeme isteğe bağlıdır.
+export function setupSteps(state) {
+  const obligations = Object.values(state.obligations);
+  const account = Object.keys(state.accounts).length > 0;
+  const income = obligations.some(o => o.kind === "income");
+  const fixed = obligations.some(o => o.kind !== "income");
+  // Hesap yoksa (ör. hepsi silindiyse) özet hesaplanamaz; karşılama her durumda gösterilir.
+  return { account, income, fixed, show: !account || (!state.settings?.setupDone && !(income && fixed)) };
+}
+
 // Özet ekranı: serbest para, tempo, maaş çubuğu.
 export function overview(state, today) {
   const payDay = payDayOf(state);

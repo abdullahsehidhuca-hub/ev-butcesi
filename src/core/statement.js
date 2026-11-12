@@ -29,6 +29,14 @@ function readDate(m) {
   return `${y}-${pad(m[5])}-${pad(m[4])}`;
 }
 
+// Açıklamadaki "3/6" taksit sırası ve sayısı; yoksa null.
+function readInstallment(text) {
+  const im = text.match(INSTALLMENT_RE);
+  if (!im) return null;
+  const index = Number(im[1]), total = Number(im[2]);
+  return total >= 2 && index >= 1 && index <= total ? { index, total } : null;
+}
+
 // Tek satırı okur; tarih ya da tutar yoksa null.
 // { date, description, amount (kuruş, pozitif), credit (ödeme/iade), installment: { index, total } | null }
 export function parseStatementLine(line) {
@@ -55,12 +63,7 @@ export function parseStatementLine(line) {
   for (const other of hits.slice(0, -1)) rest = rest.replace(other[0], " ");
   rest = rest.replace(/\b(TL|TRY)\b|₺/gi, " ").replace(/[|;\t]+/g, " ").replace(/\s+/g, " ").trim();
 
-  let installment = null;
-  const im = rest.match(INSTALLMENT_RE);
-  if (im) {
-    const index = Number(im[1]), total = Number(im[2]);
-    if (total >= 2 && index >= 1 && index <= total) installment = { index, total };
-  }
+  const installment = readInstallment(rest);
   const credit = sign === "-" || (sign !== "+" && CREDIT_WORDS.test(rest) && !installment);
   return { date, description: rest, amount, credit, installment };
 }
@@ -79,6 +82,30 @@ export function parseStatementText(text) {
 
 // CSV/Excel'den gelen hücre dizileri: hücreler birleştirilip satır gibi okunur.
 export const parseStatementCells = cellRows => parseStatementText(cellRows.map(r => r.join(" | ")).join("\n"));
+
+// Yapay zekânın PDF ekstreden ya da fişten çıkardığı tutar: sayı (1234.56) ya da metin ("1.234,56"); kuruşa çevrilir.
+export function aiAmount(v) {
+  const n = typeof v === "number" ? v
+    : Number(String(v ?? "").replace(/[^\d,.-]/g, "").replace(/\.(?=\d{3}(?:\D|$))/g, "").replace(",", "."));
+  return Number.isFinite(n) ? Math.round(Math.abs(n) * 100) : 0;
+}
+
+// Yapay zekâ ekstre okumasının sonucu ({ transactions: [{ date: "GG.AA.YYYY", desc, amount }] }) metinden okunan
+// satırlarla aynı biçime çevrilir. Sunucu yalnız harcamaları döndürür (credit: false); açıklamadaki "3/6" taksittir.
+// Tarihi ya da tutarı okunamayan satır atlanır ve sayılır.
+export function parseAiStatement(transactions) {
+  const rows = [];
+  let skipped = 0;
+  for (const t of Array.isArray(transactions) ? transactions : []) {
+    const dm = String(t?.date ?? "").match(DATE_RE);
+    const date = dm ? readDate(dm) : null;
+    const amount = aiAmount(t?.amount);
+    if (!date || !isDate(date) || !(amount > 0)) { skipped++; continue; }
+    const description = String(t?.desc ?? "").replace(/\s+/g, " ").trim();
+    rows.push({ date, description, amount, credit: false, installment: readInstallment(description), line: rows.length + 1 });
+  }
+  return { rows, skipped };
+}
 
 const payDayOf = state => state.settings?.payDay || 1;
 

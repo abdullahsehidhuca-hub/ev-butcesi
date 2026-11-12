@@ -147,6 +147,11 @@ export default function Ayarlar({ state, today, open, theme, onTheme, backup, cl
       <section className="list" style={group} aria-label="Veri ve görünüm">
         <Row icon="moon" color="indigo" title="Görünüm" value={THEMES.find(t => t[0] === theme)?.[1]} onClick={nextTheme} />
         <Row icon="cloud" color="cyan" {...cloudRow(cloud, Object.keys(members).length, open)} />
+        {cloud?.familyId && cloud.user && (
+          <Row icon="people" color="indigo" title="Aile üyeleri"
+            sub={cloud.familyId === cloud.user.uid ? "Üye davet edin: davet kodu oluşturup gönderin" : "Üyeler ve hesaptan çıkış"}
+            value={Object.keys(members).length || null} onClick={() => open({ name: "family" })} />
+        )}
         {backup && <>
           <Row icon="export" color="green" title="Yedek indir" sub="Tüm verileriniz tek dosyada (JSON)" onClick={backup.exportJson} />
           <Row icon="repeat" color="orange" title="Yedekten geri yükle" sub={cloud?.status === "synced" ? "v3 ya da eski uygulama yedeği; aile hesabındaki verinin yerine geçer, önce sorar" : "v3 ya da eski uygulama yedeği; bu cihazdaki verinin yerine geçer, önce sorar"} onClick={() => fileRef.current?.click()} />

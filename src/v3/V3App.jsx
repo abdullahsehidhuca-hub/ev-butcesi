@@ -2,7 +2,7 @@
 // Yeni hesap motoruna (src/core) bağlıdır; eski uygulamadan (App.jsx) bağımsızdır ve /v3 adresinde açılır.
 // Veri durumunu tutar, sekmeler arası geçişi ve kullanıcı işlemlerini çekirdek fonksiyonlarına iletir.
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { computePeriod, periodOf, quickAdd, today, ValidationError } from "../core/index.js";
 import { loadState, saveState, loadPref, savePref, newId, exportBackup, parseBackup, transactionsCsv, STORAGE_KEY, PLAN_KEY, THEME_KEY, BACKUP_KEY, CLOUD_BASE_KEY, LOCAL_COPY_KEY, SAMPLE_KEY, SAMPLE_PLAN_KEY } from "./store.js";
 import { useCloud } from "./useCloud.js";
@@ -19,7 +19,6 @@ import CozSheet from "./screens/CozSheet.jsx";
 import BakiyeSheet from "./screens/BakiyeSheet.jsx";
 import KapatSheet from "./screens/KapatSheet.jsx";
 import { TxListSheet, TxEditSheet } from "./screens/IslemlerSheet.jsx";
-import HesapSheet from "./screens/HesapSheet.jsx";
 import EkstreSheet from "./screens/EkstreSheet.jsx";
 import DevredenSheet from "./screens/DevredenSheet.jsx";
 import BlokeSheet from "./screens/BlokeSheet.jsx";
@@ -27,9 +26,15 @@ import BirikimAktarSheet from "./screens/BirikimAktarSheet.jsx";
 import KartOdemeSheet from "./screens/KartOdemeSheet.jsx";
 import BirikimSheet, { AlSatSheet, HedefSheet } from "./screens/BirikimSheet.jsx";
 import TaksitDeneSheet from "./screens/TaksitDeneSheet.jsx";
+import DanismanSheet from "./screens/DanismanSheet.jsx";
+import Giris from "./screens/Giris.jsx";
 import { AccountEditSheet, CategoryEditSheet, ObligationEditSheet } from "./screens/TanimSheet.jsx";
 import { PaySheet, AccountSheet, CategorySheet, ObligationSheet, InstallmentSheet, PayDaySheet, ResetSheet } from "./Sheets.jsx";
 import "./v3.css";
+
+// Hesap ve aile çekmeceleri Firebase'i doğrudan kullanır; tembel yüklenir ki Firebase kodu ilk çizimi geciktirmesin.
+const HesapSheet = lazy(() => import("./screens/HesapSheet.jsx"));
+const AileSheet = lazy(() => import("./screens/AileSheet.jsx"));
 
 const tabFromHash = () => {
   const id = typeof location !== "undefined" ? location.hash.slice(1) : "";
@@ -56,6 +61,8 @@ export default function V3App({ sample }) {
   const [sheet, setSheet] = useState(null);
   const [toast, setToast] = useState(null);
   const [saveFailed, setSaveFailed] = useState(false);
+  // Oturum durumu 5 sn içinde gelmezse (bağlantı ya da kabuk sorunu) ekran "Yükleniyor"da kalmaz; giriş ekranı açılır.
+  const [authSlow, setAuthSlow] = useState(false);
   const scroll = useRef(null);
   const firstRender = useRef(true);
   const userRef = useRef(null);
@@ -68,6 +75,7 @@ export default function V3App({ sample }) {
   const synced = cloud.status === "synced" || cloud.status === "offline";
 
   useEffect(() => { document.title = "Ev Bütçesi"; }, []);
+  useEffect(() => { const t = setTimeout(() => setAuthSlow(true), 5000); return () => clearTimeout(t); }, []);
 
   // Her değişiklik bu cihaza yazılır; ilk açılışta yazılmaz.
   useEffect(() => {
@@ -185,7 +193,32 @@ export default function V3App({ sample }) {
     ? { days: backupDays, onBackup: backup.exportJson, onSnooze: () => setBackupInfo(b => ({ ...b, snooze: addDays(todayDate, 1) })) }
     : null;
   const reloadSample = () => { commit(() => sample.buildSampleState()); setOverrides({}); setToast("Örnek veri yeniden yüklendi"); };
-  const props = { state, commit, onClose: close, today: todayDate, period, members };
+  // Yapay zekâ çağrıları oturum jetonuyla yapılır; örnek veri modunda kapalıdır (giriş çekmecesi de yoktur).
+  const aiUser = sample ? null : cloud.user;
+  const toLogin = sample ? null : () => setSheet({ name: "login" });
+  const props = { state, commit, onClose: close, today: todayDate, period, members, aiUser };
+  const loginDone = msg => { setSheet(null); setToast(msg); cloud.reload(); };
+
+  // İlk açılış ekranı: oturum ya da aile yoksa uygulama yerine giriş / kayıt / davet kodu seçenekleri gösterilir.
+  // Oturum durumu daha bilinmiyorken (açılışın ilk anı) ekran zıplamasın diye yalnız "Yükleniyor" yazılır.
+  // Oturum durumu gelene kadar bu cihazda son bilinen durum (cloud.hint) kullanılır: girişsizse giriş ekranı, aile
+  // hesabındaysa uygulama hemen çizilir. İpucu yoksa (ilk kurulum) en çok 5 sn beklenir.
+  const authWaiting = !sample && cloud.status === "loading" && !cloud.user;
+  const gate = !sample && (cloud.status === "signedOut" || cloud.status === "noFamily" || (authWaiting && (cloud.hint === "signedOut" || (!cloud.hint && authSlow))));
+  const authPending = authWaiting && !cloud.hint && !authSlow;
+  if (gate || authPending) {
+    return (
+      <div className="v3">
+        <main className="v3-scroll">
+          {authPending
+            ? <p className="t-sub" role="status" style={{ padding: "32px 4px" }}>Yükleniyor…</p>
+            : <Giris status={cloud.status === "noFamily" ? "noFamily" : "signedOut"} email={cloud.user?.email} open={start => setSheet({ name: "login", start })} />}
+        </main>
+        <Suspense fallback={null}>{sheet?.name === "login" && <HesapSheet key={sheet.start} cloud={cloud} start={sheet.start} onClose={close} onDone={loginDone} />}</Suspense>
+        {toast && <div className="toast" role="status">{toast}</div>}
+      </div>
+    );
+  }
 
   return (
     <div className="v3">
@@ -226,9 +259,10 @@ export default function V3App({ sample }) {
             Tarayıcı depolaması kapalı ya da dolu olabilir. Gizli sekmedeyseniz normal sekmede açın.
           </div>
         )}
-        {tab === "home" && <Ozet {...common} onResolve={() => setSheet({ name: "resolve" })} onPay={pay} onOpenPayments={() => go("plan")} onOpenSettings={() => go("settings")} backupDue={backupDue} />}
+        {tab === "home" && <Ozet {...common} onResolve={() => setSheet({ name: "resolve" })} onPay={pay} onOpenPayments={() => go("plan")} onOpenSettings={() => go("settings")} backupDue={backupDue}
+          onSetupDone={() => commit(s => ({ ...s, settings: { ...s.settings, setupDone: true } }))} />}
         {tab === "report" && <Rapor {...common} onCategory={(categoryId, p) => setSheet({ name: "txlist", filter: { period: p, categoryId } })}
-          onGoal={id => setSheet({ name: "goal", id })} onSavings={() => setSheet({ name: "savings" })} />}
+          onGoal={id => setSheet({ name: "goal", id })} onSavings={() => setSheet({ name: "savings" })} onAdvisor={() => setSheet({ name: "advisor" })} />}
         {tab === "plan" && <Odemeler {...common} onPay={pay} onAdd={Object.keys(state.accounts).length ? () => setSheet({ name: "obligation", kind: "fixed" }) : null}
           onTrial={Object.keys(state.accounts).length ? () => setSheet({ name: "trial" }) : null}
           onItem={it => setSheet(it.type === "card" ? { name: "blocked" } : { name: "obligationEdit", id: it.obligationId })} />}
@@ -242,7 +276,8 @@ export default function V3App({ sample }) {
       {sheet?.name === "balance" && <BakiyeSheet {...props} onToast={setToast} onStatement={() => setSheet({ name: "statement", back: { name: "balance" } })}
         onToBudget={() => setSheet({ name: "toBudget", back: { name: "balance" } })}
         onCarryover={p => setSheet({ name: "carryover", period: p, back: { name: "balance" } })} />}
-      {sheet?.name === "statement" && <EkstreSheet {...props} onClose={closeTo(sheet.back)} onToast={setToast} />}
+      {sheet?.name === "statement" && <EkstreSheet {...props} onClose={closeTo(sheet.back)} onToast={setToast} onLogin={toLogin} />}
+      {sheet?.name === "advisor" && <DanismanSheet {...props} onLogin={toLogin} />}
       {sheet?.name === "pay" && <PaySheet {...props} onClose={closeTo(sheet.back)} period={sheet.period} target={sheet.target} />}
       {sheet?.name === "txlist" && <TxListSheet state={state} members={members} initial={sheet.filter} onClose={close}
         onEdit={(id, filter) => setSheet({ name: "tx", id, back: { name: "txlist", filter } })} />}
@@ -269,7 +304,10 @@ export default function V3App({ sample }) {
       {sheet?.name === "installment" && <InstallmentSheet {...props} initial={sheet.initial} />}
       {sheet?.name === "payday" && <PayDaySheet {...props} />}
       {sheet?.name === "reset" && <ResetSheet {...props} synced={synced} />}
-      {sheet?.name === "login" && !sample && <HesapSheet cloud={cloud} onClose={close} onDone={msg => { setSheet(null); setToast(msg); cloud.reload(); }} />}
+      <Suspense fallback={null}>
+        {sheet?.name === "login" && !sample && <HesapSheet cloud={cloud} start={sheet.start} onClose={close} onDone={loginDone} />}
+        {sheet?.name === "family" && !sample && <AileSheet cloud={cloud} members={members} onClose={close} onToast={setToast} />}
+      </Suspense>
       {toast && <div className="toast" role="status">{toast}</div>}
     </div>
   );

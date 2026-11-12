@@ -152,6 +152,10 @@ a.li:active { background: var(--fill2); }
 
 .note input { width: 100%; min-height: 46px; border: 0; border-radius: 12px; background: var(--card); padding: 0 14px; font-size: 16px; outline: none; }
 .note input:focus-visible { outline: 3px solid var(--blue-t); outline-offset: 0; }
+/* Fiş yükle satırı (hızlı harcama): gizli dosya seçicinin odağı satırın çevresinde görünür. */
+.fis-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 46px; border-radius: 12px; background: var(--card); padding: 0 14px; font-size: 16px; color: var(--blue); cursor: pointer; }
+.fis-row:focus-within { outline: 3px solid var(--blue-t); outline-offset: 0; }
+.fis-row[aria-busy="true"] { color: var(--label2); cursor: default; }
 .amount input[aria-invalid="true"] { color: var(--red-t); }
 .cat { min-width: 0; }
 

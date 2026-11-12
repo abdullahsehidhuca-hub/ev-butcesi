@@ -29,8 +29,11 @@ Durum işaretleri: [x] tamam · [~] kısmen · [ ] bekliyor
       Öncelik düşürüldü (Abdullah, 2026-11-06): önce temel işlevler.
       2026-11-11 (İş #64): uç noktalar Firebase Functions'a taşındı (`functions/`, europe-west1, anahtar gizli depoda, CORS
       izin listesi, en fazla 3 kopya); kalıcı günlük sayaç veritabanında (`aiUsage/{uid}`); emülatörde denendi (`npm run test:ai`).
-      Eksik: Blaze planı + gizli anahtar + yükleme (Abdullah, `docs/AI-FIREBASE-FUNCTIONS-REHBERI.md`); canlıda deneme;
-      v3 ekranlarına AI girişleri (ekran aşamasında).
+      2026-11-12 (İş #68): Abdullah Blaze + anahtar + yüklemeyi tamamladı; canlıda üç uç nokta oturumsuz isteği 401 ile
+      reddediyor, iPhone kaynağına (capacitor://localhost) CORS izni var. v3'e bağlandı: Rapor › Yapay zekâ danışmanı
+      (`src/v3/screens/DanismanSheet.jsx`), + Ekle › Fişi yapay zekâyla oku, Kart ekstresiyle eşitle › PDF (onaylı).
+      Günlük sınır kullanıcı başına: danışman 3, fiş 20, ekstre 5 (`functions/ai/usage.js`, 2026-11-12 yüklendi).
+      Eksik: giriş yapmış hesapla gerçek bir AI yanıtının denenmesi; Vercel ve api/ kaldırılması.
 - [~] Veritabanı kurallarını depoya alma ve gözden geçirme — dosya depoda (`database.rules.json`, `firebase.json`, 2026-11-09).
       Eksik: kuralların kayıt kayıt eşitleme modeline göre gözden geçirildiğine dair kayıt yok (Faz 3 "çok aileli kullanım" ile birlikte).
 - [x] Çevrimdışı açılışta eski verinin buluta yazılmasını ve yankı yazmayı durdurma — 2026-11-06
@@ -94,7 +97,12 @@ yerel bir kabukla paketlenmesi gerekir.
 - [ ] iOS widget (WidgetKit) ve Android widget: çekirdeğin ürettiği özet + sık kullanılanlar
 - [ ] Mağaza gereklilikleri: gizlilik politikası, KVKK aydınlatma metni, uygulama içinden hesap silme,
       Google girişinin yanında Apple ile Giriş
-- [ ] Çok aileli kullanım: aile başına veri izolasyonu, davet akışı güvenliği
+- [~] Çok aileli kullanım: aile başına veri izolasyonu, davet akışı güvenliği
+      2026-11-12 (İş #68): ilk açılış ekranı (Giriş yap · Kayıt ol · Davet kodum var, `src/v3/screens/Giris.jsx`); kayıt olan
+      aileyi kurar; kurucu Ayarlar › Aile üyeleri'nden davet kodu üretir (`AileSheet.jsx`, kural testi `npm run test:rules`).
+      2026-11-12 düzeltme: kod 6 karakter harf-rakam (31^6), 7 gün geçerli, tek kullanımlık; katılım yalnız davetteki
+      e-postayla açılmış hesaba geçer (kural + istemci). Kurallar canlıya yüklendi. v3 herkese açık isim dizinine yazmıyor;
+      dizin kuralı eski uygulama kalkınca kapatılmalı.
 - [ ] AI özellikleri için maliyet modeli (kota / abonelik)
       Model seçimi ölçümle yapılacak (2026-11-12): `docs/AI-MODEL-VE-MALIYET-RAPORU.md`, `npm run ai:model-dene`.
       Resmi fiyatlara göre en ucuz aday Claude Haiku 5.5; doğruluk kullanıcının fiş/ekstreleriyle ölçülmeden kesinleşmez.
@@ -137,3 +145,16 @@ yerel bir kabukla paketlenmesi gerekir.
   `npm run ai:kurulum` (adım adım denetim, anahtarı gizli sorar, yükler, canlı denetler; `--kontrol` hiçbir şeyi değiştirmez).
   Model seçimi tek satıra indi (`functions/ai/providers.js` AI_MODEL; Claude/Gemini/DeepSeek/Mistral aynı katmandan, Claude
   4.7+ düşünme biçimi dahil); deneme betiği üretimle aynı kodu kullanıyor. 145 test geçiyor.
+- 2026-11-12 · İş #68: AI kurulumu canlıda denetlendi (401 + iPhone CORS). v3 ekranlarına üç giriş: Rapor danışmanı (gönderilecek özet
+  gösterilir; işlem açıklaması ve üye adı gitmez), hızlı harcamada fişten tutar + mağaza, ekstre eşitlemede PDF okuma
+  (`parseAiStatement` ile aynı eşitleme). İstemci katmanı `src/v3/ai.js`, saf dönüşümler `src/v3/aiData.js`. 152 test geçiyor;
+  Rapor kartı simülatör Safari'sinde OCR ile görüldü.
+- 2026-11-12 · İş #68 düzeltme: arayüzden "yapay zekâya ne gider" metinleri ve gönderim onayı kaldırıldı (Abdullah: kullanıcıyı
+  çekimser bırakıyor; veri işleme gizlilik metnine). + Ekle'de açıklamanın altında "Fiş yükle" satırı. Karşılama ilk hesaptan sonra
+  kayboluyordu (maaş ve sabit ödeme adımları atlanıyordu); artık adımlar bitene ya da "Başla"ya kadar sürüyor (`setupSteps`).
+  İlk açılış ekranı ve davet kodu. iOS kabuğunda Firebase oturumu hiç çözülmüyordu (gizli çerçeve); `src/v3/firebaseApp.js`
+  kabukta çözücüsüz başlatıyor, Google düğmesi kabukta gizli. 155 test ve 8 kural testi geçiyor.
+- 2026-11-12 · İş #68 düzeltme 2: açılış — oturum durumu beklenmeden son bilinen durumla çizim ve Firebase kodunun ilk
+  çizimden sonra yüklenmesi; sayfa içi süre simülatörde 1,06–1,26 sn'den 0,19–0,36 sn'ye indi (Debug, 3 + 5 ölçüm). Kalan
+  ~1,9–2,6 sn simülatörün WebKit süreç başlangıcı (uygulama kodu dışı). Davet: WhatsApp / e-posta / mesaj bağlantıları;
+  güvenlik kuralları ve günlük AI sınırları canlıya yüklendi. 157 test, 9 kural testi, AI emülatör denetimi geçiyor.

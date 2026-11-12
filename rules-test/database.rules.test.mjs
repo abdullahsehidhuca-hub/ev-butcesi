@@ -7,9 +7,9 @@ import assert from "node:assert/strict";
 const HOST = process.env.FIREBASE_DATABASE_EMULATOR_HOST || "127.0.0.1:9000";
 const NS = "demo-ev-butcesi-default-rtdb";
 
-// Emülatör imzasız kimlik jetonunu kabul eder; auth.uid jetondaki sub alanıdır.
+// Emülatör imzasız kimlik jetonunu kabul eder; auth.uid jetondaki sub alanıdır, e-posta "<uid>@x".
 const b64 = o => Buffer.from(JSON.stringify(o)).toString("base64url");
-const token = uid => `${b64({ alg: "none", typ: "JWT" })}.${b64({ sub: uid, user_id: uid, iat: 0, exp: 9999999999, aud: "demo-ev-butcesi", iss: "https://securetoken.google.com/demo-ev-butcesi", firebase: { sign_in_provider: "password" } })}.`;
+const token = uid => `${b64({ alg: "none", typ: "JWT" })}.${b64({ sub: uid, user_id: uid, email: `${uid}@x`, iat: 0, exp: 9999999999, aud: "demo-ev-butcesi", iss: "https://securetoken.google.com/demo-ev-butcesi", firebase: { sign_in_provider: "password" } })}.`;
 
 async function req(method, path, uid, body) {
   const headers = { "Content-Type": "application/json" };
@@ -23,6 +23,8 @@ const ok = async (p, msg) => assert.equal(await p, 200, msg);
 const denied = async (p, msg) => { const s = await p; assert.ok(s === 401 || s === 403, `${msg} (durum ${s})`); };
 
 const ADMIN = "admin1", MEMBER = "uye1", STRANGER = "yabanci";
+const DAY = 86400000;
+const invite = (email, extra = {}) => ({ familyId: ADMIN, name: "Üye", email, expiresAt: Date.now() + DAY, used: false, ...extra });
 
 before(async () => {
   await ok(req("PUT", "", "owner", null), "veritabanı temizlenemedi");
@@ -53,13 +55,13 @@ test("davet listelenemez, başkası adına davet yazılamaz", async () => {
 });
 
 test("davetle katılma akışı çalışır ve kod tek kullanımlıktır", async () => {
-  await ok(req("PUT", "invitations/123456", ADMIN, { familyId: ADMIN, name: "Kadriye", email: "k@x", used: false }), "davet oluşturma");
+  await ok(req("PUT", "invitations/123456", ADMIN, invite("uye1@x", { name: "Kadriye" })), "davet oluşturma");
   await ok(req("GET", "invitations/123456", null), "kodla tek davet okunur (girişten önce)");
   await denied(req("PUT", "invitations/123456", STRANGER, { familyId: STRANGER, used: false }), "daveti ele geçirme");
   // Üye kaydı tek başına yazılamaz; kodun kullanıldı işaretiyle aynı atomik yazımda gitmeli.
-  await denied(req("PUT", `families/${ADMIN}/members/${MEMBER}`, MEMBER, { name: "Kadriye", email: "k@x", role: "member", inviteCode: "123456" }), "üye kaydı tek başına");
+  await denied(req("PUT", `families/${ADMIN}/members/${MEMBER}`, MEMBER, { name: "Kadriye", email: "uye1@x", role: "member", inviteCode: "123456" }), "üye kaydı tek başına");
   await denied(req("PUT", "invitations/123456/used", MEMBER, true), "üye olmadan kodu yakma");
-  await ok(req("PATCH", "", MEMBER, { [`families/${ADMIN}/members/${MEMBER}`]: { name: "Kadriye", email: "k@x", role: "member", inviteCode: "123456" }, "invitations/123456/used": true }), "atomik katılım");
+  await ok(req("PATCH", "", MEMBER, { [`families/${ADMIN}/members/${MEMBER}`]: { name: "Kadriye", email: "uye1@x", role: "member", inviteCode: "123456" }, "invitations/123456/used": true }), "atomik katılım");
   await ok(req("PUT", `userFamilies/${MEMBER}`, MEMBER, { familyId: ADMIN, code: "123456", role: "member" }), "userFamilies");
   await ok(req("PUT", "nameIndex/kadriye", MEMBER, { email: "k@x", familyId: ADMIN, uid: MEMBER }), "isim kaydı");
   // Aynı kodu ikinci kez kullanmak reddedilir.
@@ -92,4 +94,24 @@ test("yönetici üyenin erişimini sıfırlayabilir (resetMemberAccess)", async 
   await ok(req("PUT", "nameIndex/kadriye", ADMIN, null), "isim silme");
   await ok(req("PUT", `families/${ADMIN}/members/${MEMBER}`, ADMIN, null), "üye silme");
   await denied(req("GET", `families/${ADMIN}/v3`, MEMBER), "silinen üye artık okuyamaz");
+});
+
+test("davet kodunu yalnız aileyi kuran üretir; üye üretemez (v3 Aile üyeleri)", async () => {
+  await ok(req("PUT", "invitations/654321", ADMIN, invite("ali@x", { name: "Ali" })), "kurucu davet üretir");
+  await denied(req("PUT", "invitations/654322", MEMBER, invite("veli@x")), "üye davet üretemez");
+  await denied(req("PUT", "invitations/654321", MEMBER, invite("ali@x", { familyId: MEMBER })), "üye kurucunun davetini ele geçiremez");
+});
+
+test("davet: kod 6 karakter harf-rakam, en çok 7 gün; yalnız davetteki e-posta, süresi içinde katılır", async () => {
+  await ok(req("PUT", "invitations/K7M2QX", ADMIN, invite("veli@x")), "harf-rakam kod");
+  await denied(req("PUT", "invitations/k7m2qy", ADMIN, invite("veli@x")), "küçük harf kod");
+  await denied(req("PUT", "invitations/K7M2QXZ", ADMIN, invite("veli@x")), "7 karakter kod");
+  await denied(req("PUT", "invitations/K7M2QZ", ADMIN, invite("veli@x", { expiresAt: Date.now() + 30 * DAY })), "30 gün geçerli kod");
+  await denied(req("PUT", "invitations/K7M2QW", ADMIN, { familyId: ADMIN, email: "veli@x", used: false }), "süresiz kod");
+  const join = (uid, code) => req("PATCH", "", uid, { [`families/${ADMIN}/members/${uid}`]: { name: "X", email: `${uid}@x`, role: "member", inviteCode: code }, [`invitations/${code}/used`]: true });
+  await denied(join(STRANGER, "K7M2QX"), "kodu bilen başka e-posta katılamaz");
+  await ok(req("PUT", "invitations/EXP234", ADMIN, invite("veli@x", { expiresAt: Date.now() - 1000 })), "süresi dolmuş davet (deneme için)");
+  await denied(join("veli", "EXP234"), "süresi dolan kodla katılınamaz");
+  await ok(req("PUT", "invitations/K7M2QR", ADMIN, invite("Veli@X")), "büyük harfli e-postalı davet");
+  await ok(join("veli", "K7M2QR"), "davetteki e-posta (büyük/küçük harf farkı önemsiz) süresi içinde katılır");
 });

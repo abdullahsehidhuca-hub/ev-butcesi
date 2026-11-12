@@ -51,17 +51,23 @@ for (const [fn, good] of [
 const wrongType = await post("analyzeStatement", { token, body: { base64: "aGVsbG8=", mediaType: "text/html" } });
 check("analyzeStatement: desteklenmeyen tür 400", wrongType.status === 400, wrongType.payload?.error);
 
-// Günlük hak: sayacı veritabanı emülatöründe 3'e çekip danışmanı çağır (Anthropic'e gitmeden 429 dönmeli).
+// Günlük hak: sayaçları (aiUsage/{uid}/{tür}) veritabanı emülatöründe sınıra çekip çağır; model çağrılmadan 429 dönmeli.
 const day = new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Istanbul" });
 for (const ns of [`${PROJECT}-default-rtdb`, PROJECT]) {
   await fetch(`http://${DB}/aiUsage/${uid}.json?ns=${ns}`, {
     method: "PUT",
     headers: { Authorization: "Bearer owner" },
-    body: JSON.stringify({ [day]: 3 })
+    body: JSON.stringify({ advisor: { [day]: 3 }, receipt: { [day]: 20 }, statement: { [day]: 5 } })
   });
 }
-const limited = await post("aiAdvisor", { token, body: { prompt: "merhaba" } });
-check("aiAdvisor: günlük hak dolunca 429 (sayaç veritabanında)", limited.status === 429, limited.payload?.error);
+for (const [fn, body] of [
+  ["aiAdvisor", { prompt: "merhaba" }],
+  ["analyzeReceipt", { base64: "aGVsbG8=", mediaType: "image/png" }],
+  ["analyzeStatement", { base64: "aGVsbG8=", mediaType: "application/pdf" }]
+]) {
+  const limited = await post(fn, { token, body });
+  check(`${fn}: günlük hak dolunca 429 (sayaç veritabanında)`, limited.status === 429, limited.payload?.error);
+}
 
 // CORS: iOS kabuğunun kaynağına izin var, başka siteye yok.
 const pre = await fetch(`${FN}/aiAdvisor`, {

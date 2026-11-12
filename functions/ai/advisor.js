@@ -1,8 +1,8 @@
 import { verifyUser } from "./common.js";
 import { callModel, modelInfo } from "./providers.js";
-import { usageToday, addUsage } from "./usage.js";
+import { usageToday, addUsage, DAILY_LIMITS } from "./usage.js";
 
-const DAILY_LIMIT = 3;
+const DAILY_LIMIT = DAILY_LIMITS.advisor;
 const MAX_PROMPT_CHARS = 200000;
 
 // Model denemesi (scripts/ai-model-dene.mjs) aynı metni kullanır.

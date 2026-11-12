@@ -1,20 +1,21 @@
 // Özet (taslak C1): özet kart + hesaplar şeridi + tek liste. İleriye dönük uyarı listenin ilk satırıdır.
 // Ana rakam "kullanılabilir" tutardır: gelir − düzenli ödemeler − harcama − bütçelere ayrılan.
 // Dokununca bankadaki tutar, bloke ve bankayla karşılaştırma çekmecesi açılır (BakiyeSheet).
-// Hesap yoksa 3 adımlı karşılama gösterilir.
+// Kurulum bitene kadar 3 adımlı karşılama gösterilir (setupSteps).
 // Kredi kartı varsa altında tek satır "Kart blokesi" durur; dokununca kart kart döküm açılır (BlokeSheet).
 import { useState } from "react";
 import { pendingCarryover, formatUnits } from "../../core/index.js";
 import { Icon, Tile, DateBadge, Avatar, Check } from "../components/ui.jsx";
-import { overview, upcoming, recent, forecast, paymentsView, accountsView, balanceView, closeCandidate, categoryName, periodLabel, fmt, fmtNum, dayNum, monthShort, monthLong } from "../selectors.js";
+import { overview, upcoming, recent, forecast, paymentsView, accountsView, balanceView, closeCandidate, categoryName, periodLabel, fmt, fmtNum, dayNum, monthShort, monthLong, setupSteps } from "../selectors.js";
 
-function Welcome({ state, open }) {
-  const ready = Object.keys(state.accounts).length > 0;
+function Welcome({ state, open, onDone }) {
+  const st = setupSteps(state);
   const steps = [
-    { title: "Banka hesabı ve bugünkü bakiye", sub: "Kredi kartlarını da buradan eklersiniz", icon: "wallet", color: "blue", sheet: { name: "account" }, on: true },
-    { title: "Maaş ve maaş günü", sub: ready ? "Bütçe ayı maaş gününden başlar" : "Önce bir hesap ekleyin", icon: "cash", color: "green", sheet: { name: "obligation", kind: "income" }, on: ready },
-    { title: "Kira, fatura gibi sabit ödemeler", sub: ready ? "Her ay kendiliğinden listelenir" : "Önce bir hesap ekleyin", icon: "repeat", color: "orange", sheet: { name: "obligation", kind: "fixed" }, on: ready }
+    { title: "Banka hesabı ve bugünkü bakiye", sub: "Kredi kartlarını da buradan eklersiniz", icon: "wallet", color: "blue", sheet: { name: "account" }, on: true, done: st.account },
+    { title: "Maaş ve maaş günü", sub: st.account ? "Bütçe ayı maaş gününden başlar" : "Önce bir hesap ekleyin", icon: "cash", color: "green", sheet: { name: "obligation", kind: "income" }, on: st.account, done: st.income },
+    { title: "Kira, fatura gibi sabit ödemeler", sub: st.account ? "Her ay kendiliğinden listelenir" : "Önce bir hesap ekleyin", icon: "repeat", color: "orange", sheet: { name: "obligation", kind: "fixed" }, on: st.account, done: st.fixed }
   ];
+  const canStart = st.account && st.income;
   return (
     <>
       <header className="stack gap2" style={{ padding: "0 4px" }}>
@@ -23,16 +24,22 @@ function Welcome({ state, open }) {
       </header>
       <section className="list" aria-label="Başlangıç adımları" style={{ "--inset": "64px" }}>
         {steps.map((s, i) => (
-          <button key={s.title} type="button" className="li" disabled={!s.on} onClick={() => open(s.sheet)} style={{ opacity: s.on ? 1 : .55 }}>
-            <Tile icon={s.icon} color={s.color} />
+          <button key={s.title} type="button" className="li" disabled={!s.on} onClick={() => open(s.sheet)} style={{ opacity: s.on ? 1 : .55 }}
+            aria-label={`${i + 1}. ${s.title}${s.done ? ", eklendi. Bir tane daha ekle" : ""}`}>
+            <Tile icon={s.done ? "check" : s.icon} color={s.done ? "green" : s.color} />
             <span className="stack grow gap2">
               <span className="t-body b">{i + 1}. {s.title}</span>
-              <span className="t-meta">{s.sub}</span>
+              <span className="t-meta">{s.done ? "Eklendi · bir tane daha eklemek için dokunun" : s.sub}</span>
             </span>
-            {s.on && <Icon name="chev" size={14} style={{ color: "var(--label3)" }} />}
+            {s.on && <Icon name={s.done ? "plus" : "chev"} size={14} style={{ color: "var(--label3)" }} />}
           </button>
         ))}
       </section>
+      {canStart && onDone && (
+        <button type="button" className="pill blue" style={{ justifyContent: "center", minHeight: 50, borderRadius: 14, fontSize: 17 }} onClick={onDone}>
+          {st.fixed ? "Başla" : "Sabit ödemeleri sonra ekleyeceğim, başla"}
+        </button>
+      )}
     </>
   );
 }
@@ -60,9 +67,9 @@ function Accounts({ state, today, onManage }) {
   );
 }
 
-export default function Ozet({ state, today, members = {}, overrides, open, onResolve, onPay, onOpenPayments, onOpenSettings, backupDue }) {
+export default function Ozet({ state, today, members = {}, overrides, open, onResolve, onPay, onOpenPayments, onOpenSettings, backupDue, onSetupDone }) {
   const [list, setList] = useState("upcoming");
-  if (!Object.keys(state.accounts).length) return <Welcome state={state} open={open} />;
+  if (setupSteps(state).show) return <Welcome state={state} open={open} onDone={onSetupDone} />;
 
   const o = overview(state, today);
   const fc = forecast(state, today, { overrides });

@@ -77,7 +77,8 @@ async function createFamily(uid2, email, name, retries = 3) {
 // Davet oluştur (admin tarafından)
 async function createInvitation(familyId, memberName, memberEmail) {
   const code = genCode();
-  await set(ref(rtdb, `invitations/${code}`), { familyId, name: memberName, email: memberEmail, createdAt: new Date().toISOString(), used: false });
+  // Kurallar (database.rules.json) 7 gün içinde dolan süre ister; katılım yalnız bu e-postayla açılmış hesaba geçer.
+  await set(ref(rtdb, `invitations/${code}`), { familyId, name: memberName, email: memberEmail.trim().toLowerCase(), createdAt: new Date().toISOString(), expiresAt: Date.now() + 7 * 86400000, used: false });
   return code;
 }
 

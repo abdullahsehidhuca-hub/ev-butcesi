@@ -1,17 +1,21 @@
 // Hızlı harcama (taslak C2): tutar → kategori (ya da geçmişten öneri) → Ekle. Hesap kategoride son
 // kullanılandan gelir; açıklama yazılırsa kategori önerilir, kullanıcının seçimi öğrenilir.
+// Açıklamanın altındaki "Fiş yükle" satırı fiş fotoğrafını yapay zekâyla okur (functions/ai/receipt.js): tutar ve
+// mağaza adı doldurulur, kayıt yine kullanıcının "Ekle"siyle yapılır. Fişin kalemleriyle ne yapılacağı ayrı iştir.
 import { useMemo, useState } from "react";
 import { Sheet, Icon } from "../components/ui.jsx";
 import { quickAdd, defaultAccountFor, suggestCategory, learnCategory } from "../../core/index.js";
 import { favoritesFor } from "../selectors.js";
-import { parseAmount } from "../format.js";
+import { parseAmount, amountText } from "../format.js";
+import { receiptDraft } from "../aiData.js";
+import { callAi, imagePayload } from "../ai.js";
 import { newId } from "../store.js";
 
 // Kayıt anı: ekranın "bugün" tarihi + şimdiki saat (örnek veri modunda tarih sabittir).
 const nowOn = day => new Date(`${day}T${new Date().toTimeString().slice(0, 8)}`);
 const AMOUNT_HINT = "Tutarı girin, örneğin 345 ya da 1.250,50.";
 
-export default function EkleSheet({ state, today, members = {}, commit, onClose, onNeedAccount, onSaved }) {
+export default function EkleSheet({ state, today, members = {}, commit, onClose, onNeedAccount, onSaved, aiUser }) {
   const accounts = Object.values(state.accounts);
   const cats = useMemo(() => Object.values(state.categories).filter(c => !c.archived).sort((a, b) => a.name.localeCompare(b.name, "tr")), [state.categories]);
   const favs = useMemo(() => favoritesFor(state, today).filter(f => state.categories[f.categoryId] && state.accounts[f.accountId]).slice(0, 4), [state, today]);
@@ -24,6 +28,8 @@ export default function EkleSheet({ state, today, members = {}, commit, onClose,
   const [who, setWho] = useState(self?.id);
   const [accountId, setAccountId] = useState(null);
   const [errors, setErrors] = useState(null);
+  const [scan, setScan] = useState(false);
+  const [info, setInfo] = useState(null);
 
   if (!accounts.length) {
     return (
@@ -49,6 +55,20 @@ export default function EkleSheet({ state, today, members = {}, commit, onClose,
   const onNote = v => {
     setNote(v);
     if (!picked) setCategoryId(suggestCategory(state, v)?.categoryId ?? null);
+  };
+  const onReceipt = async file => {
+    if (!file || scan) return;
+    setErrors(null); setInfo(null); setScan(true);
+    try {
+      const d = receiptDraft(await callAi(aiUser, "analyzeReceipt", await imagePayload(file)));
+      if (!d.amount) throw new Error("Fişte toplam tutar okunamadı. Tutarı elle girin.");
+      setText(amountText(d.amount));
+      if (d.store) onNote(d.store);
+      setInfo(`Fişten okundu${d.fromItems ? " (toplam, kalemlerden hesaplandı)" : ""}. Tutarı kontrol edip kategoriyi seçin.`);
+    } catch (e) {
+      setErrors([e?.message || "Fiş okunamadı."]);
+    }
+    setScan(false);
   };
   const cycleAccount = () => {
     const i = accounts.findIndex(a => a.id === acc);
@@ -88,6 +108,17 @@ export default function EkleSheet({ state, today, members = {}, commit, onClose,
           <span className="visually-hidden">Açıklama</span>
           <input value={note} placeholder="Açıklama, örn: Migros" onChange={e => onNote(e.target.value)} />
         </label>
+
+        {aiUser && (
+          <label className="fis-row" aria-busy={scan ? "true" : undefined}>
+            <Icon name="receipt" size={20} />
+            <span className="grow" aria-live="polite">{scan ? "Fiş okunuyor…" : "Fiş yükle"}</span>
+            {!scan && <span className="t-meta">tutar ve mağaza dolar</span>}
+            <input type="file" accept="image/*" className="visually-hidden" disabled={scan}
+              onChange={e => { onReceipt(e.target.files?.[0]); e.target.value = ""; }} />
+          </label>
+        )}
+        {info && <p className="t-meta" role="status" style={{ margin: 0 }}>{info}</p>}
 
         {favs.length > 0 && (
           <div className="chips" role="group" aria-label="Geçmişten öneriler">

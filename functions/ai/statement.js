@@ -1,5 +1,6 @@
 import { parseJSON, verifyUser, checkFile } from "./common.js";
 import { callModel, modelInfo } from "./providers.js";
+import { usageToday, addUsage, DAILY_LIMITS } from "./usage.js";
 
 const DOC_TYPES = ["application/pdf"];
 const MAX_BYTES = 4 * 1024 * 1024;
@@ -31,6 +32,10 @@ export default async function handler(req, res) {
   const { base64, mediaType } = req.body;
 
   try {
+    // Kayıt herkese açık: her kullanıcının günlük hakkı sınırlı (maliyet koruması).
+    if (await usageToday(uid, "statement") >= DAILY_LIMITS.statement) {
+      return res.status(429).json({ error: `Bugünkü ekstre okuma hakkınız doldu (${DAILY_LIMITS.statement}). Yarın yeniden deneyin.` });
+    }
     const { text } = await callModel(modelInfo(), {
       text: STATEMENT_PROMPT,
       file: { base64, mediaType },
@@ -38,6 +43,8 @@ export default async function handler(req, res) {
       thinkingBudget: 8000
     });
 
+    // Model yanıt verdiyse maliyet oluşmuştur; yanıt okunamasa da hak düşer.
+    await addUsage(uid, "statement");
     const parsed = parseJSON(text);
     if (parsed.error) return res.status(400).json({ error: parsed.error });
     return res.status(200).json(parsed);

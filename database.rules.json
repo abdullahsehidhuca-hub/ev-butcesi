@@ -6,7 +6,7 @@
         ".write": "auth != null && $familyId === auth.uid",
         "members": {
           "$memberUid": {
-            ".write": "auth != null && $memberUid === auth.uid && (data.exists() ? (!newData.exists() || newData.child('role').val() === data.child('role').val()) : (newData.child('role').val() === 'member' && newData.child('inviteCode').isString() && root.child('invitations').child(newData.child('inviteCode').val()).child('familyId').val() === $familyId && root.child('invitations').child(newData.child('inviteCode').val()).child('used').val() === false && newData.parent().parent().parent().parent().child('invitations').child(newData.child('inviteCode').val()).child('used').val() === true))"
+            ".write": "auth != null && $memberUid === auth.uid && (data.exists() ? (!newData.exists() || newData.child('role').val() === data.child('role').val()) : (newData.child('role').val() === 'member' && newData.child('inviteCode').isString() && root.child('invitations').child(newData.child('inviteCode').val()).child('familyId').val() === $familyId && root.child('invitations').child(newData.child('inviteCode').val()).child('used').val() === false && root.child('invitations').child(newData.child('inviteCode').val()).child('expiresAt').val() > now && auth.token.email != null && auth.token.email.toLowerCase() === (root.child('invitations').child(newData.child('inviteCode').val()).child('email').val() + '').toLowerCase() && newData.parent().parent().parent().parent().child('invitations').child(newData.child('inviteCode').val()).child('used').val() === true))"
           }
         },
         "data": {
@@ -30,6 +30,7 @@
       "$code": {
         ".read": true,
         ".write": "auth != null && newData.child('familyId').val() === auth.uid && (!data.exists() || data.child('familyId').val() === auth.uid)",
+        ".validate": "$code.matches(/^[0-9A-Z]{6}$/) && newData.child('familyId').isString() && newData.child('email').isString() && newData.child('expiresAt').isNumber() && newData.child('expiresAt').val() <= now + 604860000",
         "used": {
           ".write": "auth != null && data.val() === false && newData.val() === true && newData.parent().parent().parent().child('families').child(root.child('invitations').child($code).child('familyId').val() + '').child('members').child(auth.uid).child('inviteCode').val() === $code"
         }
