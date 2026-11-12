@@ -15,7 +15,8 @@ import { isDate, isPeriodKey, periodOf } from "./period.js";
 
 export const SCHEMA_VERSION = 2;
 
-export const ACCOUNT_TYPES = ["bank", "cash", "credit", "debit"];
+// prepaid: ön ödemeli kart (konfor kartı, Setcard/Multinet gibi yemek kartı) — önceden para yüklenen kart; kendi bakiyesi vardır, yükleme banka hesabından aktarımdır.
+export const ACCOUNT_TYPES = ["bank", "cash", "credit", "debit", "prepaid"];
 // refund: iade — harcamanın kategorisinden düşer, para hesaba geri girer.
 // exchange: farklı para birimli hesaplar arası alım-satım (TL ile döviz/altın alma, birikimi bozdurma).
 //   accountId'den amount (kendi biriminde) çıkar, toAccountId'ye toAmount (onun biriminde) girer.

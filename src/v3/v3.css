@@ -85,6 +85,7 @@ input { font: inherit; color: inherit; }
 .seg { display: flex; background: var(--fill); border-radius: 10px; padding: 2px; }
 .seg button { flex: 1; min-height: 44px; border-radius: 8px; font-size: 14px; }
 .seg button[aria-pressed="true"] { background: var(--seg-on, var(--card)); font-weight: 600; box-shadow: 0 2px 6px rgba(0,0,0,.08); }
+.pay-seg button { min-width: 0; padding: 0 4px; font-size: 13px; line-height: 1.15; white-space: normal; }
 
 .bar { display: flex; gap: 2px; height: 8px; }
 .bar i { display: block; border-radius: 4px; height: 100%; }
@@ -188,6 +189,11 @@ a.li:active { background: var(--fill2); }
 .v3-cancel { min-width: 96px; min-height: 50px; border-radius: 14px; background: var(--card); color: var(--label); font-size: 17px; font-weight: 500; }
 .v3-error { color: var(--red-t); font-size: var(--fs-sub); font-weight: 600; margin: 4px 4px 0; line-height: 1.45; }
 .v3-link { color: var(--blue-t); font-weight: 600; min-height: 44px; display: inline-flex; align-items: center; }
+.v3-link.c-red { color: var(--red-t); }
+.v3-link:disabled { opacity: .4; }
+/* Ödeme seçenekleri (Ayarlar): ad alanının altında sırala / sil düğmeleri. */
+.pm-item .v3-field { margin-bottom: 0; }
+.pm-tools { display: flex; justify-content: flex-end; gap: 18px; margin: 0 4px 8px; }
 .v3-pos { color: var(--green-t); } .v3-neg { color: var(--red-t); }
 
 /* 360 px'te dört kategori sütunu dar kalır; üç sütuna düşer. */

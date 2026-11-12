@@ -16,3 +16,4 @@ export * from "./cardStatement.js";
 export * from "./savings.js";
 export * from "./cardBudget.js";
 export * from "./carryover.js";
+export * from "./payMethods.js";

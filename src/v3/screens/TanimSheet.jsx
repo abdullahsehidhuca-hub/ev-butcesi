@@ -15,7 +15,7 @@ import { periodLabel, prevPeriod, fmt, dayNum, monthShort } from "../selectors.j
 const byName = (a, b) => a.name.localeCompare(b.name, "tr");
 const DAYS = Array.from({ length: 31 }, (_, i) => ({ value: String(i + 1), label: `${i + 1}` }));
 const DAYS_OPT = [{ value: "", label: "Belirtilmedi" }, ...DAYS];
-const ACCOUNT_TYPES = [{ value: "bank", label: "Banka hesabı" }, { value: "cash", label: "Nakit" }, { value: "credit", label: "Kredi kartı" }];
+const ACCOUNT_TYPES = [{ value: "bank", label: "Banka hesabı" }, { value: "cash", label: "Nakit" }, { value: "credit", label: "Kredi kartı" }, { value: "prepaid", label: "Ön ödemeli kart" }];
 const CURRENCY_OPTIONS = [{ value: "TRY", label: "Türk lirası (₺)" }, { value: "USD", label: "Dolar ($)" }, { value: "EUR", label: "Euro (€)" }, { value: "XAU", label: "Altın (gram)" }];
 const KIND = { fixed: "Sabit ödeme", installment: "Taksit", debt: "Borç", income: "Gelir" };
 const dateText = d => d ? `${dayNum(d)} ${monthShort(d)} ${d.slice(0, 4)}` : "";
@@ -53,6 +53,7 @@ export function AccountEditSheet({ state, commit, onClose, id, onToast }) {
   const [errors, setErrors] = useState(null);
   if (!a) return <Sheet title="Hesap" onClose={onClose}><p className="v3-sheet-text">Hesap bulunamadı.</p></Sheet>;
   const credit = type === "credit";
+  const prepaid = type === "prepaid";
 
   const save = () => {
     if (!name.trim()) return setErrors(["hesabın adını yazın"]);
@@ -61,7 +62,7 @@ export function AccountEditSheet({ state, commit, onClose, id, onToast }) {
     const rate = minRate.trim() ? Number(minRate.replace(",", ".")) : null;
     if (credit && minRate.trim() && !(rate > 0 && rate <= 100)) return setErrors(["asgari ödeme oranı 1-100 arası yüzde olmalı"]);
     const errs = commit(s => {
-      const rec = { ...a, name: name.trim(), type, currency };
+      const rec = { ...a, name: name.trim(), type, currency: prepaid ? "TRY" : currency };
       if (a.opening) rec.opening = { ...a.opening, balance: credit ? -Math.abs(minor) : minor };
       delete rec.cutoffDay; delete rec.paymentDay; delete rec.minPaymentRate;
       if (credit) {
@@ -71,8 +72,8 @@ export function AccountEditSheet({ state, commit, onClose, id, onToast }) {
       }
       let next = addAccount(s, rec);
       const def = next.settings.defaultAccountId;
-      if (isDefault && !credit) next = { ...next, settings: { ...next.settings, defaultAccountId: id } };
-      else if (def === id && (!isDefault || credit)) next = { ...next, settings: { ...next.settings, defaultAccountId: null } };
+      if (isDefault && !credit && !prepaid) next = { ...next, settings: { ...next.settings, defaultAccountId: id } };
+      else if (def === id && (!isDefault || credit || prepaid)) next = { ...next, settings: { ...next.settings, defaultAccountId: null } };
       return next;
     });
     if (errs) setErrors(errs); else { onToast?.("Hesap güncellendi"); onClose(); }
@@ -93,7 +94,7 @@ export function AccountEditSheet({ state, commit, onClose, id, onToast }) {
           ? <p className="v3-hint" style={{ margin: "0 4px 12px" }}>{ACCOUNT_TYPES.find(t => t.value === type)?.label}{currency !== "TRY" ? ` · ${currency}` : ""}. Kayıtları olan hesabın türü ve para birimi değiştirilemez.</p>
           : <>
             <Chips label="Tür" value={type} options={ACCOUNT_TYPES} onChange={v => v && setType(v)} wrap />
-            {!credit && <SelectField label="Para birimi" value={currency} onChange={setCurrency} options={CURRENCY_OPTIONS} />}
+            {!credit && !prepaid && <SelectField label="Para birimi" value={currency} onChange={setCurrency} options={CURRENCY_OPTIONS} />}
           </>}
         {a.opening && (
           <Field label={credit ? `Kart borcu · ${dateText(a.opening.date)}` : `Açılış bakiyesi · ${dateText(a.opening.date)}`} value={balance} onChange={setBalance} inputMode="decimal" placeholder="0,00"
@@ -107,7 +108,7 @@ export function AccountEditSheet({ state, commit, onClose, id, onToast }) {
           <Field label="Asgari ödeme oranı (%)" value={minRate} onChange={setMinRate} inputMode="decimal" placeholder="Örn: 40"
             hint="Eksiye düşme uyarısındaki 'asgari öde' seçeneği için. Boş bırakılabilir." />
         </>}
-        {!credit && (
+        {!credit && !prepaid && (
           <label className="v3-check">
             <input type="checkbox" checked={isDefault} onChange={e => setIsDefault(e.target.checked)} />
             <span>Varsayılan hesap — harcamalar ve ödemeler önce bu hesaptan önerilir</span>

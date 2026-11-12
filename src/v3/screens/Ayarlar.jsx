@@ -3,13 +3,13 @@
 // Metinler uygulamayı ilk kez kullanan kişiye yazılır: geliştirme sürümlerinden (v3, eski uygulama) söz edilmez.
 import { useRef } from "react";
 import { Tile, Icon } from "../components/ui.jsx";
-import { balanceOf, amountFor, periodOf } from "../../core/index.js";
+import { balanceOf, amountFor, periodOf, payMethodsOf } from "../../core/index.js";
 import { fmt, mainAccountId, savingsView } from "../selectors.js";
 import { globalModeAt } from "./KartOdemeSheet.jsx";
 
 const THEMES = [["system", "Sistem"], ["light", "Açık"], ["dark", "Koyu"]];
 const KIND = { fixed: "Sabit ödeme", installment: "Taksit", debt: "Borç", income: "Gelir" };
-const ACCOUNT_TYPE = { bank: "Banka hesabı", cash: "Nakit", credit: "Kredi kartı", debit: "Banka kartı" };
+const ACCOUNT_TYPE = { bank: "Banka hesabı", cash: "Nakit", credit: "Kredi kartı", debit: "Banka kartı", prepaid: "Ön ödemeli kart" };
 const join = (...parts) => parts.filter(Boolean).join(" · ");
 const byName = (a, b) => a.name.localeCompare(b.name, "tr");
 
@@ -72,8 +72,8 @@ export default function Ayarlar({ state, today, open, theme, onTheme, backup, cl
       <section className="list" style={group} aria-label="Hesaplar ve kartlar">
         {accounts.map(a => (
           <Row key={a.id}
-            icon={a.type === "credit" ? "card" : a.type === "cash" ? "cash" : "wallet"}
-            color={a.type === "credit" ? "pink" : a.id === main ? "indigo" : a.type === "cash" ? "teal" : "blue"}
+            icon={a.type === "credit" || a.type === "prepaid" ? "card" : a.type === "cash" ? "cash" : "wallet"}
+            color={a.type === "credit" ? "pink" : a.type === "prepaid" ? "orange" : a.id === main ? "indigo" : a.type === "cash" ? "teal" : "blue"}
             title={a.name}
             sub={join(ACCOUNT_TYPE[a.type], a.currency !== "TRY" && a.currency, a.cutoffDay && `Kesim ${a.cutoffDay}`, a.paymentDay && `son ödeme ${a.paymentDay}`, state.settings.defaultAccountId === a.id && "Varsayılan")}
             value={a.currency === "TRY" ? fmt(balanceOf(state, a.id, today)) : null}
@@ -82,6 +82,10 @@ export default function Ayarlar({ state, today, open, theme, onTheme, backup, cl
         {accounts.some(a => a.type === "credit") && (
           <Row icon="card" color="pink" title="Kart ekstresi hangi bütçeden" sub="Genel varsayılan; kart bazında değiştirilebilir"
             value={globalModeAt(state, today) === "pay" ? "Ödendiği ay" : "Harcandığı ay"} onClick={() => open({ name: "cardmode" })} />
+        )}
+        {hasAccount && (
+          <Row icon="card" color="blue" title="Harcamadaki ödeme seçenekleri" sub={payMethodsOf(state).map(m => m.name).join(" · ")}
+            onClick={() => open({ name: "payMethods" })} />
         )}
         <Row icon="plus" color="blue" title="Hesap ekle" tint onClick={() => open({ name: "account" })} />
       </section>

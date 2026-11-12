@@ -29,6 +29,7 @@ import TaksitDeneSheet from "./screens/TaksitDeneSheet.jsx";
 import DanismanSheet from "./screens/DanismanSheet.jsx";
 import Giris from "./screens/Giris.jsx";
 import { AccountEditSheet, CategoryEditSheet, ObligationEditSheet } from "./screens/TanimSheet.jsx";
+import OdemeSecenekSheet from "./screens/OdemeSecenekSheet.jsx";
 import { PaySheet, AccountSheet, CategorySheet, ObligationSheet, InstallmentSheet, PayDaySheet, ResetSheet } from "./Sheets.jsx";
 import "./v3.css";
 
@@ -271,7 +272,7 @@ export default function V3App({ sample }) {
 
       <TabBar tab={tab} onTab={go} onAdd={() => setSheet({ name: "quick" })} />
 
-      {sheet?.name === "quick" && <EkleSheet {...props} onNeedAccount={() => setSheet({ name: "account" })} onSaved={a => setToast(`${fmt(a)} eklendi`)} />}
+      {sheet?.name === "quick" && <EkleSheet {...props} initialMethod={sheet.method} onNeedAccount={(type, method) => setSheet({ name: "account", type, payMethod: method, back: { name: "quick", method } })} onSaved={a => setToast(`${fmt(a)} eklendi`)} />}
       {sheet?.name === "resolve" && <CozSheet state={state} today={todayDate} overrides={overrides} onClose={close} onApply={apply} />}
       {sheet?.name === "balance" && <BakiyeSheet {...props} onToast={setToast} onStatement={() => setSheet({ name: "statement", back: { name: "balance" } })}
         onToBudget={() => setSheet({ name: "toBudget", back: { name: "balance" } })}
@@ -295,7 +296,8 @@ export default function V3App({ sample }) {
       {sheet?.name === "move" && <AlSatSheet {...props} mode={sheet.mode} onToast={setToast} onClose={closeTo(sheet.back)} />}
       {sheet?.name === "goal" && <HedefSheet {...props} key={sheet.id || "new"} id={sheet.id} preset={sheet.preset} onToast={setToast} onClose={closeTo(sheet.back)} />}
       {sheet?.name === "trial" && <TaksitDeneSheet {...props} onSave={initial => setSheet({ name: "installment", initial })} />}
-      {sheet?.name === "account" && <AccountSheet {...props} onClose={closeTo(sheet.back)} />}
+      {sheet?.name === "account" && <AccountSheet {...props} initialType={sheet.type} payMethod={sheet.payMethod} onClose={closeTo(sheet.back)} />}
+      {sheet?.name === "payMethods" && <OdemeSecenekSheet {...props} onToast={setToast} />}
       {sheet?.name === "category" && <CategorySheet {...props} />}
       {sheet?.name === "obligation" && <ObligationSheet {...props} kind={sheet.kind} />}
       {sheet?.name === "accountEdit" && <AccountEditSheet {...props} key={sheet.id} id={sheet.id} onToast={setToast} />}

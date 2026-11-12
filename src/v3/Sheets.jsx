@@ -142,18 +142,22 @@ export function PaySheet({ state, commit, onClose, period, target, today }) {
 }
 
 // ── Hesap ──────────────────────────────────────────────────────────────────────
-const ACCOUNT_TYPES = [{ value: "bank", label: "Banka hesabı" }, { value: "cash", label: "Nakit" }, { value: "credit", label: "Kredi kartı" }];
+// Banka kartı ayrı hesap değildir: harcaması bağlı olduğu banka hesabından düşer. Ön ödemeli kart: konfor kartı, yemek kartı
+// (Setcard, Multinet) gibi önceden para yüklenen kart.
+const ACCOUNT_TYPES = [{ value: "bank", label: "Banka hesabı" }, { value: "cash", label: "Nakit" }, { value: "credit", label: "Kredi kartı" }, { value: "prepaid", label: "Ön ödemeli kart" }];
 const CURRENCY_OPTIONS = [{ value: "TRY", label: "Türk lirası (₺)" }, { value: "USD", label: "Dolar ($)" }, { value: "EUR", label: "Euro (€)" }];
 
-export function AccountSheet({ state, commit, onClose, today }) {
+// initialType ve payMethod: hızlı harcamadaki "Konfor kartı ekle" gibi düğmelerden gelir; yeni hesap o düğmede görünür.
+export function AccountSheet({ state, commit, onClose, today, initialType, payMethod }) {
   const [name, setName] = useState("");
-  const [type, setType] = useState("bank");
+  const [type, setType] = useState(ACCOUNT_TYPES.some(t => t.value === initialType) ? initialType : "bank");
   const [currency, setCurrency] = useState("TRY");
   const [balance, setBalance] = useState("");
   const [cutoff, setCutoff] = useState("");
   const [payment, setPayment] = useState("");
   const [errors, setErrors] = useState(null);
   const credit = type === "credit";
+  const prepaid = type === "prepaid";
 
   const save = () => {
     if (!name.trim()) return setErrors(["hesabın adını yazın"]);
@@ -163,8 +167,8 @@ export function AccountSheet({ state, commit, onClose, today }) {
       const id = newId();
       // Kartta borç eksi bakiye olarak tutulur (çekirdek kuralı); kesim ve son ödeme günü isteğe bağlıdır.
       const card = credit ? { ...(cutoff ? { cutoffDay: Number(cutoff) } : {}), ...(payment ? { paymentDay: Number(payment) } : {}) } : {};
-      let next = addAccount(s, { id, name: name.trim(), type, currency, ...card, opening: { date: today, balance: credit ? -Math.abs(minor) : minor } });
-      if (!s.settings.defaultAccountId && !credit) next = { ...next, settings: { ...next.settings, defaultAccountId: id } };
+      let next = addAccount(s, { id, name: name.trim(), type, currency: prepaid ? "TRY" : currency, ...card, ...(payMethod ? { payMethod } : {}), opening: { date: today, balance: credit ? -Math.abs(minor) : minor } });
+      if (!s.settings.defaultAccountId && !credit && !prepaid) next = { ...next, settings: { ...next.settings, defaultAccountId: id } };
       return next;
     });
     if (errs) setErrors(errs); else onClose();
@@ -173,11 +177,12 @@ export function AccountSheet({ state, commit, onClose, today }) {
   return (
     <Sheet title="Hesap ekle" onClose={onClose}>
       <Form onSubmit={save}>
-        <Field label="Hesap adı" value={name} onChange={setName} placeholder={credit ? "Örn: Bonus kart" : "Örn: Maaş hesabı"} />
+        <Field label="Hesap adı" value={name} onChange={setName} placeholder={credit ? "Örn: Bonus kart" : prepaid ? "Örn: Konfor kartı, Multinet" : "Örn: Maaş hesabı"} />
         <Chips label="Tür" value={type} options={ACCOUNT_TYPES} onChange={v => v && setType(v)} wrap />
-        {!credit && <SelectField label="Para birimi" value={currency} onChange={setCurrency} options={CURRENCY_OPTIONS} />}
+        {prepaid && <p className="v3-hint" style={{ margin: "-8px 4px 14px" }}>Konfor kartı, yemek kartı (Setcard, Multinet) gibi önceden para yüklenen kart.</p>}
+        {!credit && !prepaid && <SelectField label="Para birimi" value={currency} onChange={setCurrency} options={CURRENCY_OPTIONS} />}
         <Field label={credit ? "Güncel kart borcu" : "Bugünkü bakiye"} value={balance} onChange={setBalance} inputMode="decimal" placeholder="0,00"
-          hint={credit ? "Bankanın gösterdiği borç; ödenmemiş harcamalar dahil." : "Bankada şu an görünen tutar. Uygulama bu rakamdan devam eder."} />
+          hint={credit ? "Bankanın gösterdiği borç; ödenmemiş harcamalar dahil." : prepaid ? "Kartta şu an yüklü tutar. Uygulama bu rakamdan devam eder." : "Bankada şu an görünen tutar. Uygulama bu rakamdan devam eder."} />
         {credit && <>
           <SelectField label="Hesap kesim günü" value={cutoff} onChange={setCutoff} options={DAYS_OPT} hint="Ekstrenin kesildiği gün; bloke ve ekstre dönemi buna göre hesaplanır. Sonradan da girebilirsiniz." />
           <SelectField label="Son ödeme günü" value={payment} onChange={setPayment} options={DAYS_OPT} hint="Boş bırakılırsa kesimden 10 gün sonrası sayılır." />

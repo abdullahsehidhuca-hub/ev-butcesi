@@ -6,7 +6,8 @@
 import {
   computePeriod, projection, occurrencesIn, balanceOf, favorites, txPeriod,
   periodOf, periodRange, dateInPeriod, nextPeriod, prevPeriod, addPeriods, periodDistance, sum,
-  assetsSummary, goalProgress, emergencyFundTarget, ratesOf, addInstallmentPurchase, splitInstallments, installmentLoad
+  assetsSummary, goalProgress, emergencyFundTarget, ratesOf, addInstallmentPurchase, splitInstallments, installmentLoad,
+  payMethodsOf, accountPayMethod, DEFAULT_PAY_METHODS
 } from "../core/index.js";
 
 const payDayOf = state => state.settings?.payDay || 1;
@@ -348,7 +349,8 @@ export function savingsView(state, today) {
   const emergency = emergencyFundTarget(state, period, { rates });
   const hasEmergency = goals.some(g => g.kind === "emergency");
   const main = mainAccountId(state);
-  const savingsAccounts = assets.list.filter(a => a.accountId !== main);
+  // Konfor kartındaki para harcanmak için yüklenmiştir; birikim sayılmaz.
+  const savingsAccounts = assets.list.filter(a => a.accountId !== main && a.type !== "prepaid");
   return { rates, assets, goals, emergency, hasEmergency, main, savingsAccounts, savingsTotal: sum(savingsAccounts.map(a => a.tl || 0)) };
 }
 
@@ -373,6 +375,25 @@ export function categoryName(state, key) {
   if (key === "_none" || key == null) return "Kategorisiz";
   if (key === "_adjustment") return "Bakiye düzeltme";
   return state.categories[key]?.name || "Silinmiş kategori";
+}
+
+// Hızlı harcamada "nereden ödendi" seçenekleri: Ayarlar'da düzenlenen liste (src/core/payMethods.js), her biri kendi
+// hesaplarıyla. Yalnız TL hesaplar; her seçenekte varsayılan hesap önce, sonra son harcama yapılan.
+// Liste hiç düzenlenmediyse hesabı olmayan varsayılan "Nakit" gösterilmez.
+
+export function payOptions(state) {
+  const used = {};
+  for (const t of Object.values(state.transactions)) {
+    if (t.type === "expense" && !t.obligationId && (used[t.accountId] || "") < t.date) used[t.accountId] = t.date;
+  }
+  const def = state.settings?.defaultAccountId;
+  const list = Object.values(state.accounts).filter(a => a.currency === "TRY" && !a.archived)
+    .sort((a, b) => (b.id === def) - (a.id === def) || (used[b.id] || "").localeCompare(used[a.id] || "") || a.name.localeCompare(b.name, "tr"));
+  const methods = payMethodsOf(state);
+  const custom = methods !== DEFAULT_PAY_METHODS;
+  return methods
+    .map(m => ({ method: m.id, label: m.name, accountType: m.accountType || null, accounts: list.filter(a => accountPayMethod(state, a, methods) === m.id) }))
+    .filter(o => o.accounts.length || o.method !== "cash" || custom);
 }
 
 export function favoritesFor(state, today) {

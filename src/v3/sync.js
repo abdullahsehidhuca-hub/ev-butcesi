@@ -51,6 +51,7 @@ export function fromCloud(tree) {
   const t = tree || {};
   const state = { ...base, schemaVersion: t.schemaVersion ?? SCHEMA_VERSION, settings: { ...base.settings, ...t.settings } };
   if (t.settings?.cardBudgetModes) state.settings.cardBudgetModes = arr(t.settings.cardBudgetModes);
+  if (t.settings?.payMethods) state.settings.payMethods = arr(t.settings.payMethods);
   for (const c of COLLECTIONS) {
     state[c] = Object.fromEntries(Object.entries(t[c] || {}).map(([k, v]) => [decodeKey(k), v]));
   }
