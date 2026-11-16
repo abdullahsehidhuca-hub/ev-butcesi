@@ -3,7 +3,7 @@
 // isim dizinine (nameIndex: ad → e-posta) yazmaz.
 import {
   signInWithEmailAndPassword, createUserWithEmailAndPassword, sendEmailVerification,
-  GoogleAuthProvider, signInWithPopup, signOut, updateProfile
+  GoogleAuthProvider, signInWithPopup, signOut, updateProfile, reload
 } from "firebase/auth";
 import { ref, get, set, update } from "firebase/database";
 import { firebase, isNativeShell } from "./firebaseApp.js";
@@ -75,6 +75,20 @@ export async function lookupInvitation(code) {
   return inv && inv.used === false && inv.familyId && inv.expiresAt > Date.now() ? inv : null;
 }
 
+// Davete katılım doğrulanmış e-posta ister (kurallar auth.token.email_verified denetler): biri davetteki adresle önce
+// hesap açsa bile o adresin gelen kutusuna erişmeden katılamaz. Kullanıcı e-postadaki bağlantıya dokunduktan sonra hesap
+// yenilenir; oturum jetonu da yenilenir, yoksa kurallar eski (doğrulanmamış) değeri görür.
+export async function refreshVerified(user) {
+  await reload(user);
+  if (user.emailVerified) await user.getIdToken(true);
+  return user.emailVerified;
+}
+
+export async function resendVerification(user) {
+  firebase().auth.languageCode = "tr";
+  await sendEmailVerification(user);
+}
+
 // Üye kaydı ve kodun kullanıldı işareti tek atomik yazımda gider (kurallar ikisini birlikte ister).
 export async function joinFamily(user, code, inv, name) {
   const { db } = firebase();
@@ -95,6 +109,7 @@ export async function registerEmail(name, email, password) {
   const { auth } = firebase();
   const user = (await createUserWithEmailAndPassword(auth, email.trim(), password)).user;
   try { await updateProfile(user, { displayName: name }); } catch {}
+  auth.languageCode = "tr";
   try { await sendEmailVerification(user); } catch {}
   return user;
 }

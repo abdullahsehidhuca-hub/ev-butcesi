@@ -1,6 +1,6 @@
 import { parseJSON, verifyUser, checkFile } from "./common.js";
 import { callModel, modelInfo } from "./providers.js";
-import { usageToday, addUsage, DAILY_LIMITS } from "./usage.js";
+import { reserveUsage, releaseUsage, DAILY_LIMITS, TOTAL_FULL_MESSAGE } from "./usage.js";
 
 const DOC_TYPES = ["application/pdf"];
 const MAX_BYTES = 4 * 1024 * 1024;
@@ -32,19 +32,27 @@ export default async function handler(req, res) {
   const { base64, mediaType } = req.body;
 
   try {
-    // Kayıt herkese açık: her kullanıcının günlük hakkı sınırlı (maliyet koruması).
-    if (await usageToday(uid, "statement") >= DAILY_LIMITS.statement) {
+    // Kayıt herkese açık: her kullanıcının günlük hakkı sınırlı (maliyet koruması). Hak model çağrısından önce
+    // atomik ayrılır; aynı anda gelen istekler sınırı aşamaz.
+    const { full } = await reserveUsage(uid, "statement");
+    if (full === "total") return res.status(429).json({ error: TOTAL_FULL_MESSAGE });
+    if (full) {
       return res.status(429).json({ error: `Bugünkü ekstre okuma hakkınız doldu (${DAILY_LIMITS.statement}). Yarın yeniden deneyin.` });
     }
-    const { text } = await callModel(modelInfo(), {
-      text: STATEMENT_PROMPT,
-      file: { base64, mediaType },
-      maxTokens: 16000,
-      thinkingBudget: 8000
-    });
+    let text;
+    try {
+      ({ text } = await callModel(modelInfo(), {
+        text: STATEMENT_PROMPT,
+        file: { base64, mediaType },
+        maxTokens: 16000,
+        thinkingBudget: 8000
+      }));
+    } catch (err) {
+      // Model yanıt vermedi: maliyet yok, hak geri verilir. Yanıt geldiyse okunamasa da hak düşer.
+      await releaseUsage(uid, "statement").catch(() => {});
+      throw err;
+    }
 
-    // Model yanıt verdiyse maliyet oluşmuştur; yanıt okunamasa da hak düşer.
-    await addUsage(uid, "statement");
     const parsed = parseJSON(text);
     if (parsed.error) return res.status(400).json({ error: parsed.error });
     return res.status(200).json(parsed);

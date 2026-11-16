@@ -2,7 +2,7 @@
 // Çalıştırma: npm run test:ai
 // (firebase emulators:exec --only auth,functions,database --project demo-ev-butcesi "node scripts/ai-emulator-check.mjs")
 // Denenenler: oturumsuz istek 401, sahte oturum 401, yanlış yöntem 405, eksik/hatalı girdi 400, günlük hak dolunca 429
-// (sayaç veritabanında) ve izinli kaynaktan CORS ön isteği.
+// (sayaç veritabanında), tüm kullanıcıların günlük toplam tavanı dolunca 429 ve izinli kaynaktan CORS ön isteği.
 
 const PROJECT = process.env.GCLOUD_PROJECT || "demo-ev-butcesi";
 const AUTH = process.env.FIREBASE_AUTH_EMULATOR_HOST || "127.0.0.1:9099";
@@ -67,6 +67,27 @@ for (const [fn, body] of [
 ]) {
   const limited = await post(fn, { token, body });
   check(`${fn}: günlük hak dolunca 429 (sayaç veritabanında)`, limited.status === 429, limited.payload?.error);
+}
+
+// Tüm kullanıcıların günlük toplam tavanı (aiUsageTotal/{tür}): kullanıcının hakkı varken toplam doluysa 429, model
+// çağrılmaz ve kullanıcının sayacı düşmez.
+for (const ns of [`${PROJECT}-default-rtdb`, PROJECT]) {
+  const put = (path, body) => fetch(`http://${DB}/${path}.json?ns=${ns}`, { method: "PUT", headers: { Authorization: "Bearer owner" }, body: JSON.stringify(body) });
+  await put(`aiUsage/${uid}`, null);
+  await put("aiUsageTotal", { advisor: { [day]: 30 }, receipt: { [day]: 200 }, statement: { [day]: 40 } });
+}
+for (const [fn, body, kind] of [
+  ["aiAdvisor", { prompt: "merhaba" }, "advisor"],
+  ["analyzeReceipt", { base64: "aGVsbG8=", mediaType: "image/png" }, "receipt"],
+  ["analyzeStatement", { base64: "aGVsbG8=", mediaType: "application/pdf" }, "statement"]
+]) {
+  const limited = await post(fn, { token, body });
+  let own = null;
+  for (const ns of [`${PROJECT}-default-rtdb`, PROJECT]) {
+    const v = await fetch(`http://${DB}/aiUsage/${uid}/${kind}/${day}.json?ns=${ns}`, { headers: { Authorization: "Bearer owner" } }).then(r => r.json());
+    if (v != null) own = v;
+  }
+  check(`${fn}: günlük toplam tavan dolunca 429, kullanıcı hakkı düşmez`, limited.status === 429 && !own, `${limited.payload?.error} · kullanıcı sayacı ${own ?? 0}`);
 }
 
 // CORS: iOS kabuğunun kaynağına izin var, başka siteye yok.

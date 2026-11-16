@@ -33,7 +33,7 @@ const fail = msg => { throw new ValidationError([msg]); };
 
 // Dönemin devredeni. Kapalı dönemde kesin (final), açık dönemde tahmini.
 // pending: kapanmış, tutarı sıfırdan farklı ve kararı verilmemiş (ya da "sonra" denmiş).
-export function carryoverOf(state, period, { rates = {} } = {}) {
+export function carryoverOf(state, period, { rates = ratesOf(state) } = {}) {
   const closed = state.closedPeriods?.[period];
   const s = closed || computePeriod(state, period, { rates });
   const decided = closed ? Object.fromEntries((s.decisions || []).map(d => [d.obligationId, d.decision])) : null;
@@ -56,7 +56,7 @@ export function pendingCarryover(state) {
 
 // B modunda (ekstre ödendiği ayın bütçesinden) devreden birikime aktarılırken uyarı: sonraki dönemin
 // beklenen geliri, düzenli ödemeler ile o dönem ödenecek kart ekstresini karşılıyor mu?
-export function carryoverCardWarning(state, period, { rates = {} } = {}) {
+export function carryoverCardWarning(state, period, { rates = ratesOf(state) } = {}) {
   const next = nextPeriod(period);
   const s = computePeriod(state, next, { rates });
   const load = s.cardBudget?.load || 0;

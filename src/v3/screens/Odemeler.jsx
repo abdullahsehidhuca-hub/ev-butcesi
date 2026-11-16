@@ -74,7 +74,7 @@ export default function Odemeler({ state, today, onPay, onAdd, onItem, onTrial }
         <div className="row between baseline"><span className="t-sub b">Kalan ödeme</span><span className="t-sub">{done} ödendi{auto ? ` · ${auto} otomatik` : ""}</span></div>
         <span className="num t-big">{fmt(v.open)}</span>
         <div className="track" style={{ height: 8, borderRadius: 4 }}><i style={{ width: `${paidPct}%`, background: "var(--green)", borderRadius: 4 }} /></div>
-        <span className="t-meta">{fmt(v.total)} toplam · {fmt(v.total - v.open)} ödendi ya da otomatik</span>
+        <span className="t-meta">{fmt(v.total)} toplam · {fmt(v.total - v.open)} ödendi{auto ? " · otomatikler kart ekstresinde" : ""}</span>
       </section>
 
       {v.count > 0 ? (

@@ -1,6 +1,6 @@
 import { parseJSON, verifyUser, checkFile } from "./common.js";
 import { callModel, modelInfo } from "./providers.js";
-import { usageToday, addUsage, DAILY_LIMITS } from "./usage.js";
+import { reserveUsage, releaseUsage, DAILY_LIMITS, TOTAL_FULL_MESSAGE } from "./usage.js";
 
 const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 const MAX_BYTES = 4 * 1024 * 1024;
@@ -22,19 +22,27 @@ export default async function handler(req, res) {
   const { base64, mediaType } = req.body;
 
   try {
-    // Kayıt herkese açık: her kullanıcının günlük hakkı sınırlı (maliyet koruması).
-    if (await usageToday(uid, "receipt") >= DAILY_LIMITS.receipt) {
+    // Kayıt herkese açık: her kullanıcının günlük hakkı sınırlı (maliyet koruması). Hak model çağrısından önce
+    // atomik ayrılır; aynı anda gelen istekler sınırı aşamaz.
+    const { full } = await reserveUsage(uid, "receipt");
+    if (full === "total") return res.status(429).json({ error: TOTAL_FULL_MESSAGE });
+    if (full) {
       return res.status(429).json({ error: `Bugünkü fiş okuma hakkınız doldu (${DAILY_LIMITS.receipt}). Yarın yeniden deneyin.` });
     }
-    const { text } = await callModel(modelInfo(), {
-      text: RECEIPT_PROMPT,
-      file: { base64, mediaType },
-      maxTokens: 4000,
-      thinkingBudget: 2000
-    });
+    let text;
+    try {
+      ({ text } = await callModel(modelInfo(), {
+        text: RECEIPT_PROMPT,
+        file: { base64, mediaType },
+        maxTokens: 4000,
+        thinkingBudget: 2000
+      }));
+    } catch (err) {
+      // Model yanıt vermedi: maliyet yok, hak geri verilir. Yanıt geldiyse okunamasa da hak düşer.
+      await releaseUsage(uid, "receipt").catch(() => {});
+      throw err;
+    }
 
-    // Model yanıt verdiyse maliyet oluşmuştur; yanıt okunamasa da hak düşer.
-    await addUsage(uid, "receipt");
     const parsed = parseJSON(text);
     return res.status(200).json(parsed);
   } catch (err) {

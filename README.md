@@ -30,24 +30,15 @@ npm run build
 
 `dist/` klasöründe üretim dosyaları oluşur.
 
-## Deployment (Vercel)
+## iPhone'da Çalıştırma
 
-1. Bu projeyi GitHub'a push edin
-2. [vercel.com](https://vercel.com) üzerinden projeyi import edin
-3. Build ayarları otomatik algılanır (Vite)
-4. Deploy'u başlatın
+Uygulama Capacitor ile iOS kabuğunda çalışır; web sitesi yayını yoktur.
 
-## iPhone/iPad'e Ana Ekran Uygulaması Olarak Ekleme
+- `npm run ios:sim`: iOS Simülatöründe açar
+- `npm run ios:cihaz`: eşleşmiş iPhone'a doğrudan kurar (aynı Wi-Fi, Geliştirici Modu açık)
+- `npm run ios:testflight`: TestFlight iç teste yükler (Apple incelemesi gerekmez)
 
-1. Vercel deploy linkini Safari'de açın
-2. Paylaş butonuna basın
-3. "Ana Ekrana Ekle" seçeneğini seçin
-4. Uygulama simgesi ana ekranda görünür, tam ekran çalışır
-
-## Mac'e Ana Ekran Uygulaması Olarak Ekleme
-
-1. Vercel deploy linkini Safari'de açın
-2. Dosya menüsü → "Dock'a Ekle" veya paylaş → "Dock'a Ekle"
+Ayrıntılar: `docs/IOS-SIMULATOR-VE-TESTFLIGHT-REHBERI.md`.
 
 ## Veri Saklama
 

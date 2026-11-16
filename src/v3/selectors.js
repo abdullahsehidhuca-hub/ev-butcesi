@@ -277,7 +277,8 @@ export function paymentsView(state, period) {
   const next = nextPeriod(period);
   const inc = occurrencesIn(state, next).find(o => o.kind === "income");
   const salary = inc ? (inc.dueDate || periodRange(next, payDay).start) : periodRange(next, payDay).start;
-  const total = sum(items.map(i => i.amount));
+  // Karttan otomatik çekilen kalem (oto) toplama girmez: tutarı kart ekstresinin içinde ödenir, iki kez sayılırdı.
+  const total = sum(items.filter(i => !i.auto).map(i => i.amount));
   const open = sum(items.map(i => i.open));
   return {
     period, salary, total, open, paidCount: items.filter(i => i.paid).length, count: items.length,

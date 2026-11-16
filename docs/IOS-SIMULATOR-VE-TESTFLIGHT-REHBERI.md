@@ -36,61 +36,65 @@ yerine fareyle tıklanır.
 5. Sorun olursa: Simulator penceresini kapatıp komutu yeniden çalıştırın. Xcode lisans uyarısı gelirse Xcode'u bir kez
    açıp kabul edin.
 
-## 2. Kendi iPhone'unuzda görmek (ücretsiz Apple ID yeterli, TestFlight gerekmez)
+## 2. Kendi iPhone'unuzda doğrudan görmek (TestFlight beklemeden, 1–2 dakika)
 
-Apple'a başvurmadan, ücret ödemeden, kendi telefonunuzda çalıştırmanın yolu budur.
+Komut: `npm run ios:cihaz` (`scripts/ios-cihaz.mjs`). Derler, geliştirici imzasıyla (takım Y2CGKFL66N) imzalar, eşleşmiş
+iPhone'a yükleyip açar. Telefon ulaşılamıyorsa derlemeye girmeden nedenini yazar.
 
-1. iPhone'u kabloyla Mac'e bağlayın; telefonda "Bu bilgisayara güven" deyin.
-2. Terminal: `npm run ios:open` → Xcode projeyi açar.
-3. Xcode > Settings > Accounts > + → normal Apple ID'nizle giriş yapın (ücretsiz).
-4. Sol listede **App** > ortadaki **Signing & Capabilities** sekmesi > Team: adınızı seçin. "Automatically manage
-   signing" işaretli kalsın. Bundle ID çakışma uyarısı verirse `com.evbutcesi.app` yerine size özel bir kimlik yazın
-   (örnek: `tr.sehid.evbutcesi`); aynı kimliği `capacitor.config.json` içinde de güncellememiz gerekir, bana söyleyin.
-5. Üstteki cihaz seçicide iPhone'unuzu seçin, ▶︎ (Run) basın. İlk seferde telefonda Ayarlar > Genel > VPN ve Aygıt
-   Yönetimi > geliştirici uygulamasına güvenin; bir daha ▶︎ basın.
-6. Sınırlar (ücretsiz hesap): uygulama 7 gün sonra açılmaz, Xcode'dan yeniden ▶︎ gerekir; en fazla 3 uygulama.
-   Günlük kullanım için yeterli değildir, "telefonda görmek" için yeterlidir.
+Durum (16 Kasım 2026): iPhone 17 Pro Max bu Mac'le eşleşmiş, geliştirici cihazı olarak kayıtlı; Geliştirici Modu açık.
+Menü ancak telefon Xcode'a kabloyla bağlanıp tanındıktan sonra Ayarlar'da görünür.
+
+1. iPhone: Ayarlar > Gizlilik ve Güvenlik > en altta Geliştirici Modu > aç. Telefon yeniden başlar; açılışta "Aç" deyin.
+2. iPhone kilidi açık ve Mac'le **aynı Wi-Fi'de** olmalı (ya da kabloyla bağlı). Tailscale bu bağlantıyı taşımaz; Xcode
+   telefonu yerel ağda arar. Dışarıdayken bu yol çalışmaz, TestFlight (3. bölüm) çalışır.
+3. İlk çalıştırmada telefon Apple hesabında geliştirici cihazı olarak kaydedilir ve geliştirme profili oluşturulur.
 
 ## 3. TestFlight ile iPhone'unuzda görmek (düzenli kullanım için önerilen yol)
 
 **Önemli ayrım:** TestFlight için Apple'a "uygulama başvurusu" yapılmaz. Gereken şey **Apple Developer Program**
-üyeliğidir (yıllık ücretli, bireysel). İç test (Internal Testing) grubu için **App Review (inceleme) yoktur**; yüklediğiniz
-sürüm birkaç dakika içinde telefonunuza düşer. İnceleme yalnız "dış test" (External Testing) ve mağaza yayını için gerekir.
+üyeliğidir (var; takım Y2CGKFL66N). İç test (Internal Testing) grubu için **App Review (inceleme) yoktur**. İnceleme yalnız
+"dış test" (External Testing) ve mağaza yayını için gerekir. Yükleme betiği derlemeleri "yalnız iç test" olarak işaretler;
+bu derlemeler App Store'a ya da dış teste gönderilemez.
 
-### 3a. Tek seferlik kurulum (siz yaparsınız)
+Hazır olanlar: 1024 px simge (saydamlık yok), şifreleme beyanı (`ITSAppUsesNonExemptEncryption = false`), takım kimliği.
 
-1. **Üyelik:** developer.apple.com/programs → Enroll → Individual. Apple ID ile giriş, kimlik doğrulama, ödeme. Onay
-   genellikle 1–2 gün. (Şirket olarak değil, birey olarak başvurun; daha hızlıdır.)
-2. **Uygulama kaydı:** appstoreconnect.apple.com → My Apps → + → New App. Platform iOS, ad "Ev Bütçesi", dil Türkçe,
-   Bundle ID: önce developer.apple.com → Certificates, Identifiers & Profiles → Identifiers → + → App IDs →
-   `com.evbutcesi.app` (ya da seçtiğiniz kimlik; **bu adımdan sonra kimlik değişmez**). SKU: `evbutcesi`.
-3. **Xcode imzası:** `npm run ios:open` → App > Signing & Capabilities > Team: Developer hesabınız. Xcode gerekli
-   sertifikayı kendisi üretir.
-4. **Simge:** TestFlight 1024×1024 piksel uygulama simgesi ister. Elinizdeki simge 512 piksel; 1024'lük bir sürüm verirseniz
-   (ya da bana "mevcut simgeyi büyüt" derseniz) `ios/App/App/Assets.xcassets/AppIcon.appiconset` içine koyarım.
-5. **Telefon:** App Store'dan **TestFlight** uygulamasını indirin.
+### 3a. Tek seferlik kurulum (siz yaparsınız; telefondan Safari ile yapılabilir)
+
+**Tamamlandı (16 Kasım 2026, İş #71):** paket kimliği `com.evbutcesi.app` kayıtlı; App Store Connect kaydı "Ev Bütçesi - Aile"
+("Ev Bütçesi" adı App Store'da alınmış; ana ekranda yine "Ev Bütçesi" görünür), dil Türkçe, SKU `evbutcesi`. iPhone 17 Pro Max
+geliştirici cihazı olarak kayıtlı (otomatik imza arşivde en az bir kayıtlı cihaz istiyor). İç test grubu "Aile" (tüm
+derlemelere erişim) ve test kullanıcısı abdullahsehidhuca@gmail.com hazır. İlk derleme 261116.1333 iç testte.
+
+1. **Paket kimliği:** developer.apple.com/account/resources/identifiers → + → App IDs → App → Description `Ev Butcesi`,
+   Bundle ID Explicit `com.evbutcesi.app` → Continue → Register.
+2. **Uygulama kaydı:** appstoreconnect.apple.com → Uygulamalar → + → Yeni Uygulama. Platform iOS, ad "Ev Bütçesi" (alınmışsa
+   sonuna ek yapın; sonra değişebilir), dil Türkçe, paket kimliği `com.evbutcesi.app`, SKU `evbutcesi`, Tam erişim.
+3. **Telefon:** App Store'dan **TestFlight** uygulaması.
 
 ### 3b. Her sürümde (ben yaparım, siz yalnız telefonda güncellersiniz)
 
-1. Sürüm numarası artırılır (`ios/App/App.xcodeproj` içinde `CURRENT_PROJECT_VERSION`).
-2. Xcode'da Product > Archive (ya da komutla `xcodebuild archive`), ardından Distribute App > TestFlight & App Store →
-   Upload. Komut satırından yapabilmem için App Store Connect API anahtarı gerekir (3c).
-3. 5–30 dakika işlenir. App Store Connect > TestFlight > Internal Testing > grup (örn. "Aile") → üyeler: siz ve Kadriye.
-   İlk seferde gruba eklemek gerekir; sonraki sürümler kendiliğinden düşer, TestFlight bildirim gönderir.
-4. Telefonda TestFlight > Ev Bütçesi > Güncelle.
+1. `npm run ios:testflight` (`scripts/ios-testflight.mjs`): web derlemesi, cap sync, tarih-saatten derleme numarası
+   (ör. 261112.1530), App Store arşivi ve yalnız iç test işaretiyle yükleme. Xcode'daki Apple hesabı kullanılır.
+2. 5–15 dakika işlenir. İlk sürümde: App Store Connect > TestFlight > İç Test > + grup (örn. "Aile") → üyeler: siz ve
+   Kadriye. Otomatik dağıtım açık kalırsa sonraki sürümler kendiliğinden düşer.
+3. Telefonda TestFlight > Ev Bütçesi > Yükle; uygulama sayfasında Otomatik Güncellemeler açık. Her derleme 90 gün geçerli.
 
-### 3c. Yüklemeyi bana devretmek için (isteğe bağlı, önerilir)
+### 3c. Mac başında kimse yokken imza (bir kez gerekir)
 
-App Store Connect > Users and Access > Integrations > App Store Connect API > Team Keys > + → ad "DevHub", rol
-**App Manager**. İnen `.p8` dosyasını, Key ID'yi ve Issuer ID'yi depoya DEĞİL, Mac'te `~/.appstoreconnect/private_keys/`
-klasörüne koyun ve bana "API anahtarı hazır" deyin. Sonra her işte archive + upload komutlarını ben çalıştırırım
-(`xcrun altool --upload-app --apiKey … --apiIssuer …`). Anahtar dosyası ekranda ve depoda görünmez.
+12 Kasım 2026 denemesi: uzaktan imza, Mac ekranında açılan anahtar zinciri izin penceresinde bekliyor. Mac başındayken bu
+pencerede (ya da ilk `npm run ios:cihaz` / `ios:testflight` sırasında) Mac parolasını yazıp **Her Zaman İzin Ver** deyin;
+sonra imza uzaktan da çalışır. İsteğe bağlı: Sistem Ayarları > Genel > Paylaşma > **Ekran Paylaşımı** açılırsa böyle
+pencereler telefondan bir VNC uygulamasıyla Tailscale üzerinden yanıtlanabilir.
+
+Xcode hesabı yerine App Store Connect API anahtarı (rol App Manager; `.p8` dosyası depoda DEĞİL) kullanılacaksa
+`ASC_KEY_PATH`, `ASC_KEY_ID`, `ASC_ISSUER_ID` ortam değişkenleriyle aynı komut çalışır.
 
 ## 4. Bundan sonraki çalışma düzeni
 
 Her işte sırayla: `npm test` → `npm run build` → `npm run ios:sim` (simülatörde açılır, ekran görüntüsü alınır,
-yazılar OCR ile denetlenir) → raporda "simülatörde görüldü" notu. TestFlight kurulunca aynı zincirin sonuna
-archive + upload eklenir ve raporda sürüm numarası yazılır. Vercel'e yükleme ayrıca ve yalnız istenince yapılır.
+yazılar OCR ile denetlenir) → `npm run ios:testflight` ve raporda derleme numarası. Kural (kullanıcı, 16 Kasım 2026):
+her düzenleme TestFlight'a yüklenir, kontrol oradan yapılır; Functions ya da veritabanı kuralı da değiştiyse önce onlar yüklenir. Web sitesi yayını yok
+(Vercel 12 Kasım 2026'da kapatıldı).
 
 ## 5. Yerel kabuğun bilinen sınırları (Faz 3 iş listesi)
 
@@ -131,7 +135,10 @@ yazılır ve bankadan karta aynı tutarda aktarım kaydı oluşur; TL birikim ha
 Aktarılmayanlar: altın cinsinden borç (Dostlar Sandığı), konfor kartı yüklemeleri, hesap açılış bakiyeleri (0 yazılır;
 bankadaki gerçek tutarı "bakiye düzeltme" ile girersiniz).
 
-**Vercel sorusu — teyit bekliyor.** Anladığım: artık web sitesi (Vercel adresi) kullanılmayacak; uygulama yalnız iPhone
+**Vercel — kapatıldı (12 Kasım 2026, İş #71).** Proje Vercel panelinden silindi; `vercel.json` ve `api/` depodan
+kaldırıldı, AI uç noktaları Firebase Functions'ta. Aşağıdaki metin 11 Kasım'taki soruyu kayıt için tutuyor.
+
+**Vercel sorusu (11 Kasım).** Anladığım: artık web sitesi (Vercel adresi) kullanılmayacak; uygulama yalnız iPhone
 uygulaması olarak sizde (simülatör, kendi telefonunuz, TestFlight) ve ileride App Store'dan çalışacak. Teknik karşılığı:
 
 - Arayüz kodu (tasarım, ekranlar) zaten uygulama paketinin **içinde** gidiyor; Capacitor onu Apple'ın dağıtımıyla (TestFlight /

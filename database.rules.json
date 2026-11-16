@@ -6,7 +6,7 @@
         ".write": "auth != null && $familyId === auth.uid",
         "members": {
           "$memberUid": {
-            ".write": "auth != null && $memberUid === auth.uid && (data.exists() ? (!newData.exists() || newData.child('role').val() === data.child('role').val()) : (newData.child('role').val() === 'member' && newData.child('inviteCode').isString() && root.child('invitations').child(newData.child('inviteCode').val()).child('familyId').val() === $familyId && root.child('invitations').child(newData.child('inviteCode').val()).child('used').val() === false && root.child('invitations').child(newData.child('inviteCode').val()).child('expiresAt').val() > now && auth.token.email != null && auth.token.email.toLowerCase() === (root.child('invitations').child(newData.child('inviteCode').val()).child('email').val() + '').toLowerCase() && newData.parent().parent().parent().parent().child('invitations').child(newData.child('inviteCode').val()).child('used').val() === true))"
+            ".write": "auth != null && $memberUid === auth.uid && (data.exists() ? (!newData.exists() || newData.child('role').val() === data.child('role').val()) : (newData.child('role').val() === 'member' && newData.child('inviteCode').isString() && root.child('invitations').child(newData.child('inviteCode').val()).child('familyId').val() === $familyId && root.child('invitations').child(newData.child('inviteCode').val()).child('used').val() === false && root.child('invitations').child(newData.child('inviteCode').val()).child('expiresAt').val() > now && auth.token.email != null && auth.token.email_verified === true && auth.token.email.toLowerCase() === (root.child('invitations').child(newData.child('inviteCode').val()).child('email').val() + '').toLowerCase() && newData.parent().parent().parent().parent().child('invitations').child(newData.child('inviteCode').val()).child('used').val() === true))"
           }
         },
         "data": {
@@ -34,12 +34,6 @@
         "used": {
           ".write": "auth != null && data.val() === false && newData.val() === true && newData.parent().parent().parent().child('families').child(root.child('invitations').child($code).child('familyId').val() + '').child('members').child(auth.uid).child('inviteCode').val() === $code"
         }
-      }
-    },
-    "nameIndex": {
-      "$name": {
-        ".read": true,
-        ".write": "auth != null && (!data.exists() || data.child('uid').val() === auth.uid || (!newData.exists() && data.child('familyId').val() === auth.uid)) && (!newData.exists() || newData.child('uid').val() === auth.uid)"
       }
     },
     "userFamilies": {

@@ -99,7 +99,7 @@ Her dosya değişikliğinden önce:
 
 Hata çıktığında:
 - Tahmine dayalı çözüm sunmadan önce kök nedeni araştır
-- Console hatası, Vercel build log, Firebase kurallarını sırayla kontrol
+- Console hatası, Functions günlüğü, Firebase kurallarını sırayla kontrol
   et
 - Birden fazla olası sebep varsa hepsini listele, sonra birini seçip
   uygula
@@ -139,15 +139,14 @@ seçeneklerin artı-eksilerini dürüstçe sun, kararı ona bırak.
 
 ### Teknoloji Yığını
 - Frontend: React 18 + Vite
-- Hosting: Vercel (otomatik deploy)
+- Dağıtım: Capacitor iOS kabuğu, TestFlight (`npm run ios:testflight`); web sitesi yayını yok
+  (Vercel 2026-11-12'de kapatıldı)
 - Backend: Firebase Realtime Database (europe-west1)
 - Auth: Firebase Authentication (email/password) + isim - email
   eşleştirme + aile sistemi
-- AI: Anthropic API doğrudan tarayıcıdan çağrılıyor (fiş analizi + finans
-  danışmanı için)
-- Repo: GitHub (main branch'e push - otomatik Vercel deploy)
-- api/ klasörü: Vercel serverless function veya API endpoint barındırır
-  (detayı ilk Claude Code oturumunda incelenecek)
+- AI: Firebase Functions (`functions/`, europe-west1) üzerinden fiş, ekstre ve finans danışmanı;
+  anahtar sunucuda
+- Repo: GitHub (main branch)
 
 ### Yapısal Kararlar
 - Aile sistemi: admin (ilk kullanıcı) + member (davet kodu ile katılan).

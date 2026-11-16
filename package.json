@@ -15,7 +15,9 @@
     "functions:deploy": "firebase deploy --only functions --project ev-butcesi-96167 && firebase functions:artifacts:setpolicy --location europe-west1 --days 1 --force --project ev-butcesi-96167",
     "ios:sync": "npm run build && cap sync ios",
     "ios:sim": "node scripts/ios-simulator.mjs",
+    "ios:cihaz": "node scripts/ios-cihaz.mjs",
     "ios:open": "cap open ios",
+    "ios:testflight": "node scripts/ios-testflight.mjs",
     "ai:model-dene": "node scripts/ai-model-dene.mjs",
     "ai:kurulum": "node scripts/ai-kurulum.mjs"
   },

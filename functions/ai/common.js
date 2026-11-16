@@ -1,13 +1,12 @@
 // AI uç noktalarının ortak yardımcıları: oturum doğrulama, dosya denetimi, JSON ayrıştırma.
-// Model ve sağlayıcı çağrısı: providers.js. Hem Firebase Functions (functions/index.js) hem de Vercel kapanana kadar
-// api/ bu dosyayı kullanır.
+// Model ve sağlayıcı çağrısı: providers.js. Firebase Functions (functions/index.js) bu dosyayı kullanır.
 
 import { initializeApp, getApps } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 
 // Token doğrulaması yalnızca proje kimliği ister (Google'ın açık anahtarlarıyla imza denetlenir);
 // servis hesabı gerekmez. Proje kimliği ve veritabanı adresi gizli değildir.
-// Firebase Functions (ve emülatör) FIREBASE_CONFIG'i kendisi verir; Vercel'de varsayılanlar kullanılır.
+// Firebase Functions (ve emülatör) FIREBASE_CONFIG'i kendisi verir; başka ortamlarda (testler) varsayılanlar kullanılır.
 const FIREBASE_CONFIG = JSON.parse(process.env.FIREBASE_CONFIG || "{}");
 const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || FIREBASE_CONFIG.projectId || "ev-butcesi-96167";
 const DATABASE_URL = FIREBASE_CONFIG.databaseURL || "https://ev-butcesi-96167-default-rtdb.europe-west1.firebasedatabase.app";

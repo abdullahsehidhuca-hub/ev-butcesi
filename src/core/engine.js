@@ -9,6 +9,9 @@ import { statementsDueIn, statementCharges } from "./cardStatement.js";
 import { cardBudget } from "./cardBudget.js";
 
 const payDayOf = state => state.settings?.payDay || 1;
+// Kur verilmezse kullanıcının Birikim ekranında girdiği kurlar (settings.rates) kullanılır; yoksa dövizli kalemler
+// eksik kur olarak raporlanır.
+const savedRates = state => state.settings?.rates || {};
 
 // İşlemin bütçe dönemi: yükümlülük ödemesi ait olduğu döneme, diğerleri tarihine göre.
 export function txPeriod(t, payDay) {
@@ -18,7 +21,7 @@ export function txPeriod(t, payDay) {
 export const isClosed = (state, period) => !!state.closedPeriods?.[period];
 
 // Kapalı dönemde dondurulmuş özet, açık dönemde canlı hesap döner.
-export function computePeriod(state, period, { rates = {} } = {}) {
+export function computePeriod(state, period, { rates = savedRates(state) } = {}) {
   return state.closedPeriods?.[period] || liveSummary(state, period, rates);
 }
 
@@ -148,7 +151,7 @@ function liveSummary(state, period, rates) {
 //  "carry" (varsayılan): sonraki döneme tek seferlik kalem olarak taşı
 //  "defer": bu dönemi atla (taksit/borçta takvim bir dönem uzar)
 //  "drop": vazgeç
-export function closePeriod(state, period, { rates = {}, decisions = {}, closedAt = null } = {}) {
+export function closePeriod(state, period, { rates = savedRates(state), decisions = {}, closedAt = null } = {}) {
   if (isClosed(state, period)) throw new ValidationError([`${period} zaten kapalı`]);
   const summary = liveSummary(state, period, rates);
   if (summary.missingRates.length) throw new ValidationError([`kur eksik: ${summary.missingRates.join(", ")}`]);
@@ -158,12 +161,15 @@ export function closePeriod(state, period, { rates = {}, decisions = {}, closedA
   for (const item of summary.obligations.items) {
     if (item.kind === "income" || !item.open) continue;
     const decision = decisions[item.obligationId] || "carry";
+    // Kısmen ödenmiş kalem ertelenmez: takvim bir dönem kayar ve tam tutar yeniden beklenirdi (ödenen kısım iki kez).
+    if (decision === "defer" && item.paid > 0) throw new ValidationError([`${item.name} kısmen ödendi; ertelemek yerine kalanı taşıyın`]);
     if (decision === "carry") {
       next = addObligation(next, {
         id: `${item.obligationId}~${period}`,
         kind: "fixed",
         name: `${item.name} (devir)`,
-        amount: item.amount,
+        // Yalnız açık kalan taşınır (kısmi ödeme düşülür); tutar kalemin kendi para biriminde.
+        amount: item.open === item.planned ? item.amount : Math.max(1, Math.round(item.amount * item.open / item.planned)),
         currency: item.currency,
         accountId: item.accountId,
         categoryId: item.categoryId,
@@ -184,7 +190,7 @@ export function closePeriod(state, period, { rates = {}, decisions = {}, closedA
 }
 
 // Gelecek dönemlerin planı: beklenen gelir − yükümlülükler − kategori bütçeleri.
-export function projection(state, fromPeriod, count, { rates = {} } = {}) {
+export function projection(state, fromPeriod, count, { rates = savedRates(state) } = {}) {
   const budgets = sum(Object.values(state.categories).filter(c => !c.archived && c.budget > 0).map(c => c.budget));
   return Array.from({ length: count }, (_, i) => {
     const period = addPeriods(fromPeriod, i);

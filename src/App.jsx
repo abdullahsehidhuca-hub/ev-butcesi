@@ -101,7 +101,8 @@ async function joinViaInvitation(uid2, code, invData) {
     [`invitations/${code}/used`]: true,
   });
   await set(ref(rtdb, `userFamilies/${uid2}`), { familyId, code, role: "member", name });
-  await registerName(name, email, familyId, uid2);
+  // İsim dizini kurallarla kapatıldı (16 Kasım 2026); yazım reddedilir, katılımı bozmasın.
+  try { await registerName(name, email, familyId, uid2); } catch {}
   return { familyId, code, role: "member", name };
 }
 

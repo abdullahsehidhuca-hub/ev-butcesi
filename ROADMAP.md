@@ -33,7 +33,7 @@ Durum işaretleri: [x] tamam · [~] kısmen · [ ] bekliyor
       reddediyor, iPhone kaynağına (capacitor://localhost) CORS izni var. v3'e bağlandı: Rapor › Yapay zekâ danışmanı
       (`src/v3/screens/DanismanSheet.jsx`), + Ekle › Fişi yapay zekâyla oku, Kart ekstresiyle eşitle › PDF (onaylı).
       Günlük sınır kullanıcı başına: danışman 3, fiş 20, ekstre 5 (`functions/ai/usage.js`, 2026-11-12 yüklendi).
-      Eksik: giriş yapmış hesapla gerçek bir AI yanıtının denenmesi; Vercel ve api/ kaldırılması.
+      Eksik: giriş yapmış hesapla gerçek bir AI yanıtının denenmesi. Vercel ve api/ 2026-11-12 (İş #71) kaldırıldı.
 - [~] Veritabanı kurallarını depoya alma ve gözden geçirme — dosya depoda (`database.rules.json`, `firebase.json`, 2026-11-09).
       Eksik: kuralların kayıt kayıt eşitleme modeline göre gözden geçirildiğine dair kayıt yok (Faz 3 "çok aileli kullanım" ile birlikte).
 - [x] Çevrimdışı açılışta eski verinin buluta yazılmasını ve yankı yazmayı durdurma — 2026-11-06
@@ -92,8 +92,8 @@ Widget (ana ekran kısayolu ve "bu ay kalan" göstergesi) PWA ile yapılamaz; uy
 yerel bir kabukla paketlenmesi gerekir.
 - [~] Capacitor ile iOS/Android paketleme (aynı web kodu) — iOS başladı 2026-11-11: Capacitor 8.6 (SPM), `ios/` Xcode
       projesi, `capacitor.config.json` (`com.evbutcesi.app`), `npm run ios:sim` döngüsü simülatörde çalışıyor.
-      Eksik: marka simgesi / açılış ekranı, TestFlight (Developer Program + API anahtarı), Google girişi yerine eklenti ya da
-      Apple ile Giriş, Android. Rehber: `docs/IOS-SIMULATOR-VE-TESTFLIGHT-REHBERI.md`.
+      2026-11-16: TestFlight iç test (`npm run ios:testflight`), marka simgesi ve açılış ekranı `public/icon.svg`'den.
+      Eksik: Google girişi yerine eklenti ya da Apple ile Giriş, Android. Rehber: `docs/IOS-SIMULATOR-VE-TESTFLIGHT-REHBERI.md`.
 - [ ] iOS widget (WidgetKit) ve Android widget: çekirdeğin ürettiği özet + sık kullanılanlar
 - [ ] Mağaza gereklilikleri: gizlilik politikası, KVKK aydınlatma metni, uygulama içinden hesap silme,
       Google girişinin yanında Apple ile Giriş
@@ -158,3 +158,8 @@ yerel bir kabukla paketlenmesi gerekir.
   çizimden sonra yüklenmesi; sayfa içi süre simülatörde 1,06–1,26 sn'den 0,19–0,36 sn'ye indi (Debug, 3 + 5 ölçüm). Kalan
   ~1,9–2,6 sn simülatörün WebKit süreç başlangıcı (uygulama kodu dışı). Davet: WhatsApp / e-posta / mesaj bağlantıları;
   güvenlik kuralları ve günlük AI sınırları canlıya yüklendi. 157 test, 9 kural testi, AI emülatör denetimi geçiyor.
+- 2026-11-12 · İş #71: TestFlight iç test yüklemesi (`npm run ios:testflight`, incelemesiz, tarih-saatli derleme numarası) ve
+  eşleşmiş iPhone'a doğrudan kurulum (`npm run ios:cihaz`); takım kimliği projede. Vercel silindi; `vercel.json`, `api/` ve
+  CORS listesindeki eski adres kaldırıldı. 2026-11-16: App Store Connect kaydı "Ev Bütçesi - Aile", iç test grubu "Aile",
+  ilk derlemeler TestFlight'ta; iOS simgesi ve açılış görseli Capacitor varsayılanından marka logosuna geçti; Functions
+  yeniden yüklendi (eski Vercel kaynağına CORS izni yok, canlıda doğrulandı).

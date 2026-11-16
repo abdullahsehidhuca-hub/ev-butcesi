@@ -1,6 +1,6 @@
 import { verifyUser } from "./common.js";
 import { callModel, modelInfo } from "./providers.js";
-import { usageToday, addUsage, DAILY_LIMITS } from "./usage.js";
+import { reserveUsage, releaseUsage, DAILY_LIMITS, TOTAL_FULL_MESSAGE } from "./usage.js";
 
 const DAILY_LIMIT = DAILY_LIMITS.advisor;
 const MAX_PROMPT_CHARS = 200000;
@@ -39,23 +39,31 @@ export default async function handler(req, res) {
   if (prompt.length > MAX_PROMPT_CHARS) return res.status(400).json({ error: "Analiz verisi çok uzun" });
 
   try {
-    const count = await usageToday(uid);
-    if (count >= DAILY_LIMIT) {
+    // Hak model çağrısından önce atomik ayrılır; aynı anda gelen istekler sınırı aşamaz.
+    const { count, full } = await reserveUsage(uid, "advisor");
+    if (full === "total") return res.status(429).json({ error: TOTAL_FULL_MESSAGE, remaining: 0 });
+    if (full) {
       return res.status(429).json({
         error: `Günlük AI danışman hakkınız doldu (${DAILY_LIMIT}/${DAILY_LIMIT}). Yarın tekrar deneyin.`,
         remaining: 0
       });
     }
 
-    const { text } = await callModel(modelInfo(), {
-      system: SYSTEM_PROMPT,
-      text: prompt,
-      maxTokens: 16000,
-      thinkingBudget: 10000
-    });
+    let text;
+    try {
+      ({ text } = await callModel(modelInfo(), {
+        system: SYSTEM_PROMPT,
+        text: prompt,
+        maxTokens: 16000,
+        thinkingBudget: 10000
+      }));
+    } catch (err) {
+      // Model yanıt vermedi: maliyet yok, hak geri verilir.
+      await releaseUsage(uid, "advisor").catch(() => {});
+      throw err;
+    }
 
-    await addUsage(uid);
-    return res.status(200).json({ text, remaining: Math.max(0, DAILY_LIMIT - count - 1) });
+    return res.status(200).json({ text, remaining: Math.max(0, DAILY_LIMIT - count) });
   } catch (err) {
     return res.status(500).json({ error: "Analiz yapılamadı: " + err.message });
   }

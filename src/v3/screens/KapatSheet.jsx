@@ -14,7 +14,8 @@ const CHOICES = {
   defer: "Ertele (taksit bir ay uzar)",
   drop: "Yok say"
 };
-const choicesFor = item => item.kind === "installment" || item.kind === "debt" ? ["carry", "defer", "drop"] : ["carry", "drop"];
+// Kısmen ödenmiş kalem ertelenemez (motor da reddeder): kalanı taşınır ya da yok sayılır.
+const choicesFor = item => (item.kind === "installment" || item.kind === "debt") && !(item.paid > 0) ? ["carry", "defer", "drop"] : ["carry", "drop"];
 
 export default function KapatSheet({ state, commit, onClose, today, onToast, onPay, onCarryover }) {
   const c = closeCandidate(state, today);
@@ -83,7 +84,7 @@ export default function KapatSheet({ state, commit, onClose, today, onToast, onP
               </div>
             );
           })}
-          {carried.length > 0 && <p className="v3-hint">{carried.length} kalem {next} dönemine "(devir)" olarak eklenecek.</p>}
+          {carried.length > 0 && <p className="v3-hint">{carried.length} kalem {next} dönemine "(devir)" olarak eklenecek; kısmen ödenenlerin yalnız kalanı taşınır.</p>}
         </fieldset>
       ) : (
         <p className="v3-sheet-text">Bu dönemde açık ödeme kalmadı.</p>

@@ -1,4 +1,4 @@
-// Firebase Functions: yapay zekâ uç noktaları (Vercel api/ klasörünün yerine).
+// Firebase Functions: yapay zekâ uç noktaları.
 // Adresler: https://europe-west1-ev-butcesi-96167.cloudfunctions.net/{aiAdvisor|analyzeReceipt|analyzeStatement}
 // İşleyiciler functions/ai/ altında; oturum jetonu her istekte sunucuda doğrulanır.
 // Model functions/ai/providers.js içindeki AI_MODEL satırıyla seçilir. Seçilen sağlayıcının anahtarı Firebase gizli
@@ -14,13 +14,12 @@ import { modelInfo } from "./ai/providers.js";
 // Bilinmeyen model yazılırsa yükleme burada açık bir hatayla durur.
 const AI_KEY = defineSecret(modelInfo().keyName);
 
-// Tarayıcıdan çağrıya izin verilen kaynaklar: iOS kabuğu (Capacitor), Android kabuğu, yerel geliştirme sunucusu
-// ve Vercel kapanana kadar eski web adresi. Uygulama dışı sitelerden gelen tarayıcı istekleri reddedilir.
+// Tarayıcıdan çağrıya izin verilen kaynaklar: iOS kabuğu (Capacitor), Android kabuğu, yerel geliştirme sunucusu.
+// Uygulama dışı sitelerden gelen tarayıcı istekleri reddedilir.
 const ORIGINS = [
   "capacitor://localhost",
   "http://localhost",
-  "http://localhost:5180",
-  "https://ev-butcesi-eight.vercel.app"
+  "http://localhost:5180"
 ];
 
 const options = timeoutSeconds => ({
