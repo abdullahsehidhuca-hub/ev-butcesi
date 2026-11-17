@@ -40,6 +40,16 @@ Uygulama Capacitor ile iOS kabuğunda çalışır; web sitesi yayını yoktur.
 
 Ayrıntılar: `docs/IOS-SIMULATOR-VE-TESTFLIGHT-REHBERI.md`.
 
+## Android'de Çalıştırma
+
+Aynı web kodu Capacitor'ın Android kabuğunda (`android/`) çalışır. Android Studio ve Java 21 (`brew install openjdk@21`) gerekir.
+
+- `npm run android:emu`: Android Emulator'da (Pixel 10 Pro XL) açar ve ekran görüntüsü alır
+- `npm run android:paket`: Google Play'e yüklenecek imzalı `.aab` paketini üretir
+- `npm run android:open`: projeyi Android Studio'da açar
+
+Ayrıntılar: `docs/ANDROID-PLAN-VE-KURULUM-REHBERI.md`. Her düzenleme iOS ve Android'e birlikte işlenir.
+
 ## Veri Saklama
 
 Tüm veriler tarayıcının `localStorage`'ında saklanır. Veri kaybı riskini minimize etmek için uygulama her hafta başında zorunlu yedekleme modalı açar.

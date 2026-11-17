@@ -92,7 +92,8 @@ Xcode hesabı yerine App Store Connect API anahtarı (rol App Manager; `.p8` dos
 ## 4. Bundan sonraki çalışma düzeni
 
 Her işte sırayla: `npm test` → `npm run build` → `npm run ios:sim` (simülatörde açılır, ekran görüntüsü alınır,
-yazılar OCR ile denetlenir) → `npm run ios:testflight` ve raporda derleme numarası. Kural (kullanıcı, 16 Kasım 2026):
+yazılar OCR ile denetlenir) ve `npm run android:emu` → `npm run ios:testflight` ve `npm run android:paket` (Play hesabı
+açılınca dahili teste yüklenir); raporda iki platformun derleme numarası. Android ayrıntıları: `docs/ANDROID-PLAN-VE-KURULUM-REHBERI.md`. Kural (kullanıcı, 16 Kasım 2026):
 her düzenleme TestFlight'a yüklenir, kontrol oradan yapılır; Functions ya da veritabanı kuralı da değiştiyse önce onlar yüklenir. Web sitesi yayını yok
 (Vercel 12 Kasım 2026'da kapatıldı).
 

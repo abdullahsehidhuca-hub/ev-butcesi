@@ -93,7 +93,15 @@ yerel bir kabukla paketlenmesi gerekir.
 - [~] Capacitor ile iOS/Android paketleme (aynı web kodu) — iOS başladı 2026-11-11: Capacitor 8.6 (SPM), `ios/` Xcode
       projesi, `capacitor.config.json` (`com.evbutcesi.app`), `npm run ios:sim` döngüsü simülatörde çalışıyor.
       2026-11-16: TestFlight iç test (`npm run ios:testflight`), marka simgesi ve açılış ekranı `public/icon.svg`'den.
-      Eksik: Google girişi yerine eklenti ya da Apple ile Giriş, Android. Rehber: `docs/IOS-SIMULATOR-VE-TESTFLIGHT-REHBERI.md`.
+      2026-11-16 (İş #77): Android eklendi — `android/` Gradle projesi, `npm run android:emu` (Pixel 10 Pro XL emülatörü),
+      `npm run android:paket` (Google Play için imzalı .aab; yükleme anahtarı depo dışında `~/.ev-butcesi`), marka simgesi ve
+      açılış görseli, Android geri tuşu açık çekmeceyi kapatır (`src/v3/backButton.js`). Kural: her düzenleme iOS ve Android'e
+      birlikte işlenir. 2026-11-17: Play Console kişisel hesabı açıldı ve ödendi; uygulama oluşturma kimlik, tacir beyanı,
+      gerçek Android cihaz ve telefon doğrulamaları (kullanıcı) bitene kadar kapalı. Aynı gün doğrulamalar bitti; Play'de
+      uygulama kaydı (`com.evbutcesi.app`, kullanılabilir) kullanıcı onayı bekliyor. Kullanıcı kaydı tamamladı (taslak);
+      dahili test kurulumu arayüz düzeltmelerinden sonraya ertelendi (kullanıcı kararı, 2026-11-17).
+      Eksik: Google girişi yerine eklenti ya da Apple ile Giriş, Play dahili test kurulumu. Rehberler:
+      `docs/IOS-SIMULATOR-VE-TESTFLIGHT-REHBERI.md`, `docs/ANDROID-PLAN-VE-KURULUM-REHBERI.md`.
 - [ ] iOS widget (WidgetKit) ve Android widget: çekirdeğin ürettiği özet + sık kullanılanlar
 - [ ] Mağaza gereklilikleri: gizlilik politikası, KVKK aydınlatma metni, uygulama içinden hesap silme,
       Google girişinin yanında Apple ile Giriş
@@ -163,3 +171,5 @@ yerel bir kabukla paketlenmesi gerekir.
   CORS listesindeki eski adres kaldırıldı. 2026-11-16: App Store Connect kaydı "Ev Bütçesi - Aile", iç test grubu "Aile",
   ilk derlemeler TestFlight'ta; iOS simgesi ve açılış görseli Capacitor varsayılanından marka logosuna geçti; Functions
   yeniden yüklendi (eski Vercel kaynağına CORS izni yok, canlıda doğrulandı).
+- 2026-11-16 · İş #77: Android kabuğu (`android/`, Capacitor 8.6), emülatör ve Play paketi betikleri (`scripts/android-*.mjs`),
+  Java 21 (Homebrew), marka simgesi/açılış görseli, geri tuşu–çekmece bağlantısı (`@capacitor/app`). TestFlight 261116.2035.

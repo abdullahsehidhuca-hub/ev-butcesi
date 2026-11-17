@@ -18,10 +18,16 @@
     "ios:cihaz": "node scripts/ios-cihaz.mjs",
     "ios:open": "cap open ios",
     "ios:testflight": "node scripts/ios-testflight.mjs",
+    "android:sync": "npm run build && cap sync android",
+    "android:emu": "node scripts/android-emulator.mjs",
+    "android:open": "cap open android",
+    "android:paket": "node scripts/android-paket.mjs",
     "ai:model-dene": "node scripts/ai-model-dene.mjs",
     "ai:kurulum": "node scripts/ai-kurulum.mjs"
   },
   "dependencies": {
+    "@capacitor/android": "^8.6.2",
+    "@capacitor/app": "^8.1.2",
     "@capacitor/core": "^8.6.0",
     "@capacitor/ios": "^8.6.0",
     "@tesseract.js-data/tur": "^1.0.0",

@@ -2,6 +2,7 @@
 
 import React, { useEffect, useId, useRef } from "react";
 import { fmtNumber, symbolOf } from "./format.js";
+import { pushBack } from "./backButton.js";
 
 export function SectionHead({ title, action, onAction, id }) {
   return (
@@ -52,7 +53,7 @@ export function Row({ title, sub, value, valueClass = "", tag, tagClass = "v3-ta
   return <button type="button" className="v3-row" onClick={onClick} aria-label={label}>{body}</button>;
 }
 
-// Alt çekmece (modal). Esc ve arka plana dokunma kapatır; açılınca ilk alana odaklanır,
+// Alt çekmece (modal). Esc, arka plana dokunma ve Android geri tuşu kapatır; açılınca ilk alana odaklanır,
 // kapanınca odak açan düğmeye döner.
 export function Sheet({ title, onClose, children }) {
   const titleId = useId();
@@ -67,7 +68,8 @@ export function Sheet({ title, onClose, children }) {
     first?.focus();
     const onKey = e => { if (e.key === "Escape") close.current(); };
     document.addEventListener("keydown", onKey);
-    return () => { document.removeEventListener("keydown", onKey); opener?.focus?.(); };
+    const offBack = pushBack(() => close.current());
+    return () => { document.removeEventListener("keydown", onKey); offBack(); opener?.focus?.(); };
   }, []);
   return (
     <div className="v3-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>

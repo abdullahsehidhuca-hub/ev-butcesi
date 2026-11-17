@@ -139,7 +139,8 @@ seçeneklerin artı-eksilerini dürüstçe sun, kararı ona bırak.
 
 ### Teknoloji Yığını
 - Frontend: React 18 + Vite
-- Dağıtım: Capacitor iOS kabuğu, TestFlight (`npm run ios:testflight`); web sitesi yayını yok
+- Dağıtım: Capacitor iOS ve Android kabukları; TestFlight (`npm run ios:testflight`) ve Google Play paketi
+  (`npm run android:paket`). Her düzenleme iki platforma birlikte işlenir; web sitesi yayını yok
   (Vercel 2026-11-12'de kapatıldı)
 - Backend: Firebase Realtime Database (europe-west1)
 - Auth: Firebase Authentication (email/password) + isim - email
