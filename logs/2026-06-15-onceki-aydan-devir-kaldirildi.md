@@ -27,7 +27,7 @@ Abdullah'ın mimari itirazı doğruydu: kapanmış bir kasa (ay) yeni kasayı et
 taksit ve sarkan fatura çok aylıdır ve onlar zaten kendi takvimleriyle taşınıyor. Devir
 mekanizması ise kapanmış ayı dondurulmamış halde canlı yeniden hesaplayan tek "sızıntıydı".
 
-## İç düşünme süreci
+## Değerlendirilen seçenekler
 
 - İlk analizde masaüstündeki yedek üzerinden hesapladım; o yedekte Haziran borç ödemesi henüz
   işaretli değildi, bu yüzden "deviri silmek seni hedeften uzaklaştırır" gibi yanlış bir
