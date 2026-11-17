@@ -227,7 +227,7 @@ Log dosyası: logs/YYYY-MM-DD-kisa-konu.md formatında oluştur.
 Dosya içeriği:
 - Ne yapıldı: Yapılan değişikliklerin özeti
 - Neden böyle yapıldı: Mimari/tasarım kararlarının gerekçesi
-- İç düşünme süreci: Claude'un karar verirken değerlendirdiği
+- Değerlendirilen seçenekler: karar verilirken ele alınan
   alternatifler, seçim gerekçesi, karşılaşılan zorluklar
 - Sonraki adım: Bekleyen iş veya kullanıcı tarafında yapılması gereken
 - Gözlem (varsa): Abdullah'ın talep dilinde veya çalışma tarzında dikkat

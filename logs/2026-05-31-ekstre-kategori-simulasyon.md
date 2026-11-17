@@ -56,7 +56,7 @@ Her yeni kategori otomatik değişken gider takibine giriyordu. Eğitim, sağlı
 ### Borç Projeksiyonu
 `d.remainingMonths` statik bir değerdi — gelecek aylar için azalmıyordu. 3 ay kalan bir borç, 8 ay sonra bile aktif sayılıyordu. `mkDist` ile gelecek ay mesafesi hesaplanarak borç bitişi doğru yansıtıldı.
 
-## İç Düşünme Süreci
+## Değerlendirilen seçenekler
 
 - **Model seçimi**: Önce `claude-opus-4-6` kullanıldı ama fiş/ekstre analizi için Opus gereksiz pahalı. `claude-sonnet-4-6` yeterli ve daha hızlı.
 - **Eşleştirme toleransı**: ±0.5 TL çok dar — bankalar kuruş farklılıkları yapabiliyor. ±1 TL makul. Tarihte de ±2 gün gerekli çünkü banka işlem tarihi ile valör tarihi farklı olabiliyor.

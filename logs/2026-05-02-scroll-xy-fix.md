@@ -25,7 +25,7 @@
 - Scroll: iOS Safari'de Settings alt sayfaları kaydırılamıyordu — flex container içinde overflow:auto eksikti
 - X/Y/B: Teknik kullanıcılar için anlamlı ama sıradan kullanıcılar için kafa karıştırıcı
 
-## İç düşünme süreci
+## Değerlendirilen seçenekler
 - Scroll sorunu için tüm bileşenleri sistematik audit ettim (Agent ile)
 - Replace-all kullandım: `padding: "20px 16px 90px"` → scroll ekli versiyona toplu geçiş
 - X/Y/B temizliğinde kod içi değişken isimlerini (remainingX, remainingY, groupB) DEĞİŞTİRMEDİM — sadece kullanıcıya görünen UI metinlerini düzelttim

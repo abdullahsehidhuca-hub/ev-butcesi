@@ -76,7 +76,7 @@ Hazır önerilerin varsayılan anahtar kelimeleri input'un value'suna yazılırs
 ### Boykot kuralı
 Abdullah'ın kesin kararı: İsrail'e destek veren tüm markalar sorgusuz boykot. Kodda, placeholder'larda, önerilerde marka ismi yerine genel terimler kullanıldı.
 
-## İç düşünme süreci
+## Değerlendirilen seçenekler
 
 - Ekstre dönem seçici için B seçeneği (otomatik tarih analizi) daha "akıllı" görünse de CSV formatları bankadan bankaya değişiyor, yanlış parse sessiz hataya neden olur. A seçeneği tek dropdown — basit, kararlı.
 - Fatura alt kategorilendirme başlangıçta sadece ön tanımlı butonlarla yapıldı, Abdullah geri bildirimle serbest input istedi. İteratif tasarım süreci: 3 revizyon sonucu mevcut yapıya ulaşıldı.

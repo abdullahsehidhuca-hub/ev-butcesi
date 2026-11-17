@@ -50,7 +50,7 @@
   yazı için yeterli karşıtlık); klavye odak halkası ve hareket azaltma desteği eklendi.
 - Giriş alanları 16 px (iOS Safari 16 px altında yakınlaştırma yapar).
 
-## İç düşünme süreci
+## Değerlendirilen seçenekler
 - Alternatif: v3'ü ayrı bir HTML girişi (`v3.html`) olarak açmak. Tek giriş + adres kontrolü daha
   az yapılandırma istedi ve PWA bildirimi ortak kaldı.
 - Gelir kaleminde günü geçmiş maaş "gecikti" görünüyordu; dönem ortasında eklenen maaş genelde

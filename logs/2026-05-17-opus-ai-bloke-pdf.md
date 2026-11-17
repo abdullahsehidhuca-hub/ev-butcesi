@@ -62,7 +62,7 @@ Abdullah geçen ay "bloke sonrası kalan tamamen benim" diye düşünerek harcam
 ### PDF ekstre
 Banka ekstrelerinin çoğu PDF formatında geliyor. CSV'ye dönüştürmek kullanıcı için ekstra adım. Opus PDF tablosunu doğrudan okuyup aynı eşleştirme motoruna besleyebiliyor.
 
-## İç Düşünme Süreci
+## Değerlendirilen seçenekler
 
 - **Model seçimi**: Abdullah önce "Opus 7" istedi, sonra "Opus 4.7" dedi (API docs ekran görüntüsü paylaştı). Model ID'si `claude-opus-4-7` olarak doğrulandı.
 - **Bloke stratejisi**: groupC'yi blokeye dahil etmek "doğru cevap" gibi görünüyordu ama gerçek kullanımda ayın başında negatif bütçe göstermesi kabul edilemezdi. Tahmini giderleri bilgi olarak göstermek en iyi denge noktası.

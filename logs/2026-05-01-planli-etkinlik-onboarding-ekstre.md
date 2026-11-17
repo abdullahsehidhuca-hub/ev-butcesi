@@ -59,7 +59,7 @@
 - Otomatik yedek: Firebase'den yanlışlıkla veri silinmesi sonrası acil önlem
 - Onboarding: 20 kişilik test grubu için ilk kurulum deneyimi
 
-## İç düşünme süreci
+## Değerlendirilen seçenekler
 - localStorage izolasyonu: eski tek anahtar tüm aileler için kullanılıyordu, familyId bazlı ayrım yapıldı
 - Ekstre modu mimarisi: calcMonth'da dallanma yerine veri kaynağını değiştirme yaklaşımı tercih edildi (prevMd vs md)
 - Onboarding tetikleme: onboardingCompleted flag'i yerine monthlyBudget === 0 kontrolü daha güvenilir bulundu

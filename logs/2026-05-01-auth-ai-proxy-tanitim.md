@@ -76,7 +76,7 @@
 - cmk() 15+ yerde tekrarlanıyordu → tek noktaya indirildi, mk prop olarak geçiyor
 - Sabit giderlerde elektrik/su/doğalgaz vardı → bunlar değişken, çıkarıldı
 
-## İç düşünme süreci
+## Değerlendirilen seçenekler
 - Auth sistemi 5-6 iterasyon geçirdi. Email Link → sendEmailVerification, popup → redirect, LoginScreen → App seviyesi. Her seferinde test feedback'i ile düzeltildi.
 - Banka kartı eklenmesi tüm hesaplama zincirini etkiledi: calcMonth, calcFlat, ccTransferItems, groupA/B ayrımı. Her birini ayrı simüle ettim.
 - cmk refactoru iki aşamalıydı: önce parametre eklendi, sonra Abdullah "en temiz çözüm mü?" diye sordu → mk prop yaklaşımına geçildi.

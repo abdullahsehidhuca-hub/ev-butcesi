@@ -52,7 +52,7 @@ Test kullanıcıları ekstre modunda KK harcamalarını kaydedip aktar ekranınd
 ### Auth
 7 test kullanıcısından 3'ü giriş sorunu yaşadı. Kök neden: createFamily'nin 4 ayrı Firebase yazması hiçbir hata yakalama olmadan sıralı çalışıyordu — tek bir ağ kesintisi tüm akışı kırıyordu. "Aile kaydı bulunamadı" ekranı çıkış-giriş döngüsüne neden oluyordu.
 
-## İç düşünme süreci
+## Değerlendirilen seçenekler
 
 ### Bloke analizi
 - İlk başta 3 modal sunuldu (Bloke, Kalan Bütçe, Bütçe Dökümü). Üçünde de tutarsızlık olduğunu düşündüm ama detaylı incelemede sadece Bloke'nin gerçek sorunu olduğu ortaya çıktı
