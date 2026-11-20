@@ -8,8 +8,8 @@ export const SAMPLE_TODAY = "2026-11-26";
 
 // Arayüz düzeyinde aile üyeleri (core'da henüz yok). createdBy alanı bu kimlikleri kullanır.
 export const SAMPLE_MEMBERS = {
-  "u-a": { id: "u-a", name: "Abdullah", initial: "A", color: "indigo", self: true },
-  "u-k": { id: "u-k", name: "Eşin", initial: "K", color: "orange" }
+  "u-a": { id: "u-a", name: "Üye 1", initial: "1", color: "indigo", self: true },
+  "u-k": { id: "u-k", name: "Üye 2", initial: "2", color: "orange" }
 };
 
 const TL = n => Math.round(n * 100);

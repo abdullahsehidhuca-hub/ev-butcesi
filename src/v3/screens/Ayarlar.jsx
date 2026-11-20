@@ -46,7 +46,7 @@ function cloudRow(cloud = { status: "off" }, memberCount, open) {
   }
 }
 
-export default function Ayarlar({ state, today, open, theme, onTheme, backup, cloud, members = {} }) {
+export default function Ayarlar({ state, today, open, theme, onTheme, backup, cloud, members = {}, onLogOut }) {
   const fileRef = useRef(null);
   const accounts = Object.values(state.accounts);
   const categories = Object.values(state.categories).filter(c => !c.archived).sort(byName);
@@ -153,7 +153,7 @@ export default function Ayarlar({ state, today, open, theme, onTheme, backup, cl
         <Row icon="cloud" color="cyan" {...cloudRow(cloud, Object.keys(members).length, open)} />
         {cloud?.familyId && cloud.user && (
           <Row icon="people" color="indigo" title="Aile üyeleri"
-            sub={cloud.familyId === cloud.user.uid ? "Üye davet edin: davet kodu oluşturup gönderin" : "Üyeler ve hesaptan çıkış"}
+            sub={cloud.familyId === cloud.user.uid ? "Üye davet edin: davet kodu oluşturup gönderin" : "Hesabı kimlerle paylaştığınızı görün"}
             value={Object.keys(members).length || null} onClick={() => open({ name: "family" })} />
         )}
         {backup && <>
@@ -165,6 +165,15 @@ export default function Ayarlar({ state, today, open, theme, onTheme, backup, cl
         </>}
         <Row icon="alert" color="red" title="Tüm verileri sil" sub={cloud?.status === "synced" ? "Aile hesabındaki tüm veriler silinir; önce sorar" : "Bu cihazdaki tüm veriler silinir; önce sorar"} danger onClick={() => open({ name: "reset" })} />
       </section>
+
+      {cloud?.user && onLogOut && (
+        <>
+          <span className="t-cap">Hesap</span>
+          <section className="list" style={group} aria-label="Hesap">
+            <Row icon="login" color="gray" title="Hesaptan çık" sub={cloud.user.email ? `${cloud.user.email} ile giriş yapıldı` : null} danger onClick={onLogOut} />
+          </section>
+        </>
+      )}
     </>
   );
 }

@@ -1,6 +1,6 @@
 // v3 ortak bileşenleri. Görünüm v3.css'teki sınıflardan gelir; burada hesap yapılmaz.
 
-import React, { useEffect, useId, useRef } from "react";
+import React, { useEffect, useId, useRef, useState } from "react";
 import { fmtNumber, symbolOf } from "./format.js";
 import { pushBack } from "./backButton.js";
 
@@ -82,14 +82,27 @@ export function Sheet({ title, onClose, children }) {
   );
 }
 
-export function Field({ label, value, onChange, hint, invalid, inputMode, placeholder, type = "text" }) {
+// type="password" ise yanında Göster / Gizle düğmesi çıkar; autoComplete parola yöneticisinin doldurmasını sağlar.
+export function Field({ label, value, onChange, hint, invalid, inputMode, placeholder, type = "text", autoComplete, readOnly }) {
   const id = useId();
+  const [shown, setShown] = useState(false);
+  const password = type === "password";
+  const input = (
+    <input id={id} className="v3-input" type={password && shown ? "text" : type} value={value} inputMode={inputMode} placeholder={placeholder}
+      autoComplete={autoComplete} readOnly={readOnly} autoCapitalize={password || type === "email" ? "none" : undefined}
+      aria-invalid={invalid ? "true" : undefined} aria-describedby={hint ? `${id}-hint` : undefined}
+      onChange={e => onChange(e.target.value)} />
+  );
   return (
     <div className="v3-field">
       <label className="v3-label" htmlFor={id}>{label}</label>
-      <input id={id} className="v3-input" type={type} value={value} inputMode={inputMode} placeholder={placeholder}
-        aria-invalid={invalid ? "true" : undefined} aria-describedby={hint ? `${id}-hint` : undefined}
-        onChange={e => onChange(e.target.value)} />
+      {password ? (
+        <div className="v3-pass">
+          {input}
+          <button type="button" className="v3-link" aria-controls={id} aria-label={shown ? "Şifreyi gizle" : "Şifreyi göster"}
+            onClick={() => setShown(v => !v)}>{shown ? "Gizle" : "Göster"}</button>
+        </div>
+      ) : input}
       {hint && <p className="v3-hint" id={`${id}-hint`}>{hint}</p>}
     </div>
   );
@@ -139,7 +152,7 @@ export function Form({ onSubmit, children }) {
 
 export function ErrorText({ errors }) {
   if (!errors?.length) return null;
-  return <p className="v3-error" role="alert">{errors.map(e => e.charAt(0).toLocaleUpperCase("tr-TR") + e.slice(1)).join(". ")}.</p>;
+  return <p className="v3-error" role="alert">{errors.map(e => e.charAt(0).toLocaleUpperCase("tr-TR") + e.slice(1)).join(". ").replace(/[.!?]?$/, m => m || ".")}</p>;
 }
 
 const ICONS = {

@@ -1,4 +1,4 @@
-// Ev Bütçesi v3 arayüzü. Görsel düzen Abdullah'ın dış taslağından (C tasarımı, 2026-11-08) uyarlandı.
+// Ev Bütçesi v3 arayüzü. Görsel düzen dış taslaktan (C tasarımı, 2026-11-08) uyarlandı.
 // Yeni hesap motoruna (src/core) bağlıdır; eski uygulamadan (App.jsx) bağımsızdır ve /v3 adresinde açılır.
 // Veri durumunu tutar, sekmeler arası geçişi ve kullanıcı işlemlerini çekirdek fonksiyonlarına iletir.
 
@@ -197,6 +197,12 @@ export default function V3App({ sample }) {
   // Yapay zekâ çağrıları oturum jetonuyla yapılır; örnek veri modunda kapalıdır (giriş çekmecesi de yoktur).
   const aiUser = sample ? null : cloud.user;
   const toLogin = sample ? null : () => setSheet({ name: "login" });
+  // Hesaptan çıkış (Ayarlar › Hesap): oturum kapanınca giriş ekranı açılır. Firebase kodu tembel yüklenir.
+  const logOut = sample ? null : async () => {
+    if (!confirm("Hesaptan çıkılsın mı? Yeniden girmek için e-posta adresiniz ve şifreniz gerekir.")) return;
+    try { await (await import("./family.js")).logOut(); go("home"); }
+    catch { setToast("Çıkış yapılamadı; bağlantınızı kontrol edip yeniden deneyin"); }
+  };
   const props = { state, commit, onClose: close, today: todayDate, period, members, aiUser };
   const loginDone = msg => { setSheet(null); setToast(msg); cloud.reload(); };
 
@@ -210,10 +216,8 @@ export default function V3App({ sample }) {
   if (gate || authPending) {
     return (
       <div className="v3">
-        <main className="v3-scroll">
-          {authPending
-            ? <p className="t-sub" role="status" style={{ padding: "32px 4px" }}>Yükleniyor…</p>
-            : <Giris status={cloud.status === "noFamily" ? "noFamily" : "signedOut"} email={cloud.user?.email} open={start => setSheet({ name: "login", start })} />}
+        <main className="v3-scroll is-gate">
+          <Giris status={authPending ? "loading" : cloud.status === "noFamily" ? "noFamily" : "signedOut"} email={cloud.user?.email} open={start => setSheet({ name: "login", start })} />
         </main>
         <Suspense fallback={null}>{sheet?.name === "login" && <HesapSheet key={sheet.start} cloud={cloud} start={sheet.start} onClose={close} onDone={loginDone} />}</Suspense>
         {toast && <div className="toast" role="status">{toast}</div>}
@@ -267,7 +271,7 @@ export default function V3App({ sample }) {
         {tab === "plan" && <Odemeler {...common} onPay={pay} onAdd={Object.keys(state.accounts).length ? () => setSheet({ name: "obligation", kind: "fixed" }) : null}
           onTrial={Object.keys(state.accounts).length ? () => setSheet({ name: "trial" }) : null}
           onItem={it => setSheet(it.type === "card" ? { name: "blocked" } : { name: "obligationEdit", id: it.obligationId })} />}
-        {tab === "settings" && <Ayarlar {...common} theme={theme} onTheme={setTheme} backup={backup} cloud={sample ? { status: "off" } : cloud} />}
+        {tab === "settings" && <Ayarlar {...common} theme={theme} onTheme={setTheme} backup={backup} cloud={sample ? { status: "off" } : cloud} onLogOut={logOut} />}
       </main>
 
       <TabBar tab={tab} onTab={go} onAdd={() => setSheet({ name: "quick" })} />

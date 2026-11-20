@@ -176,6 +176,23 @@ a.li:active { background: var(--fill2); }
 .v3-input:focus-visible { border-color: var(--blue-t); outline: none; }
 .v3-input[aria-invalid="true"] { border-color: var(--red-t); }
 .v3-hint { font-size: var(--fs-meta); color: var(--label2); margin: 6px 4px 0; }
+.v3-input[readonly] { color: var(--label2); }
+.v3-pass { position: relative; }
+.v3-pass .v3-input { padding-right: 84px; }
+.v3-pass .v3-link { position: absolute; top: 1px; right: 2px; min-width: 64px; justify-content: center; padding: 0 12px; }
+.v3-sheet-done { font-size: var(--fs-sub); line-height: 1.5; margin: 0 4px 14px; }
+/* İlk açılış (onaylı taslak 4): içerik ekranın altına itilir; başparmakla erişilir. */
+.v3-scroll.is-gate { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 16px); }
+.v3-gate-space { flex: 1 0 0; }
+.v3-gate-head { display: flex; flex-direction: column; gap: 16px; padding: 0 0 10px; } /* + bölüm aralığı 14 = taslaktaki 24 */
+.v3-gate-head .tile { width: 48px; height: 48px; border-radius: 13.333px; }
+.v3-gate-head .tile svg { width: 27px; height: 27px; }
+.v3-gate-head .t-title { margin: 0; line-height: 40px; }
+.v3-gate-head .t-sub { line-height: 20px; margin: 0; }
+.v3-gate-row { padding: 0 16px; min-height: 64px; }
+.v3-gate-row .stack { padding: 12px 0; gap: 2px; }
+.v3-gate-row .v3-gate-t { font-size: 17px; font-weight: 590; line-height: 22px; letter-spacing: -0.01em; color: var(--label); }
+.v3-gate-row .t-meta { line-height: 18px; }
 .v3-pills { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: none; }
 .v3-pills.is-wrap { flex-wrap: wrap; overflow: visible; }
 .v3-chip { flex: 0 0 auto; min-height: 44px; padding: 0 14px; border-radius: 22px; background: var(--card); font-size: 14px; font-weight: 500; display: inline-flex; align-items: center; }

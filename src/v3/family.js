@@ -3,7 +3,7 @@
 // isim dizinine (nameIndex: ad → e-posta) yazmaz.
 import {
   signInWithEmailAndPassword, createUserWithEmailAndPassword, sendEmailVerification,
-  GoogleAuthProvider, signInWithPopup, signOut, updateProfile, reload
+  GoogleAuthProvider, signInWithPopup, signOut, updateProfile, reload, sendPasswordResetEmail
 } from "firebase/auth";
 import { ref, get, set, update } from "firebase/database";
 import { firebase, isNativeShell } from "./firebaseApp.js";
@@ -15,13 +15,13 @@ export const googleAvailable = () => !isNativeShell();
 // Firebase hata kodlarını kullanıcıya anlaşılır Türkçe iletiye çevirir.
 export function authMessage(e) {
   switch (e?.code) {
-    case "auth/invalid-credential": case "auth/wrong-password": case "auth/user-not-found": return "E-posta ya da şifre yanlış.";
+    case "auth/invalid-credential": case "auth/wrong-password": case "auth/user-not-found": return "E-posta ya da şifre yanlış. Hatırlamıyorsanız “Şifremi unuttum”a dokunun.";
     case "auth/invalid-email": return "Geçerli bir e-posta adresi girin.";
-    case "auth/email-already-in-use": return "Bu e-posta ile zaten bir hesap var; giriş yapın.";
+    case "auth/email-already-in-use": return "Bu e-postayla açılmış bir üye hesabı var. Giriş yapın.";
     case "auth/weak-password": return "Şifre en az 6 karakter olmalı.";
-    case "auth/too-many-requests": return "Çok fazla deneme yapıldı; biraz sonra tekrar deneyin.";
-    case "auth/network-request-failed": return "İnternet bağlantısı yok; bağlantıyı kontrol edin.";
-    case "auth/popup-blocked": return "Tarayıcı Google penceresini engelledi; açılır pencerelere izin verin.";
+    case "auth/too-many-requests": return "Çok fazla deneme yapıldı. Birkaç dakika sonra tekrar deneyin.";
+    case "auth/network-request-failed": return "İnternet bağlantısı yok. Bağlantınızı kontrol edin.";
+    case "auth/popup-blocked": return "Tarayıcı Google penceresini engelledi. Açılır pencerelere izin verin.";
     case "PERMISSION_DENIED": case "permission-denied": return "Bu işlem için izniniz yok.";
     default: return e?.message || "Beklenmeyen bir hata oluştu.";
   }
@@ -112,6 +112,14 @@ export async function registerEmail(name, email, password) {
   auth.languageCode = "tr";
   try { await sendEmailVerification(user); } catch {}
   return user;
+}
+
+// Şifre sıfırlama bağlantısı. Adresle hesap olup olmadığı söylenmez (hesap listesi dışarıdan çıkarılamasın):
+// hesap yoksa da başarılı sayılır.
+export async function sendPasswordReset(email) {
+  const { auth } = firebase();
+  auth.languageCode = "tr";
+  try { await sendPasswordResetEmail(auth, email.trim()); } catch (e) { if (e?.code !== "auth/user-not-found") throw e; }
 }
 
 export async function signInGoogle() {
