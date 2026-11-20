@@ -48,6 +48,7 @@ export default function Odemeler({ state, today, onPay, onAdd, onItem, onTrial }
   const all = v.before.concat(v.after);
   const done = all.filter(i => i.paid).length;
   const auto = all.filter(i => i.auto).length;
+  const cardAuto = all.some(i => i.auto && !i.bankAuto);
   const paidPct = v.total ? (v.total - v.open) / v.total * 100 : 0;
   const shown = all.filter(i => match(filter, i)).length;
 
@@ -74,7 +75,7 @@ export default function Odemeler({ state, today, onPay, onAdd, onItem, onTrial }
         <div className="row between baseline"><span className="t-sub b">Kalan ödeme</span><span className="t-sub">{done} ödendi{auto ? ` · ${auto} otomatik` : ""}</span></div>
         <span className="num t-big">{fmt(v.open)}</span>
         <div className="track" style={{ height: 8, borderRadius: 4 }}><i style={{ width: `${paidPct}%`, background: "var(--green)", borderRadius: 4 }} /></div>
-        <span className="t-meta">{fmt(v.total)} toplam · {fmt(v.total - v.open)} ödendi{auto ? " · otomatikler kart ekstresinde" : ""}</span>
+        <span className="t-meta">{fmt(v.total)} toplam · {fmt(v.total - v.open)} ödendi{cardAuto ? " · karttan otomatikler kart ekstresinde" : ""}</span>
       </section>
 
       {v.count > 0 ? (
@@ -120,7 +121,10 @@ export default function Odemeler({ state, today, onPay, onAdd, onItem, onTrial }
 
 function subline(it) {
   if (it.paid) return "Ödendi";
-  if (it.auto) return it.total ? `Taksit ${it.index}/${it.total} · karttan otomatik` : "Karttan otomatik";
+  if (it.auto) {
+    const from = it.bankAuto ? "banka talimatı" : "karttan otomatik";
+    return it.total ? `Taksit ${it.index}/${it.total} · ${from}` : it.bankAuto ? "Banka talimatı" : "Karttan otomatik";
+  }
   if (it.type === "card") return "Ekstre · son ödeme";
   if (it.total) return `Taksit ${it.index}/${it.total}`;
   if (it.open < it.amount) return `Kısmi · kalan ${fmt(it.open)}`;

@@ -7,6 +7,8 @@ export * from "./schedule.js";
 export * from "./engine.js";
 export * from "./quickEntry.js";
 export * from "./accounts.js";
+export * from "./allowance.js";
+export * from "./events.js";
 export * from "./installments.js";
 export * from "./labels.js";
 export * from "./cardTransfer.js";

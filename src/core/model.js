@@ -100,6 +100,10 @@ export function validateObligation(state, o) {
   if (o.firstAmount != null) err(e, isMinor(o.firstAmount) && o.firstAmount > 0, "ilk taksit tutarı geçersiz");
   if (o.categoryId != null) err(e, !!state.categories[o.categoryId], "kategori bulunamadı");
   if (o.dueDay != null) err(e, Number.isInteger(o.dueDay) && o.dueDay >= 1 && o.dueDay <= 31, "son ödeme günü 1-31 arası olmalı");
+  if (o.autopayFrom != null) {
+    err(e, isPeriodKey(o.autopayFrom), "talimat başlangıç dönemi geçersiz");
+    err(e, o.kind !== "income", "gelire talimat tanımlanamaz");
+  }
   return e;
 }
 

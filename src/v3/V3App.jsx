@@ -3,7 +3,7 @@
 // Veri durumunu tutar, sekmeler arası geçişi ve kullanıcı işlemlerini çekirdek fonksiyonlarına iletir.
 
 import React, { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
-import { computePeriod, periodOf, quickAdd, today, ValidationError } from "../core/index.js";
+import { computePeriod, periodOf, quickAdd, today, ValidationError, dueAllowances, applyAllowances, fundingNeeds, reconcileDue, eventCategoryName } from "../core/index.js";
 import { loadState, saveState, loadPref, savePref, newId, exportBackup, parseBackup, transactionsCsv, STORAGE_KEY, PLAN_KEY, THEME_KEY, BACKUP_KEY, CLOUD_BASE_KEY, LOCAL_COPY_KEY, SAMPLE_KEY, SAMPLE_PLAN_KEY } from "./store.js";
 import { useCloud } from "./useCloud.js";
 import { stampCreatedBy } from "./sync.js";
@@ -36,6 +36,7 @@ import "./v3.css";
 // Hesap ve aile çekmeceleri Firebase'i doğrudan kullanır; tembel yüklenir ki Firebase kodu ilk çizimi geciktirmesin.
 const HesapSheet = lazy(() => import("./screens/HesapSheet.jsx"));
 const AileSheet = lazy(() => import("./screens/AileSheet.jsx"));
+const EtkinlikSheet = lazy(() => import("./screens/EtkinlikSheet.jsx"));
 
 const tabFromHash = () => {
   const id = typeof location !== "undefined" ? location.hash.slice(1) : "";
@@ -118,6 +119,12 @@ export default function V3App({ sample }) {
   const todayDate = sample ? sample.SAMPLE_TODAY : today();
   const members = sample ? sample.SAMPLE_MEMBERS : cloud.members;
   const period = periodOf(todayDate, state.settings.payDay);
+  // Haftalık yüklemeler (konfor kartı gibi): bekleyen yükleme aktarım olarak yazılır. Bulut verisi gelmeden yazılmaz;
+  // kayıt kimliği hesap ve tarihten türediği için iki cihaz aynı yüklemeyi yazsa da tek kayıt olur.
+  useEffect(() => {
+    if (!sample && !synced) return;
+    if (dueAllowances(state, todayDate).length) commit(s => applyAllowances(s, todayDate, { userId: userRef.current }));
+  }, [state, todayDate, synced]);
   const go = useCallback(id => {
     if (location.hash.slice(1) !== id) history.replaceState(null, "", `#${id}`);
     setTab(id);
@@ -193,6 +200,41 @@ export default function V3App({ sample }) {
     && !(backupInfo.snooze && backupInfo.snooze > todayDate)
     ? { days: backupDays, onBackup: backup.exportJson, onSnooze: () => setBackupInfo(b => ({ ...b, snooze: addDays(todayDate, 1) })) }
     : null;
+  // Bankayla karşılaştırma hatırlatması: tek hesap düzeninde ayda bir, diğerlerinde haftada bir; işlem yokken sorulmaz.
+  const settingsPatch = patch => commit(s => ({ ...s, settings: { ...s.settings, ...patch } }));
+  const dueChecks = Object.keys(state.transactions).length ? reconcileDue(state, todayDate, state.settings.trackingMode === "single" ? 30 : 7) : [];
+  const reconcileReminder = dueChecks.length
+    ? { names: dueChecks.map(a => a.name).join(", "), onSnooze: () => settingsPatch({ reconcileSnooze: addDays(todayDate, 3) }) }
+    : null;
+  // Talimat hesabı: talimatlı ödemeler için bu dönem eksik kalan tutar ana hesaptan tek dokunuşla aktarılır.
+  const mainId = mainAccountId(state);
+  const funding = mainId ? fundingNeeds(state, todayDate, mainId).map(n => ({
+    ...n,
+    onFund: () => {
+      const errs = commit(s => quickAdd(s, { type: "transfer", amount: n.amount, accountId: mainId, toAccountId: n.accountId, note: `${n.name} talimat aktarımı` }, { id: newId(), now: new Date(`${todayDate}T${new Date().toTimeString().slice(0, 8)}`) }).state);
+      setToast(errs ? errs[0] : `${fmt(n.amount)} ${n.name} hesabına aktarıldı`);
+    },
+    onSkip: () => settingsPatch({ fundingSkips: [...(state.settings.fundingSkips || []), n.key] })
+  })) : [];
+  // Kısa süreli bütçedeki kendi harcamalarını ev bütçesine ekler: kart harcaması ilk kredi kartına, nakit harcama
+  // nakit hesabına (yoksa varsayılan hesaba) yazılır. Eklenenler settings.eventExports'ta tutulur, iki kez eklenmez.
+  const exportEvent = (eventId, eventName, list) => {
+    if (!confirm(`${list.length} harcama (${fmt(list.reduce((a, e) => a + e.amount, 0))}) ev bütçesine eklensin mi?`)) return;
+    const errs = commit(s => {
+      const accs = Object.values(s.accounts).filter(a => !a.archived && a.currency === "TRY");
+      const fallback = s.settings.defaultAccountId || mainAccountId(s);
+      const card = accs.find(a => a.type === "credit")?.id || fallback;
+      const cash = accs.find(a => a.type === "cash")?.id || fallback;
+      let next = s;
+      for (const e of list) {
+        next = quickAdd(next, { amount: e.amount, categoryId: null, accountId: e.method === "card" ? card : cash, note: `${eventName}: ${e.note || eventCategoryName(e.category)}` },
+          { id: newId(), now: new Date(`${e.date}T12:00:00`) }).state;
+      }
+      const done = [...(s.settings.eventExports?.[eventId] || []), ...list.map(e => e.id)];
+      return { ...next, settings: { ...next.settings, eventExports: { ...(next.settings.eventExports || {}), [eventId]: done } } };
+    });
+    setToast(errs ? errs[0] : `${list.length} harcama ev bütçesine eklendi`);
+  };
   const reloadSample = () => { commit(() => sample.buildSampleState()); setOverrides({}); setToast("Örnek veri yeniden yüklendi"); };
   // Yapay zekâ çağrıları oturum jetonuyla yapılır; örnek veri modunda kapalıdır (giriş çekmecesi de yoktur).
   const aiUser = sample ? null : cloud.user;
@@ -217,9 +259,12 @@ export default function V3App({ sample }) {
     return (
       <div className="v3">
         <main className="v3-scroll is-gate">
-          <Giris status={authPending ? "loading" : cloud.status === "noFamily" ? "noFamily" : "signedOut"} email={cloud.user?.email} open={start => setSheet({ name: "login", start })} />
+          <Giris status={authPending ? "loading" : cloud.status === "noFamily" ? "noFamily" : "signedOut"} email={cloud.user?.email} open={start => setSheet(start === "events" ? { name: "events", start: "new" } : { name: "login", start })} />
         </main>
-        <Suspense fallback={null}>{sheet?.name === "login" && <HesapSheet key={sheet.start} cloud={cloud} start={sheet.start} onClose={close} onDone={loginDone} />}</Suspense>
+        <Suspense fallback={null}>
+          {sheet?.name === "login" && <HesapSheet key={sheet.start} cloud={cloud} start={sheet.start} onClose={close} onDone={loginDone} />}
+          {sheet?.name === "events" && <EtkinlikSheet user={cloud.user} today={todayDate} start={sheet.start} onClose={close} onToast={setToast} />}
+        </Suspense>
         {toast && <div className="toast" role="status">{toast}</div>}
       </div>
     );
@@ -234,6 +279,7 @@ export default function V3App({ sample }) {
             Yalnız bu cihazda, gerçek veriden ayrı tutulur. Değişiklikleri deneyebilirsiniz.
             <span className="row" style={{ gap: 16, flexWrap: "wrap" }}>
               <button type="button" className="v3-link" style={{ padding: 0 }} onClick={reloadSample}>Baştan yükle</button>
+              <a className="v3-link" href="/?test">Test ekranları</a>
               <a className="v3-link" href="/v3">Gerçek veriye geç</a>
             </span>
           </div>
@@ -265,7 +311,9 @@ export default function V3App({ sample }) {
           </div>
         )}
         {tab === "home" && <Ozet {...common} onResolve={() => setSheet({ name: "resolve" })} onPay={pay} onOpenPayments={() => go("plan")} onOpenSettings={() => go("settings")} backupDue={backupDue}
-          onSetupDone={() => commit(s => ({ ...s, settings: { ...s.settings, setupDone: true } }))} />}
+          onSetupDone={() => commit(s => ({ ...s, settings: { ...s.settings, setupDone: true } }))}
+          onSetupMode={mode => commit(s => ({ ...s, settings: { ...s.settings, trackingMode: mode } }))}
+          reconcileReminder={reconcileReminder} funding={funding} />}
         {tab === "report" && <Rapor {...common} onCategory={(categoryId, p) => setSheet({ name: "txlist", filter: { period: p, categoryId } })}
           onGoal={id => setSheet({ name: "goal", id })} onSavings={() => setSheet({ name: "savings" })} onAdvisor={() => setSheet({ name: "advisor" })} />}
         {tab === "plan" && <Odemeler {...common} onPay={pay} onAdd={Object.keys(state.accounts).length ? () => setSheet({ name: "obligation", kind: "fixed" }) : null}
@@ -313,6 +361,8 @@ export default function V3App({ sample }) {
       <Suspense fallback={null}>
         {sheet?.name === "login" && !sample && <HesapSheet cloud={cloud} start={sheet.start} onClose={close} onDone={loginDone} />}
         {sheet?.name === "family" && !sample && <AileSheet cloud={cloud} members={members} onClose={close} onToast={setToast} />}
+        {sheet?.name === "events" && !sample && <EtkinlikSheet user={cloud.user} today={todayDate} start={sheet.start} onClose={close} onToast={setToast}
+          onExport={Object.keys(state.accounts).length ? exportEvent : null} exportedOf={id => new Set(state.settings.eventExports?.[id] || [])} />}
       </Suspense>
       {toast && <div className="toast" role="status">{toast}</div>}
     </div>

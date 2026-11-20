@@ -10,6 +10,10 @@ export function amountFor(o, period) {
   return amount;
 }
 
+// Talimatlı ödeme: kullanıcının "otomatik talimatla ödeniyor" dediği dönemden (autopayFrom) itibaren
+// ödeme günü gelince işaret beklemeden hesaptan düşer.
+export const isAutopay = (o, period) => !!o?.autopayFrom && o.kind !== "income" && period >= o.autopayFrom;
+
 // Dönemdeki ödeme; yoksa null. index 1'den başlar.
 // firstAmount: taksitte bölünmeden kalan kuruş farkı ilk taksite eklenir.
 export function occurrence(o, period, payDay = 1) {

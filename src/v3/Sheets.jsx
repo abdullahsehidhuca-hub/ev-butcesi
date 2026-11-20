@@ -4,7 +4,7 @@
 import React, { useState } from "react";
 import {
   quickAdd, payObligation, favorites, defaultAccountFor, suggestCategory, learnCategory,
-  addAccount, addObligation, addInstallmentPurchase, putRecord, emptyState, setPayDay
+  addAccount, addObligation, addInstallmentPurchase, putRecord, emptyState, setPayDay, periodOf, setAllowance
 } from "../core/index.js";
 import { parseAmount, amountText, fmtMoney, symbolOf } from "./format.js";
 import { newId } from "./store.js";
@@ -147,6 +147,39 @@ export function PaySheet({ state, commit, onClose, period, target, today }) {
 const ACCOUNT_TYPES = [{ value: "bank", label: "Banka hesabı" }, { value: "cash", label: "Nakit" }, { value: "credit", label: "Kredi kartı" }, { value: "prepaid", label: "Ön ödemeli kart" }];
 const CURRENCY_OPTIONS = [{ value: "TRY", label: "Türk lirası (₺)" }, { value: "USD", label: "Dolar ($)" }, { value: "EUR", label: "Euro (€)" }];
 
+// ── Haftalık yükleme (konfor kartı gibi) ──────────────────────────────────────
+// Kart dışı hesaba her hafta aynı gün aynı tutar başka bir hesaptan aktarılır; aktarım kendiliğinden yazılır.
+const WEEKDAYS = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"].map((label, i) => ({ value: String(i + 1), label }));
+export function useAllowance(state, account) {
+  const al = account?.allowance;
+  const [amount, setAmount] = useState(al ? amountText(al.amount) : "");
+  const [weekday, setWeekday] = useState(String(al?.weekday || 1));
+  const [fromId, setFromId] = useState(al?.fromAccountId || "");
+  return { amount, setAmount, weekday, setWeekday, fromId, setFromId };
+}
+// Dönüş: null (yükleme yok), { amount, weekday, fromAccountId } ya da { error }.
+export function allowanceValue(f, sources) {
+  if (!f.amount.trim()) return null;
+  const minor = parseAmount(f.amount);
+  if (!minor) return { error: "haftalık yükleme tutarını rakamla yazın ya da boş bırakın" };
+  const from = f.fromId || sources[0]?.id;
+  if (!from) return { error: "yüklemenin yapılacağı başka bir hesap ekleyin" };
+  return { amount: minor, weekday: Number(f.weekday), fromAccountId: from };
+}
+export function AllowanceFields({ f, sources }) {
+  if (!sources.length) return null;
+  return <>
+    <Field label="Haftalık yükleme (isteğe bağlı)" value={f.amount} onChange={f.setAmount} inputMode="decimal" placeholder="Örn: 1.500"
+      hint="Konfor kartı gibi her hafta para gönderdiğiniz hesaplar için. Aktarım o gün kendiliğinden kaydedilir." />
+    {!!f.amount.trim() && <>
+      <SelectField label="Yükleme günü" value={f.weekday} onChange={f.setWeekday} options={WEEKDAYS} />
+      <SelectField label="Hangi hesaptan yüklenir?" value={f.fromId || sources[0].id} onChange={f.setFromId} options={accountOptions(sources)} />
+    </>}
+  </>;
+}
+// Yükleme kaynağı olabilecek hesaplar: kart dışı, aynı para birimli, kendisi hariç.
+export const allowanceSources = (state, id, currency) => Object.values(state.accounts).filter(a => a.id !== id && a.type !== "credit" && !a.archived && a.currency === currency).sort(byName);
+
 // initialType ve payMethod: hızlı harcamadaki "Konfor kartı ekle" gibi düğmelerden gelir; yeni hesap o düğmede görünür.
 export function AccountSheet({ state, commit, onClose, today, initialType, payMethod }) {
   const [name, setName] = useState("");
@@ -156,19 +189,24 @@ export function AccountSheet({ state, commit, onClose, today, initialType, payMe
   const [cutoff, setCutoff] = useState("");
   const [payment, setPayment] = useState("");
   const [errors, setErrors] = useState(null);
+  const allowance = useAllowance(state, null);
   const credit = type === "credit";
   const prepaid = type === "prepaid";
+  const sources = credit ? [] : allowanceSources(state, null, prepaid ? "TRY" : currency);
 
   const save = () => {
     if (!name.trim()) return setErrors(["hesabın adını yazın"]);
     const minor = parseBalance(balance);
     if (minor == null) return setErrors(["bakiyeyi rakamla yazın, örneğin 48.265,44"]);
+    const weekly = sources.length ? allowanceValue(allowance, sources) : null;
+    if (weekly?.error) return setErrors([weekly.error]);
     const errs = commit(s => {
       const id = newId();
       // Kartta borç eksi bakiye olarak tutulur (çekirdek kuralı); kesim ve son ödeme günü isteğe bağlıdır.
       const card = credit ? { ...(cutoff ? { cutoffDay: Number(cutoff) } : {}), ...(payment ? { paymentDay: Number(payment) } : {}) } : {};
       let next = addAccount(s, { id, name: name.trim(), type, currency: prepaid ? "TRY" : currency, ...card, ...(payMethod ? { payMethod } : {}), opening: { date: today, balance: credit ? -Math.abs(minor) : minor } });
       if (!s.settings.defaultAccountId && !credit && !prepaid) next = { ...next, settings: { ...next.settings, defaultAccountId: id } };
+      if (weekly) next = setAllowance(next, id, weekly, today);
       return next;
     });
     if (errs) setErrors(errs); else onClose();
@@ -187,6 +225,7 @@ export function AccountSheet({ state, commit, onClose, today, initialType, payMe
           <SelectField label="Hesap kesim günü" value={cutoff} onChange={setCutoff} options={DAYS_OPT} hint="Ekstrenin kesildiği gün; bloke ve ekstre dönemi buna göre hesaplanır. Sonradan da girebilirsiniz." />
           <SelectField label="Son ödeme günü" value={payment} onChange={setPayment} options={DAYS_OPT} hint="Boş bırakılırsa kesimden 10 gün sonrası sayılır." />
         </>}
+        <AllowanceFields f={allowance} sources={sources} />
         <ErrorText errors={errors} />
         <Actions submit="Kaydet" onCancel={onClose} />
       </Form>
@@ -225,24 +264,35 @@ export function CategorySheet({ commit, onClose }) {
 }
 
 // ── Düzenli ödeme ya da gelir (her ay) ─────────────────────────────────────────
-export function ObligationSheet({ state, commit, onClose, kind, period }) {
+// İlk maaş, henüz işlem yokken girilirse bütçe ayı maaş gününden başlar (settings.payDay).
+// Talimatlı ödeme (autopayFrom) banka hesabında işaret beklemeden düşer; kredi kartında zaten kendiliğindendir.
+export function ObligationSheet({ state, commit, onClose, kind, period, today }) {
   const income = kind === "income";
-  const accounts = Object.values(state.accounts);
+  // Maaş kredi kartına yatmaz; gelir için kart listelenmez.
+  const accounts = Object.values(state.accounts).filter(a => !income || a.type !== "credit");
+  const firstSalary = income && !Object.values(state.obligations).some(o => o.kind === "income") && !Object.keys(state.transactions).length;
   const [name, setName] = useState(income ? "Maaş" : "");
   const [amount, setAmount] = useState("");
-  const [accountId, setAccountId] = useState(state.settings.defaultAccountId || accounts[0]?.id || "");
+  const [accountId, setAccountId] = useState(accounts.find(a => a.id === state.settings.defaultAccountId)?.id || accounts[0]?.id || "");
   const [categoryId, setCategoryId] = useState("");
   const [day, setDay] = useState(String(income ? state.settings.payDay : 1));
+  const [autopay, setAutopay] = useState(false);
   const [errors, setErrors] = useState(null);
+  const canAutopay = !income && state.accounts[accountId]?.type !== "credit";
 
   const save = () => {
     if (!name.trim()) return setErrors(["adını yazın"]);
     const minor = parseAmount(amount);
     if (!minor) return setErrors([AMOUNT_HINT]);
-    const errs = commit(s => addObligation(s, {
-      id: newId(), kind, name: name.trim(), amount: minor, currency: s.accounts[accountId]?.currency || "TRY",
-      accountId, categoryId: categoryId || null, startPeriod: period, count: null, dueDay: Number(day)
-    }));
+    const errs = commit(s => {
+      const next = firstSalary ? setPayDay(s, Number(day)) : s;
+      const start = firstSalary ? periodOf(today, Number(day)) : period;
+      return addObligation(next, {
+        id: newId(), kind, name: name.trim(), amount: minor, currency: s.accounts[accountId]?.currency || "TRY",
+        accountId, categoryId: categoryId || null, startPeriod: start, count: null, dueDay: Number(day),
+        ...(autopay && canAutopay ? { autopayFrom: start } : {})
+      });
+    });
     if (errs) setErrors(errs); else onClose();
   };
 
@@ -255,7 +305,13 @@ export function ObligationSheet({ state, commit, onClose, kind, period }) {
         <SelectField label={income ? "Yattığı hesap" : "Ödendiği hesap"} value={accountId} onChange={setAccountId} options={accountOptions(accounts)} />
         {!income && <SelectField label="Kategori" value={categoryId} onChange={setCategoryId} options={categoryOptions(state)} />}
         <SelectField label={income ? "Ayın kaçında yatıyor?" : "Son ödeme günü"} value={day} onChange={setDay} options={DAYS}
-          hint="Bu dönemden başlayarak her ay tekrarlanır." />
+          hint={firstSalary ? "Bütçe ayınız bu günden başlar ve her ay tekrarlanır." : "Bu dönemden başlayarak her ay tekrarlanır."} />
+        {canAutopay && (
+          <label className="v3-check">
+            <input type="checkbox" checked={autopay} onChange={e => setAutopay(e.target.checked)} />
+            <span>Otomatik talimatla ödeniyor: ödeme günü gelince işaretlemeden düşer</span>
+          </label>
+        )}
         <ErrorText errors={errors} />
         <Actions submit="Kaydet" onCancel={onClose} />
       </Form>

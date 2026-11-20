@@ -11,7 +11,7 @@ test("Karşılama ilk hesaptan sonra sürer; maaş ve sabit ödeme girilince bit
   let s = emptyState();
   assert.equal(setupSteps(s).show, true);
   s = addAccount(s, { id: "b", name: "Banka", type: "bank", currency: "TRY" });
-  assert.deepEqual(setupSteps(s), { account: true, income: false, fixed: false, show: true });
+  assert.deepEqual(setupSteps(s), { account: true, bank: true, credit: false, extra: false, income: false, fixed: false, mode: null, show: true });
   s = withObligation(s, { id: "m", kind: "income", name: "Maaş" });
   assert.equal(setupSteps(s).show, true, "sabit ödeme adımı atlanmamalı");
   s = withObligation(s, { id: "k", kind: "fixed", name: "Kira" });
@@ -28,4 +28,14 @@ test("Sabit ödemesi olmayan kullanıcı 'Başla' ile geçer; hesap yoksa karş�
 
 test("Kurulu veri (örnek veri) karşılama göstermez", () => {
   assert.equal(setupSteps(buildSampleState()).show, false);
+});
+
+test("Hesap düzeni: kart ve ek hesap adımları ayrı izlenir; maaş adımı yalnız kart dışı hesapla açılır", () => {
+  let s = { ...emptyState(), settings: { ...emptyState().settings, trackingMode: "separate" } };
+  assert.equal(setupSteps(s).mode, "separate");
+  s = addAccount(s, { id: "k", name: "Kart", type: "credit", currency: "TRY" });
+  assert.deepEqual([setupSteps(s).bank, setupSteps(s).credit, setupSteps(s).extra], [false, true, false]);
+  s = addAccount(s, { id: "b", name: "Banka", type: "bank", currency: "TRY" });
+  s = addAccount(s, { id: "t", name: "Talimat", type: "bank", currency: "TRY" });
+  assert.deepEqual([setupSteps(s).bank, setupSteps(s).extra], [true, true]);
 });

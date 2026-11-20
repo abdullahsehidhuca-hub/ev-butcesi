@@ -47,6 +47,40 @@
         ".read": "$uid === auth.uid",
         ".write": "$uid === auth.uid"
       }
+    },
+    "events": {
+      "$eventId": {
+        ".read": "auth != null && data.child('members').child(auth.uid).exists()",
+        "meta": {
+          ".write": "auth != null && (data.exists() ? data.child('ownerUid').val() === auth.uid : newData.child('ownerUid').val() === auth.uid)",
+          ".validate": "newData.hasChildren(['ownerUid', 'name', 'kind', 'start', 'end']) && newData.child('name').isString() && newData.child('name').val().length <= 60 && (newData.child('kind').val() === 'split' || newData.child('kind').val() === 'trip') && newData.child('start').isString() && newData.child('end').isString() && (!newData.child('budget').exists() || (newData.child('budget').isNumber() && newData.child('budget').val() >= 0)) && (!data.exists() || newData.child('ownerUid').val() === data.child('ownerUid').val())"
+        },
+        "members": {
+          "$uid": {
+            ".write": "auth != null && (root.child('events').child($eventId).child('meta').child('ownerUid').val() === auth.uid || ($uid === auth.uid && (data.exists() ? !newData.exists() : (newData.child('code').isString() && root.child('eventInvites').child(newData.child('code').val() + '').child('eventId').val() === $eventId && root.child('eventInvites').child(newData.child('code').val() + '').child('expiresAt').val() > now))))",
+            ".validate": "newData.child('name').isString() && newData.child('name').val().length <= 40"
+          }
+        },
+        "expenses": {
+          "$id": {
+            ".write": "auth != null && root.child('events').child($eventId).child('members').child(auth.uid).exists() && (data.exists() ? (data.child('createdBy').val() === auth.uid || root.child('events').child($eventId).child('meta').child('ownerUid').val() === auth.uid) : newData.child('createdBy').val() === auth.uid)",
+            ".validate": "newData.child('amount').isNumber() && newData.child('amount').val() > 0 && newData.child('amount').val() <= 100000000000 && newData.child('date').isString() && (newData.child('method').val() === 'cash' || newData.child('method').val() === 'card') && root.child('events').child($eventId).child('members').child(newData.child('paidBy').val() + '').exists() && (!newData.child('note').exists() || (newData.child('note').isString() && newData.child('note').val().length <= 80)) && newData.child('createdBy').isString() && (!data.exists() || newData.child('createdBy').val() === data.child('createdBy').val())"
+          }
+        }
+      }
+    },
+    "eventInvites": {
+      "$code": {
+        ".read": "auth != null",
+        ".write": "auth != null && (data.exists() ? data.child('createdBy').val() === auth.uid : true)",
+        ".validate": "$code.matches(/^[0-9A-Z]{6}$/) && newData.child('eventId').isString() && newData.child('createdBy').val() === auth.uid && root.child('events').child(newData.child('eventId').val() + '').child('meta').child('ownerUid').val() === auth.uid && newData.child('expiresAt').isNumber() && newData.child('expiresAt').val() <= now + 604860000"
+      }
+    },
+    "userEvents": {
+      "$uid": {
+        ".read": "$uid === auth.uid",
+        ".write": "auth != null && $uid === auth.uid"
+      }
     }
   }
 }

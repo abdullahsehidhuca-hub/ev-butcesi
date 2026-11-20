@@ -127,3 +127,47 @@ test("davete yalnız e-postası doğrulanmış hesap katılır (adresi başkası
   await denied(join(false), "doğrulanmamış e-posta");
   await ok(join(true), "doğrulanmış e-posta");
 });
+
+// Kısa süreli bütçe (kamp, tatil): events/{id} ev bütçesinden ayrıdır; üyelik kodla, kodu yalnız kuran üretir.
+test("kısa süreli bütçe: kuran yazar, kodla katılan üye harcama ekler, yabancı göremez", async () => {
+  const EV = "ev1", OWN = "kamp_kuran", JOIN = "kamp_uye";
+  const meta = { ownerUid: OWN, name: "Kaş kampı", kind: "split", start: "2026-07-01", end: "2026-07-03" };
+  await denied(req("PUT", `events/${EV}/meta`, STRANGER, meta), "başkası adına etkinlik kurma");
+  await ok(req("PUT", `events/${EV}/meta`, OWN, meta), "etkinlik kurma");
+  await denied(req("PUT", `events/${EV}/meta`, STRANGER, { ...meta, ownerUid: STRANGER }), "etkinliği ele geçirme");
+  await denied(req("PUT", `events/${EV}/meta/kind`, OWN, "party"), "geçersiz tür");
+  await ok(req("PUT", `events/${EV}/members/${OWN}`, OWN, { name: "Abdullah" }), "kuran kendini üye yazar");
+  await ok(req("PUT", `userEvents/${OWN}/${EV}`, OWN, { name: "Kaş kampı", kind: "split" }), "kendi listesi");
+  await denied(req("PUT", `userEvents/${JOIN}/${EV}`, OWN, { name: "x" }), "başkasının listesine yazma");
+
+  await denied(req("PUT", "eventInvites/KMP234", STRANGER, { eventId: EV, createdBy: STRANGER, expiresAt: Date.now() + DAY }), "başkasının etkinliğine kod");
+  await denied(req("PUT", "eventInvites/KMP235", OWN, { eventId: EV, createdBy: OWN, expiresAt: Date.now() + 30 * DAY }), "30 gün geçerli kod");
+  await ok(req("PUT", "eventInvites/KMP234", OWN, { eventId: EV, createdBy: OWN, expiresAt: Date.now() + DAY }), "kod üretme");
+  await ok(req("GET", "eventInvites/KMP234", JOIN), "girişli kişi kodu okur");
+  await denied(req("GET", "eventInvites", JOIN), "kod listesi okunamaz");
+  await denied(req("PUT", "eventInvites/KMP234", STRANGER, { eventId: EV, createdBy: STRANGER, expiresAt: Date.now() + DAY }), "kodu ele geçirme");
+
+  await denied(req("GET", `events/${EV}`, JOIN), "katılmadan okuma");
+  await denied(req("PUT", `events/${EV}/members/${JOIN}`, JOIN, { name: "Can" }), "kodsuz katılma");
+  await denied(req("PUT", `events/${EV}/members/${JOIN}`, JOIN, { name: "Can", code: "ZZZ999" }), "yanlış kodla katılma");
+  await ok(req("PUT", `events/${EV}/members/${JOIN}`, JOIN, { name: "Can", code: "KMP234" }), "kodla katılma");
+  await ok(req("GET", `events/${EV}`, JOIN), "üye okur");
+
+  const exp = (by, extra = {}) => ({ amount: 45000, paidBy: by, method: "cash", category: "food", date: "2026-07-01", createdBy: by, ...extra });
+  await ok(req("PUT", `events/${EV}/expenses/x1`, JOIN, exp(JOIN)), "üye harcama ekler");
+  await ok(req("PUT", `events/${EV}/expenses/x2`, JOIN, exp(OWN, { createdBy: JOIN })), "başkasının ödediğini girer");
+  await denied(req("PUT", `events/${EV}/expenses/x3`, JOIN, exp(JOIN, { createdBy: OWN })), "başkası adına kayıt");
+  await denied(req("PUT", `events/${EV}/expenses/x4`, JOIN, exp(JOIN, { amount: -5 })), "eksi tutar");
+  await denied(req("PUT", `events/${EV}/expenses/x5`, JOIN, exp(STRANGER, { createdBy: JOIN })), "üye olmayan ödeyen");
+  await denied(req("PUT", `events/${EV}/expenses/x6`, STRANGER, exp(STRANGER)), "yabancı harcama");
+  await ok(req("PUT", `events/${EV}/expenses/y1`, OWN, exp(OWN)), "kuranın harcaması");
+  await denied(req("PUT", `events/${EV}/expenses/y1`, JOIN, null), "üye başkasının kaydını silemez");
+  await ok(req("PUT", `events/${EV}/expenses/x1`, OWN, null), "kuran her kaydı silebilir");
+  await ok(req("PUT", `events/${EV}/expenses/x2`, JOIN, null), "üye kendi kaydını siler");
+  await denied(req("PUT", `events/${EV}/meta/name`, JOIN, "Yeni ad"), "üye ayarları değiştiremez");
+  await ok(req("PUT", `events/${EV}/members/${JOIN}`, JOIN, null), "üye ayrılır");
+  await denied(req("GET", `events/${EV}`, JOIN), "ayrılan okuyamaz");
+
+  await ok(req("PUT", "eventInvites/EXP777", OWN, { eventId: EV, createdBy: OWN, expiresAt: Date.now() - 1000 }), "süresi dolmuş kod (deneme için)");
+  await denied(req("PUT", `events/${EV}/members/${STRANGER}`, STRANGER, { name: "X", code: "EXP777" }), "süresi dolan kodla katılınamaz");
+});

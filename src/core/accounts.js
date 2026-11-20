@@ -3,7 +3,8 @@
 // Bakiye yalnızca GERÇEKLEŞMİŞ hareketlerden hesaplanır; planlanan ama ödenmemiş
 // yükümlülükler bakiyeyi etkilemez. Her işlem hesabın kendi para birimindedir.
 // İstisna: kredi kartına bağlı taksit/abonelikler karttan kendiliğinden çekildiği için
-// dönem başında kart bakiyesine "otomatik" hareket olarak yazılır (ekstredeki gibi).
+// dönem başında kart bakiyesine "otomatik" hareket olarak yazılır (ekstredeki gibi). Banka hesabındaki
+// talimatlı ödemeler de ödeme gününde aynı şekilde yazılır.
 
 import { sum } from "./money.js";
 import { addTransaction, putRecord, ValidationError } from "./model.js";
@@ -34,20 +35,22 @@ function accountOf(state, accountId) {
   return a;
 }
 
-// Kredi kartında, "ödendi" olarak ayrıca girilmemiş taksit/abonelik çekimleri.
-// Çekim tarihi = dönemin ilk günü. Dönüş: işlem benzeri { type: "auto", ... } kayıtları.
+// Kredi kartında, "ödendi" olarak ayrıca girilmemiş taksit/abonelik çekimleri; çekim tarihi dönemin ilk günü.
+// Diğer hesaplarda yalnız talimatlı ödemeler (isAutopay); çekim tarihi ödeme günü, yoksa dönemin ilk günü.
+// Dönüş: işlem benzeri { type: "auto", ... } kayıtları.
 function autoCharges(state, a, upTo) {
-  if (a.type !== "credit" || !upTo) return [];
+  if (!upTo) return [];
+  const credit = a.type === "credit";
   const payDay = state.settings?.payDay || 1;
   const linked = new Set(Object.values(state.transactions).filter(t => t.obligationId).map(t => `${t.obligationId}|${t.period}`));
   const lastPeriod = periodOf(upTo, payDay);
   const out = [];
   for (const o of Object.values(state.obligations)) {
-    if (o.accountId !== a.id || o.kind === "income") continue;
-    for (let p = o.startPeriod; p <= lastPeriod; p = nextPeriod(p)) {
+    if (o.accountId !== a.id || o.kind === "income" || (!credit && !o.autopayFrom)) continue;
+    for (let p = credit ? o.startPeriod : o.autopayFrom; p <= lastPeriod; p = nextPeriod(p)) {
       const oc = occurrence(o, p, payDay);
       if (!oc || linked.has(`${o.id}|${p}`)) continue;
-      const date = periodRange(p, payDay).start;
+      const date = credit ? periodRange(p, payDay).start : oc.dueDate || periodRange(p, payDay).start;
       if (date > upTo || (a.opening?.date && date < a.opening.date)) continue;
       out.push({ id: `auto:${o.id}:${p}`, type: "auto", date, amount: oc.amount, currency: oc.currency, accountId: a.id, obligationId: o.id, period: p, note: o.name });
     }

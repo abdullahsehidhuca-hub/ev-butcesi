@@ -1,26 +1,63 @@
 // Özet (taslak C1): özet kart + hesaplar şeridi + tek liste. İleriye dönük uyarı listenin ilk satırıdır.
 // Ana rakam "kullanılabilir" tutardır: gelir − düzenli ödemeler − harcama − bütçelere ayrılan.
 // Dokununca bankadaki tutar, bloke ve bankayla karşılaştırma çekmecesi açılır (BakiyeSheet).
-// Kurulum bitene kadar 3 adımlı karşılama gösterilir (setupSteps).
+// Kurulum bitene kadar karşılama gösterilir: önce hesap düzeni sorulur, adımlar düzene göre değişir (setupSteps).
 // Kredi kartı varsa altında tek satır "Kart blokesi" durur; dokununca kart kart döküm açılır (BlokeSheet).
 import { useState } from "react";
-import { pendingCarryover, formatUnits } from "../../core/index.js";
+import { pendingCarryover, formatUnits, balanceOf, nextAllowanceDate } from "../../core/index.js";
 import { Icon, Tile, DateBadge, Avatar, Check } from "../components/ui.jsx";
 import { overview, upcoming, recent, forecast, paymentsView, accountsView, balanceView, closeCandidate, categoryName, periodLabel, fmt, fmtNum, dayNum, monthShort, monthLong, setupSteps } from "../selectors.js";
 
-function Welcome({ state, open, onDone }) {
+// Hesap düzeni: karşılamada ilk hesaptan önce sorulur; yalnız kurulum adımlarını belirler.
+const MODES = [
+  { id: "single", title: "Tek hesap", sub: "Her şey maaş hesabımdan çıkar", icon: "wallet", color: "blue" },
+  { id: "cards", title: "Kartlarımı da izlerim", sub: "Önerilen · kart harcaması karta yazılır, ekstreyi ayda bir ödersiniz", icon: "card", color: "pink", primary: true },
+  { id: "separate", title: "Her hesabı ayrı izlerim", sub: "Talimat hesabı, konfor kartı gibi hesapları bankayla karşılaştırırsınız", icon: "repeat", color: "teal" }
+];
+
+function ModeChoice({ onMode }) {
+  return (
+    <>
+      <header className="stack gap2" style={{ padding: "0 4px" }}>
+        <h1 className="t-title" style={{ margin: 0 }}>Paranızı nasıl takip edersiniz?</h1>
+        <span className="t-sub">Sonradan istediğiniz hesabı ekleyebilirsiniz.</span>
+      </header>
+      <section className="list" aria-label="Hesap düzeni" style={{ "--inset": "64px" }}>
+        {MODES.map(m => (
+          <button key={m.id} type="button" className="li" onClick={() => onMode(m.id)}>
+            <Tile icon={m.icon} color={m.color} solid={m.primary} />
+            <span className="stack grow gap2">
+              <span className="t-body b">{m.title}</span>
+              <span className="t-meta">{m.sub}</span>
+            </span>
+            <Icon name="chev" size={14} style={{ color: "var(--label3)" }} />
+          </button>
+        ))}
+      </section>
+    </>
+  );
+}
+
+function Welcome({ state, open, onDone, onMode }) {
   const st = setupSteps(state);
+  // Düzen seçilmeden hesap eklenmişse (eski kurulum) tek hesap adımları gösterilir.
+  const mode = st.mode || (st.account || !onMode ? "single" : null);
+  if (!mode) return <ModeChoice onMode={onMode} />;
+  const single = mode === "single";
+  const later = st.bank ? null : "Önce ana hesabı ekleyin";
   const steps = [
-    { title: "Banka hesabı ve bugünkü bakiye", sub: "Kredi kartlarını da buradan eklersiniz", icon: "wallet", color: "blue", sheet: { name: "account" }, on: true, done: st.account },
-    { title: "Maaş ve maaş günü", sub: st.account ? "Bütçe ayı maaş gününden başlar" : "Önce bir hesap ekleyin", icon: "cash", color: "green", sheet: { name: "obligation", kind: "income" }, on: st.account, done: st.income },
-    { title: "Kira, fatura gibi sabit ödemeler", sub: st.account ? "Her ay kendiliğinden listelenir" : "Önce bir hesap ekleyin", icon: "repeat", color: "orange", sheet: { name: "obligation", kind: "fixed" }, on: st.account, done: st.fixed }
-  ];
-  const canStart = st.account && st.income;
+    { title: single ? "Maaş hesabı ve bugünkü bakiye" : "Ana hesap ve bugünkü bakiye", sub: single ? "Bütün ödemeler bu hesaptan düşer" : "Maaşın yattığı, ödemelerin çıktığı hesap", icon: "wallet", color: "blue", sheet: { name: "account", type: "bank" }, on: true, done: st.bank },
+    !single && { title: "Kredi kartları", sub: later || "Kart harcaması karta yazılır; ekstreyi ayda bir ödersiniz", icon: "card", color: "pink", sheet: { name: "account", type: "credit" }, on: st.bank, done: st.credit },
+    mode === "separate" && { title: "Talimat hesabı, konfor kartı", sub: later || "Bankayla karşılaştırmak istediğiniz diğer hesaplar", icon: "repeat", color: "teal", sheet: { name: "account", type: "bank" }, on: st.bank, done: st.extra },
+    { title: "Maaş ve maaş günü", sub: later || "Bütçe ayı maaş gününden başlar", icon: "cash", color: "green", sheet: { name: "obligation", kind: "income" }, on: st.bank, done: st.income },
+    { title: "Kira, fatura gibi sabit ödemeler", sub: later || "Talimatla ödenenler işaretlemeden düşer", icon: "repeat", color: "orange", sheet: { name: "obligation", kind: "fixed" }, on: st.bank, done: st.fixed }
+  ].filter(Boolean);
+  const canStart = st.bank && st.income;
   return (
     <>
       <header className="stack gap2" style={{ padding: "0 4px" }}>
         <h1 className="t-title" style={{ margin: 0 }}>Hoş geldiniz</h1>
-        <span className="t-sub">3 adımda başlayın; sonra her şey kendiliğinden hesaplanır.</span>
+        <span className="t-sub">Hesap ve maaşla başlayın; diğer adımları sonra da ekleyebilirsiniz.</span>
       </header>
       <section className="list" aria-label="Başlangıç adımları" style={{ "--inset": "64px" }}>
         {steps.map((s, i) => (
@@ -36,9 +73,10 @@ function Welcome({ state, open, onDone }) {
         ))}
       </section>
       {canStart && onDone && (
-        <button type="button" className="pill blue" style={{ justifyContent: "center", minHeight: 50, borderRadius: 14, fontSize: 17 }} onClick={onDone}>
-          {st.fixed ? "Başla" : "Sabit ödemeleri sonra ekleyeceğim, başla"}
-        </button>
+        <button type="button" className="pill blue" style={{ justifyContent: "center", minHeight: 50, borderRadius: 14, fontSize: 17 }} onClick={onDone}>Başla</button>
+      )}
+      {!st.account && onMode && (
+        <button type="button" className="t-sub c-blue" style={{ minHeight: 44, fontWeight: 500 }} onClick={() => onMode(null)}>Hesap düzenini değiştir</button>
       )}
     </>
   );
@@ -67,9 +105,28 @@ function Accounts({ state, today, onManage }) {
   );
 }
 
-export default function Ozet({ state, today, members = {}, overrides, open, onResolve, onPay, onOpenPayments, onOpenSettings, backupDue, onSetupDone }) {
+// Haftalık harçlık tanımlı hesaplar (konfor kartı gibi): bu hafta kalan tutar ve sonraki yükleme.
+function Allowances({ state, today }) {
+  const list = Object.values(state.accounts).filter(a => a.allowance && !a.archived);
+  if (!list.length) return null;
+  return (
+    <section className="stack gap2" aria-label="Haftalık harçlık" style={{ padding: "0 4px" }}>
+      {list.map(a => {
+        const left = balanceOf(state, a.id, today);
+        const next = nextAllowanceDate(a, today);
+        return (
+          <p key={a.id} className="t-meta" style={{ margin: 0 }}>
+            <b>{a.name}:</b> bu hafta <span className={`num${left < 0 ? " c-red" : ""}`}>{fmt(left)}</span> kaldı · {dayNum(next)} {monthShort(next)} günü {fmt(a.allowance.amount)} yüklenir
+          </p>
+        );
+      })}
+    </section>
+  );
+}
+
+export default function Ozet({ state, today, members = {}, overrides, open, onResolve, onPay, onOpenPayments, onOpenSettings, backupDue, onSetupDone, onSetupMode, reconcileReminder, funding = [] }) {
   const [list, setList] = useState("upcoming");
-  if (setupSteps(state).show) return <Welcome state={state} open={open} onDone={onSetupDone} />;
+  if (setupSteps(state).show) return <Welcome state={state} open={open} onDone={onSetupDone} onMode={onSetupMode} />;
 
   const o = overview(state, today);
   const fc = forecast(state, today, { overrides });
@@ -125,6 +182,28 @@ export default function Ozet({ state, today, members = {}, overrides, open, onRe
           <span className="row" style={{ gap: 16, flexWrap: "wrap" }}>
             <button type="button" className="v3-link" style={{ padding: 0 }} onClick={backupDue.onBackup}>Şimdi yedek indir</button>
             <button type="button" className="v3-link" style={{ padding: 0 }} onClick={backupDue.onSnooze}>Yarın hatırlat</button>
+          </span>
+        </div>
+      )}
+
+      {funding.map(n => (
+        <div key={n.key} className="v3-alert" role="status">
+          <strong>{n.name} için bu dönem {fmt(n.amount)} gerekiyor</strong>
+          Talimatlı ödemeler bu hesaptan çekilir. Ana hesaptan aktarılsın mı?
+          <span className="row" style={{ gap: 16, flexWrap: "wrap" }}>
+            <button type="button" className="v3-link" style={{ padding: 0 }} onClick={n.onFund}>{fmt(n.amount)} aktar</button>
+            <button type="button" className="v3-link" style={{ padding: 0 }} onClick={n.onSkip}>Bu dönem aktarmayacağım</button>
+          </span>
+        </div>
+      ))}
+
+      {reconcileReminder && (
+        <div className="v3-alert" role="status">
+          <strong>Bankayla karşılaştırma zamanı</strong>
+          {reconcileReminder.names} için bankadaki rakamı yazın. Fark varsa hangi kayıtlara bakacağınızı gösteririz.
+          <span className="row" style={{ gap: 16, flexWrap: "wrap" }}>
+            <button type="button" className="v3-link" style={{ padding: 0 }} onClick={() => open({ name: "balance" })}>Şimdi karşılaştır</button>
+            <button type="button" className="v3-link" style={{ padding: 0 }} onClick={reconcileReminder.onSnooze}>3 gün sonra hatırlat</button>
           </span>
         </div>
       )}
@@ -192,6 +271,7 @@ export default function Ozet({ state, today, members = {}, overrides, open, onRe
       </section>
 
       <Accounts state={state} today={today} onManage={() => open({ name: "savings" })} />
+      <Allowances state={state} today={today} />
 
       <div className="seg" role="group" aria-label="Liste">
         <button type="button" aria-pressed={list === "upcoming"} onClick={() => setList("upcoming")}>Yaklaşan · {up.length}</button>
@@ -218,7 +298,7 @@ export default function Ozet({ state, today, members = {}, overrides, open, onRe
                 <Tile icon={it.icon} color={it.color} />
                 <span className="stack grow gap2">
                   <span className="t-body ellipsis">{it.name}</span>
-                  <span className="t-meta ellipsis">{income ? (it.date < today ? "Alındı mı?" : `Gelir · ${daysText(today, it.date)}`) : it.auto ? (it.total ? `Taksit ${it.index}/${it.total} · otomatik` : "Karttan otomatik") : it.type === "card" ? "Ekstre · son ödeme" : daysText(today, it.date)}</span>
+                  <span className="t-meta ellipsis">{income ? (it.date < today ? "Alındı mı?" : `Gelir · ${daysText(today, it.date)}`) : it.auto ? (it.total ? `Taksit ${it.index}/${it.total} · otomatik` : it.bankAuto ? "Banka talimatı" : "Karttan otomatik") : it.type === "card" ? "Ekstre · son ödeme" : daysText(today, it.date)}</span>
                 </span>
                 <span className={`num t-body b${income ? " c-green" : ""}`}>{income ? "+" : ""}{fmt(it.auto ? it.amount : it.open)}</span>
                 {it.auto ? <span className="auto-tag">oto</span> : <Check on={false} onClick={() => onPay(it)} label={`${it.name} ${income ? "alındı" : "ödendi"} olarak işaretle`} />}

@@ -6,6 +6,7 @@ import { Tile, Icon } from "../components/ui.jsx";
 import { balanceOf, amountFor, periodOf, payMethodsOf } from "../../core/index.js";
 import { fmt, mainAccountId, savingsView } from "../selectors.js";
 import { globalModeAt } from "./KartOdemeSheet.jsx";
+import { TEST_TOOLS } from "../testTools.js";
 
 const THEMES = [["system", "Sistem"], ["light", "Açık"], ["dark", "Koyu"]];
 const KIND = { fixed: "Sabit ödeme", installment: "Taksit", debt: "Borç", income: "Gelir" };
@@ -156,6 +157,9 @@ export default function Ayarlar({ state, today, open, theme, onTheme, backup, cl
             sub={cloud.familyId === cloud.user.uid ? "Üye davet edin: davet kodu oluşturup gönderin" : "Hesabı kimlerle paylaştığınızı görün"}
             value={Object.keys(members).length || null} onClick={() => open({ name: "family" })} />
         )}
+        {cloud?.user && (
+          <Row icon="cal" color="orange" title="Kısa süreli bütçeler" sub="Kamp, tatil, gezi gibi; ev bütçesinden ayrı" onClick={() => open({ name: "events" })} />
+        )}
         {backup && <>
           <Row icon="export" color="green" title="Yedek indir" sub="Tüm verileriniz tek dosyada (JSON)" onClick={backup.exportJson} />
           <Row icon="repeat" color="orange" title="Yedekten geri yükle" sub={cloud?.status === "synced" ? "v3 ya da eski uygulama yedeği; aile hesabındaki verinin yerine geçer, önce sorar" : "v3 ya da eski uygulama yedeği; bu cihazdaki verinin yerine geçer, önce sorar"} onClick={() => fileRef.current?.click()} />
@@ -171,6 +175,15 @@ export default function Ayarlar({ state, today, open, theme, onTheme, backup, cl
           <span className="t-cap">Hesap</span>
           <section className="list" style={group} aria-label="Hesap">
             <Row icon="login" color="gray" title="Hesaptan çık" sub={cloud.user.email ? `${cloud.user.email} ile giriş yapıldı` : null} danger onClick={onLogOut} />
+          </section>
+        </>
+      )}
+
+      {TEST_TOOLS && (
+        <>
+          <span className="t-cap">Test</span>
+          <section className="list" style={group} aria-label="Test">
+            <Row icon="spark" color="gray" title="Test ekranları" sub="Ekranları örnek veriyle, baştan açın · yalnız test sürümünde görünür" href="/?test" />
           </section>
         </>
       )}

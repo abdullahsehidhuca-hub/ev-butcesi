@@ -3,7 +3,7 @@
 
 import { toBase, sum } from "./money.js";
 import { periodOf, prevPeriod, nextPeriod, addPeriods } from "./period.js";
-import { occurrencesIn } from "./schedule.js";
+import { occurrencesIn, isAutopay } from "./schedule.js";
 import { addObligation, skipObligation, ValidationError } from "./model.js";
 import { statementsDueIn, statementCharges } from "./cardStatement.js";
 import { cardBudget } from "./cardBudget.js";
@@ -55,10 +55,11 @@ function liveSummary(state, period, rates) {
   // Kredi kartına bağlı gider kalemleri (taksit, abonelik) karttan kendiliğinden çekilir:
   // "ödendi" işareti beklenmez, açık sayılmaz ve ay kapatmada devredilmez (çift sayım olurdu).
   // Kartın kendisi bankadan ödenir; o ödeme cards bölümünde izlenir.
+  // Banka hesabındaki talimatlı ödeme (autopayFrom) de o dönemden itibaren aynı şekilde kendiliğinden düşer.
   const items = occurrencesIn(state, period).map(oc => {
     const planned = base(oc.amount, oc.currency);
     const paid = paidBy[oc.obligationId] || 0;
-    const auto = oc.kind !== "income" && state.accounts[oc.accountId]?.type === "credit";
+    const auto = oc.kind !== "income" && (state.accounts[oc.accountId]?.type === "credit" || isAutopay(state.obligations[oc.obligationId], period));
     const settled = auto || finalBy.has(oc.obligationId);
     const open = settled ? 0 : Math.max(0, planned - paid);
     const deferred = auto && deferredOb.has(oc.obligationId);

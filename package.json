@@ -16,6 +16,7 @@
     "ios:sync": "npm run build && cap sync ios",
     "ios:sim": "node scripts/ios-simulator.mjs",
     "ios:cihaz": "node scripts/ios-cihaz.mjs",
+    "ios:canli": "node scripts/ios-canli.mjs",
     "ios:open": "cap open ios",
     "ios:testflight": "node scripts/ios-testflight.mjs",
     "android:sync": "npm run build && cap sync android",

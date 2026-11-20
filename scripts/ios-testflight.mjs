@@ -47,9 +47,10 @@ const auth = ascKey
   : [];
 const signHint = "İmza sorunu ise: Xcode > Settings > Accounts'ta Apple Developer hesabınız ekli ve oturumu açık olmalı.";
 
-// 1) Web paketi ve Capacitor eşitlemesi.
+// 1) Web paketi ve Capacitor eşitlemesi. Test ekranları (Ayarlar › Test ekranları, src/v3/testTools.js) bu derlemede
+// açıktır: derleme yalnız iç test içindir, App Store'a gönderilemez.
 if (!noBuild) {
-  run("npm", ["run", "build"]);
+  run("npm", ["run", "build"], { env: { ...process.env, VITE_TEST_ARACLARI: "1" } });
   run("npx", ["cap", "sync", "ios"]);
 }
 

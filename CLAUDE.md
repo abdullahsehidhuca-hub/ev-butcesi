@@ -13,6 +13,17 @@ gerekçesiyle güncelle ve Abdullah’a bildir.
 
 Yeni hesap motoru `src/core/` altındadır ve `npm test` ile doğrulanır.
 
+## Test ve Dağıtım (20 Kasım 2026 kararı)
+
+- Uygulama kodunu değiştiren her iş, testler ve derleme geçtikten sonra `npm run ios:testflight` ile
+  TestFlight'a yüklenerek biter; bunun için ayrıca onay istenmez. Abdullah iPhone'da TestFlight ile dener.
+  Simülatör ve emülatör yalnız istenirse açılır (Mac'te çok kasıyor).
+- Hızlı deneme: `npm run ios:canli` iPhone'daki uygulamayı Mac'teki geliştirme sunucusuna bağlar, kod
+  değişince ekran kendiliğinden yenilenir. Kapatmak: `npm run ios:canli -- --durdur`.
+- Ekran seçici: Ayarlar › Test ekranları (`/?test`). Yalnız geliştirmede ve TestFlight derlemesinde görünür
+  (`src/v3/testTools.js`). Bir ekranı düzelttiğinde gerekiyorsa `src/v3/testScenarios.js`'e senaryo ekle ve
+  özette hangi satırın açılacağını yaz (ör. "Test ekranları › Kurulumu baştan başlat").
+
 ## Kullanıcı Profili
 
 Abdullah bir eczacıdır, Konya'da yaşar, eşi Kadriye ile birlikte aile

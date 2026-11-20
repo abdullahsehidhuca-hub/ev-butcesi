@@ -4,12 +4,12 @@
 // bu dönemden sonrasını etkiler; kapanmış dönemlerin rakamı değişmez.
 import { useState } from "react";
 import {
-  addAccount, deleteAccount, putRecord, validateObligation, ValidationError, changeObligationAmount, endObligation,
+  addAccount, deleteAccount, putRecord, setAllowance, validateObligation, ValidationError, changeObligationAmount, endObligation,
   deleteObligation, archiveCategory, deleteCategory, amountFor, lastPeriod
 } from "../../core/index.js";
 import { Sheet, Field, SelectField, Chips, Actions, ErrorText, Form } from "../ui.jsx";
 import { parseAmount, amountText, symbolOf } from "../format.js";
-import { parseBalance } from "../Sheets.jsx";
+import { parseBalance, useAllowance, allowanceValue, allowanceSources, AllowanceFields } from "../Sheets.jsx";
 import { periodLabel, prevPeriod, fmt, dayNum, monthShort } from "../selectors.js";
 
 const byName = (a, b) => a.name.localeCompare(b.name, "tr");
@@ -38,7 +38,7 @@ function DeleteRow({ label, onDelete }) {
 }
 
 // ── Hesap ──────────────────────────────────────────────────────────────────────
-export function AccountEditSheet({ state, commit, onClose, id, onToast }) {
+export function AccountEditSheet({ state, commit, onClose, id, onToast, today }) {
   const a = state.accounts[id];
   const used = Object.values(state.transactions).some(t => t.accountId === id || t.toAccountId === id)
     || Object.values(state.obligations).some(o => o.accountId === id);
@@ -51,9 +51,11 @@ export function AccountEditSheet({ state, commit, onClose, id, onToast }) {
   const [minRate, setMinRate] = useState(a?.minPaymentRate ? String(Math.round(a.minPaymentRate * 100)) : "");
   const [isDefault, setIsDefault] = useState(state.settings.defaultAccountId === id);
   const [errors, setErrors] = useState(null);
+  const allowance = useAllowance(state, a);
   if (!a) return <Sheet title="Hesap" onClose={onClose}><p className="v3-sheet-text">Hesap bulunamadı.</p></Sheet>;
   const credit = type === "credit";
   const prepaid = type === "prepaid";
+  const sources = credit ? [] : allowanceSources(state, id, prepaid ? "TRY" : currency);
 
   const save = () => {
     if (!name.trim()) return setErrors(["hesabın adını yazın"]);
@@ -61,6 +63,8 @@ export function AccountEditSheet({ state, commit, onClose, id, onToast }) {
     if (a.opening && minor == null) return setErrors(["açılış bakiyesini rakamla yazın, örneğin 48.265,44"]);
     const rate = minRate.trim() ? Number(minRate.replace(",", ".")) : null;
     if (credit && minRate.trim() && !(rate > 0 && rate <= 100)) return setErrors(["asgari ödeme oranı 1-100 arası yüzde olmalı"]);
+    const weekly = sources.length ? allowanceValue(allowance, sources) : null;
+    if (weekly?.error) return setErrors([weekly.error]);
     const errs = commit(s => {
       const rec = { ...a, name: name.trim(), type, currency: prepaid ? "TRY" : currency };
       if (a.opening) rec.opening = { ...a.opening, balance: credit ? -Math.abs(minor) : minor };
@@ -74,6 +78,7 @@ export function AccountEditSheet({ state, commit, onClose, id, onToast }) {
       const def = next.settings.defaultAccountId;
       if (isDefault && !credit && !prepaid) next = { ...next, settings: { ...next.settings, defaultAccountId: id } };
       else if (def === id && (!isDefault || credit || prepaid)) next = { ...next, settings: { ...next.settings, defaultAccountId: null } };
+      if (weekly || next.accounts[id].allowance) next = setAllowance(next, id, weekly, today);
       return next;
     });
     if (errs) setErrors(errs); else { onToast?.("Hesap güncellendi"); onClose(); }
@@ -108,6 +113,7 @@ export function AccountEditSheet({ state, commit, onClose, id, onToast }) {
           <Field label="Asgari ödeme oranı (%)" value={minRate} onChange={setMinRate} inputMode="decimal" placeholder="Örn: 40"
             hint="Eksiye düşme uyarısındaki 'asgari öde' seçeneği için. Boş bırakılabilir." />
         </>}
+        <AllowanceFields f={allowance} sources={sources} />
         {!credit && !prepaid && (
           <label className="v3-check">
             <input type="checkbox" checked={isDefault} onChange={e => setIsDefault(e.target.checked)} />
@@ -186,11 +192,14 @@ export function ObligationEditSheet({ state, commit, onClose, id, period, onToas
   const [accountId, setAccountId] = useState(o?.accountId || "");
   const [categoryId, setCategoryId] = useState(o?.categoryId || "");
   const [day, setDay] = useState(o?.dueDay ? String(o.dueDay) : "");
+  const [autopay, setAutopay] = useState(!!o?.autopayFrom);
   const [endAt, setEndAt] = useState("prev");
   const [errors, setErrors] = useState(null);
   if (!o) return <Sheet title="Düzenli ödeme" onClose={onClose}><p className="v3-sheet-text">Kayıt bulunamadı.</p></Sheet>;
 
   const unit = symbolOf(state.accounts[accountId]?.currency || o.currency);
+  // Talimat yalnız kart dışı hesaptaki giderde sorulur; kartta ödeme zaten kendiliğinden düşer.
+  const canAutopay = !income && state.accounts[accountId]?.type !== "credit";
   const last = lastPeriod(o);
   const info = [
     KIND[o.kind],
@@ -207,6 +216,9 @@ export function ObligationEditSheet({ state, commit, onClose, id, period, onToas
     const errs = commit(s => {
       const acc = s.accounts[accountId];
       let rec = { ...o, name: name.trim(), accountId, currency: acc?.currency || o.currency, categoryId: income ? null : categoryId || null, dueDay: day ? Number(day) : null };
+      // Talimat açıldığı dönemden itibaren geçerlidir; geçmiş dönemlerin bakiyesi değişmez.
+      if (autopay && canAutopay) rec = { ...rec, autopayFrom: o.autopayFrom || period };
+      else { const { autopayFrom, ...rest } = rec; rec = rest; }
       if (minor !== current) {
         // Ödeme girilmemişse ana tutar düzelir; girildiyse önceki dönemler korunur, bu dönemden sonrası değişir.
         if (!payments.length) rec = { ...rec, amount: minor, changes: [] };
@@ -246,6 +258,12 @@ export function ObligationEditSheet({ state, commit, onClose, id, period, onToas
         <SelectField label={income ? "Yattığı hesap" : "Ödendiği hesap"} value={accountId} onChange={setAccountId} options={accounts.map(a => ({ value: a.id, label: a.name }))} />
         {!income && <SelectField label="Kategori" value={categoryId} onChange={setCategoryId} options={categories} />}
         <SelectField label={income ? "Ayın kaçında yatıyor?" : "Son ödeme günü"} value={day} onChange={setDay} options={DAYS_OPT} />
+        {canAutopay && (
+          <label className="v3-check">
+            <input type="checkbox" checked={autopay} onChange={e => setAutopay(e.target.checked)} />
+            <span>Otomatik talimatla ödeniyor: ödeme günü gelince işaretlemeden düşer</span>
+          </label>
+        )}
         <ErrorText errors={errors} />
         <Actions submit="Kaydet" onCancel={onClose} />
       </Form>

@@ -36,7 +36,10 @@ Uygulama Capacitor ile iOS kabuğunda çalışır; web sitesi yayını yoktur.
 
 - `npm run ios:sim`: iOS Simülatöründe açar
 - `npm run ios:cihaz`: eşleşmiş iPhone'a doğrudan kurar (aynı Wi-Fi, Geliştirici Modu açık)
+- `npm run ios:canli`: iPhone'daki uygulamayı Mac'teki geliştirme sunucusuna bağlar; kod değişince ekran kendiliğinden yenilenir (kapatmak: `npm run ios:canli -- --durdur`)
 - `npm run ios:testflight`: TestFlight iç teste yükler (Apple incelemesi gerekmez)
+
+Geliştirmede ve TestFlight derlemesinde Ayarlar › Test ekranları (`/?test`) ekranları örnek veriyle, baştan açar; gerçek veriye dokunmaz.
 
 Ayrıntılar: `docs/IOS-SIMULATOR-VE-TESTFLIGHT-REHBERI.md`.
 

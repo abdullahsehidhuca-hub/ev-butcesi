@@ -40,6 +40,7 @@ public/ocr/
 
 # Simülatör ekran görüntüleri ve Xcode türev çıktıları
 logs/*.png
+logs/canli-sunucu.pid
 ios/App/build/
 ios/App/DerivedData/
 

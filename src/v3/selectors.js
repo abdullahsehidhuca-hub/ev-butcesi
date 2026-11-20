@@ -46,7 +46,9 @@ export function paymentsOf(state, period) {
     icon: state.obligations[i.obligationId]?.icon || state.categories[i.categoryId]?.icon || "more",
     color: state.obligations[i.obligationId]?.color || state.categories[i.categoryId]?.color || "gray",
     date: i.dueDate || start, amount: i.paid && i.settled ? i.paid : i.planned,
-    paid: i.settled && !i.auto, auto: i.auto, open: i.open, index: i.index, total: i.total
+    paid: i.settled && !i.auto, auto: i.auto, open: i.open, index: i.index, total: i.total,
+    // Otomatik çekimin kaynağı: kredi kartı (ekstreye yazılır) ya da banka hesabındaki talimat.
+    bankAuto: !!i.auto && state.accounts[i.accountId]?.type !== "credit"
   }));
   for (const c of s.cards) {
     if (c.charges <= 0) continue;
@@ -80,11 +82,14 @@ export function forecast(state, today, { days = 35, overrides = {} } = {}) {
   let p = periodOf(today, payDay);
   for (let i = 0; i < 3; i++, p = nextPeriod(p)) {
     for (const it of paymentsOf(state, p)) {
-      if (it.paid || it.auto || it.open <= 0) continue;
+      // Talimatlı banka ödemesi açık sayılmaz ama ödeme gününe kadar bakiyeden düşmemiştir; tahmine girer.
+      const bankAuto = it.auto && state.accounts[it.accountId]?.type !== "credit"
+        && !Object.values(state.transactions).some(t => t.obligationId === it.obligationId && t.period === p);
+      if (it.paid || (it.auto && !bankAuto) || (!bankAuto && it.open <= 0)) continue;
       if (!(it.type === "card" || it.accountId === acc)) continue;
       // overrides[key]: yeni tarih ("YYYY-MM-DD") ya da bölünmüş plan [{ date, amount }].
       const ov = overrides[it.key];
-      const parts = Array.isArray(ov) ? ov : [{ date: ov || it.date, amount: it.open }];
+      const parts = Array.isArray(ov) ? ov : [{ date: ov || it.date, amount: bankAuto ? it.amount : it.open }];
       for (const part of parts) {
         if (part.date <= today || part.date > until) continue;
         events.push({ date: part.date, delta: -part.amount, label: it.name, key: it.key });
@@ -141,14 +146,21 @@ export function resolveOptions(state, today, overrides = {}) {
 }
 
 // Kurulum adımları: hesap, maaş, sabit ödemeler. Karşılama ilk hesap eklenince kaybolmaz;
-// üç adım tamamlanana ya da kullanıcı "Başla" diyene (settings.setupDone) kadar kalır. Sabit ödeme isteğe bağlıdır.
+// adımlar tamamlanana ya da kullanıcı "Başla" diyene (settings.setupDone) kadar kalır. Sabit ödeme isteğe bağlıdır.
+// mode: karşılamada seçilen hesap düzeni (settings.trackingMode): single · cards · separate. Yalnız adımları belirler.
+// bank: kart dışı hesap var mı; extra: ana hesap dışında kart dışı hesap (talimat hesabı, konfor kartı) var mı.
 export function setupSteps(state) {
   const obligations = Object.values(state.obligations);
-  const account = Object.keys(state.accounts).length > 0;
+  const accounts = Object.values(state.accounts);
+  const account = accounts.length > 0;
+  const bank = accounts.some(a => a.type !== "credit");
+  const credit = accounts.some(a => a.type === "credit");
+  const extra = accounts.filter(a => a.type !== "credit").length > 1;
   const income = obligations.some(o => o.kind === "income");
   const fixed = obligations.some(o => o.kind !== "income");
+  const mode = state.settings?.trackingMode || null;
   // Hesap yoksa (ör. hepsi silindiyse) özet hesaplanamaz; karşılama her durumda gösterilir.
-  return { account, income, fixed, show: !account || (!state.settings?.setupDone && !(income && fixed)) };
+  return { account, bank, credit, extra, income, fixed, mode, show: !account || (!state.settings?.setupDone && !(income && fixed)) };
 }
 
 // Özet ekranı: serbest para, tempo, maaş çubuğu.
