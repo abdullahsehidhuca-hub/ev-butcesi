@@ -9,6 +9,7 @@ import {
   assetsSummary, goalProgress, emergencyFundTarget, ratesOf, addInstallmentPurchase, splitInstallments, installmentLoad,
   payMethodsOf, accountPayMethod, DEFAULT_PAY_METHODS
 } from "../core/index.js";
+import { isExpenseAccount, groupOf } from "./setupGuide.js";
 
 const payDayOf = state => state.settings?.payDay || 1;
 const DAY = 86400000;
@@ -147,20 +148,25 @@ export function resolveOptions(state, today, overrides = {}) {
 
 // Kurulum adımları: hesap, maaş, sabit ödemeler. Karşılama ilk hesap eklenince kaybolmaz;
 // adımlar tamamlanana ya da kullanıcı "Başla" diyene (settings.setupDone) kadar kalır. Sabit ödeme isteğe bağlıdır.
-// mode: karşılamada seçilen hesap düzeni (settings.trackingMode): single · cards · separate. Yalnız adımları belirler.
-// bank: kart dışı hesap var mı; extra: ana hesap dışında kart dışı hesap (talimat hesabı, konfor kartı) var mı.
+// mode: karşılamada seçilen hesap düzeni (settings.trackingMode): single · cards. Yalnız adımları belirler; eski "separate" seçimi cards sayılır.
+// bank: gelir tarafında kart dışı hesap var mı; extra: gider takibi hesabı var mı ya da kullanıcı "ayrı hesap açmayacağım"
+// dedi mi (settings.noExpenseAccounts); catFixed / catVariable: sabit ve değişken gider kategorisi var mı.
 export function setupSteps(state) {
   const obligations = Object.values(state.obligations);
   const accounts = Object.values(state.accounts);
+  const categories = Object.values(state.categories || {}).filter(c => !c.archived);
   const account = accounts.length > 0;
-  const bank = accounts.some(a => a.type !== "credit");
+  const bank = accounts.some(a => a.type !== "credit" && !isExpenseAccount(a));
   const credit = accounts.some(a => a.type === "credit");
-  const extra = accounts.filter(a => a.type !== "credit").length > 1;
+  const extra = accounts.some(isExpenseAccount) || !!state.settings?.noExpenseAccounts;
+  const catFixed = categories.some(c => groupOf(c) === "fixed");
+  const catVariable = categories.some(c => groupOf(c) === "variable");
   const income = obligations.some(o => o.kind === "income");
   const fixed = obligations.some(o => o.kind !== "income");
-  const mode = state.settings?.trackingMode || null;
+  const saved = state.settings?.trackingMode || null;
+  const mode = saved === "separate" ? "cards" : saved;
   // Hesap yoksa (ör. hepsi silindiyse) özet hesaplanamaz; karşılama her durumda gösterilir.
-  return { account, bank, credit, extra, income, fixed, mode, show: !account || (!state.settings?.setupDone && !(income && fixed)) };
+  return { account, bank, credit, extra, catFixed, catVariable, income, fixed, mode, show: !account || (!state.settings?.setupDone && !(income && fixed)) };
 }
 
 // Özet ekranı: serbest para, tempo, maaş çubuğu.

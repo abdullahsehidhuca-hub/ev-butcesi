@@ -6,13 +6,15 @@ import { Sheet, Field, SelectField, ErrorText, Actions, Form } from "../ui.jsx";
 import { parseAmount } from "../format.js";
 import { newId } from "../store.js";
 import { mainAccountId, fmt } from "../selectors.js";
+import { isExpenseAccount } from "../setupGuide.js";
 
 const UNIT = { TRY: "₺", USD: "$", EUR: "€", XAU: "gram" };
 
 export default function BirikimAktarSheet({ state, commit, onClose, today, onToast }) {
   const main = mainAccountId(state);
   const rates = ratesOf(state);
-  const accounts = Object.values(state.accounts).filter(a => a.type !== "credit" && !a.archived).sort((a, b) => a.name.localeCompare(b.name, "tr"));
+  // Gider takibi hesapları (otomatik ödemeler, kart aktarımları, günlük harcama) birikim aktarımında listelenmez.
+  const accounts = Object.values(state.accounts).filter(a => a.type !== "credit" && !isExpenseAccount(a) && !a.archived).sort((a, b) => a.name.localeCompare(b.name, "tr"));
   const goalAccounts = new Set(Object.values(state.goals || {}).flatMap(g => g.accountIds || []));
   // Önce hedefe bağlı birikim hesapları, sonra diğerleri.
   const sources = accounts.filter(a => a.id !== main).sort((a, b) => goalAccounts.has(b.id) - goalAccounts.has(a.id));

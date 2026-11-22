@@ -1,6 +1,7 @@
 // Ortak küçük bileşenler: ikon, renkli ikon karesi, tarih, kişi rozeti, sekme çubuğu, alttan açılan sayfa.
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { dayNum, monthShort } from "../selectors.js";
+import { useKeyboardInset } from "../ui.jsx";
 
 const PATHS = {
   home: <path d="M4 11l8-7 8 7v9h-5v-6H9v6H4z" />,
@@ -20,6 +21,9 @@ const PATHS = {
   chev: <path d="M9 5l7 7-7 7" />,
   login: <path d="M10 17l5-5-5-5M15 12H3M14 4h5a1 1 0 011 1v14a1 1 0 01-1 1h-5" />,
   back: <path d="M15 5l-7 7 7 7" />,
+  pencil: <path d="M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4" />,
+  close: <path d="M6 6l12 12M18 6L6 18" />,
+  info: <><circle cx="12" cy="12" r="9" /><path d="M12 11v6M12 7.5v.5" /></>,
   wallet: <><path d="M4 7h14a2 2 0 012 2v9a2 2 0 01-2 2H4z" /><path d="M4 7l11-3v3" /><circle cx="16" cy="13.5" r="1.3" fill="currentColor" /></>,
   cash: <><rect x="3" y="6" width="18" height="12" rx="2" /><circle cx="12" cy="12" r="2.6" /></>,
   ozet: <><path d="M4 13a8 8 0 1116 0" /><path d="M12 13l3.5-4" /><path d="M4 18h16" /></>,
@@ -94,6 +98,8 @@ export function TabBar({ tab, onTab, onAdd }) {
 
 // Alttan açılan sayfa. Arka plana dokunmak ya da Escape kapatır; kapanınca odak açan düğmeye döner.
 export function Sheet({ onClose, children, label }) {
+  const wrap = useRef(null);
+  useKeyboardInset(wrap);
   useEffect(() => {
     const opener = document.activeElement;
     return () => opener?.focus?.();
@@ -104,7 +110,7 @@ export function Sheet({ onClose, children, label }) {
     return () => window.removeEventListener("keydown", k);
   }, [onClose]);
   return (
-    <div className="sheet-wrap" onClick={e => e.target === e.currentTarget && onClose()}>
+    <div className="sheet-wrap" ref={wrap} onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="sheet" role="dialog" aria-modal="true" aria-label={label}>
         <span className="grabber" aria-hidden="true" />
         {children}

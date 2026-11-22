@@ -9,6 +9,7 @@ import {
 import { parseAmount, amountText, fmtMoney, symbolOf } from "./format.js";
 import { newId } from "./store.js";
 import { Sheet, Field, SelectField, Chips, Actions, ErrorText, Form } from "./ui.jsx";
+import { INCOME_PURPOSES, EXPENSE_PURPOSES, CATEGORY_GROUPS, LATER_NOTE, purposeOf, isExpenseAccount, isSavingsAccount, groupOf } from "./setupGuide.js";
 
 const AMOUNT_HINT = "tutarı girin, örneğin 345 ya da 1.250,50";
 const byName = (a, b) => a.name.localeCompare(b.name, "tr");
@@ -177,13 +178,20 @@ export function AllowanceFields({ f, sources }) {
     </>}
   </>;
 }
-// Yükleme kaynağı olabilecek hesaplar: kart dışı, aynı para birimli, kendisi hariç.
-export const allowanceSources = (state, id, currency) => Object.values(state.accounts).filter(a => a.id !== id && a.type !== "credit" && !a.archived && a.currency === currency).sort(byName);
+// Yükleme kaynağı olabilecek hesaplar: gelir tarafında, kart dışı, aynı para birimli, kendisi hariç.
+export const allowanceSources = (state, id, currency) => Object.values(state.accounts).filter(a => a.id !== id && a.type !== "credit" && !isExpenseAccount(a) && !a.archived && a.currency === currency).sort(byName);
 
 // initialType ve payMethod: hızlı harcamadaki "Konfor kartı ekle" gibi düğmelerden gelir; yeni hesap o düğmede görünür.
-export function AccountSheet({ state, commit, onClose, today, initialType, payMethod }) {
+// side: kurulumdan açılınca hesabın tarafı. "income" maaş · birikim · nakit, "expense" otomatik ödemeler · kredi kartı
+// aktarımları · günlük harcama türlerini sunar ve hesaba purpose yazar; "card" yalnız kredi kartı ekler.
+const PLACEHOLDER = { salary: "Örn: Ziraat maaş hesabı", savings: "Örn: Vadeli birikim", cash: "Örn: Cüzdan", autopay: "Örn: Talimat hesabı", cardTransfer: "Örn: Kart ödeme hesabı", daily: "Örn: Konfor kartı" };
+export function AccountSheet({ state, commit, onClose, today, initialType, payMethod, side }) {
+  const purposes = side === "income" ? INCOME_PURPOSES : side === "expense" ? EXPENSE_PURPOSES : null;
+  const [purpose, setPurpose] = useState(purposes?.[0].value || null);
+  const [typesInfo, setTypesInfo] = useState(false);
   const [name, setName] = useState("");
-  const [type, setType] = useState(ACCOUNT_TYPES.some(t => t.value === initialType) ? initialType : "bank");
+  const [pickedType, setType] = useState(side === "card" ? "credit" : ACCOUNT_TYPES.some(t => t.value === initialType) ? initialType : "bank");
+  const type = purposes ? purposeOf(purpose).type : pickedType;
   const [currency, setCurrency] = useState("TRY");
   const [balance, setBalance] = useState("");
   const [cutoff, setCutoff] = useState("");
@@ -192,7 +200,8 @@ export function AccountSheet({ state, commit, onClose, today, initialType, payMe
   const allowance = useAllowance(state, null);
   const credit = type === "credit";
   const prepaid = type === "prepaid";
-  const sources = credit ? [] : allowanceSources(state, null, prepaid ? "TRY" : currency);
+  // Haftalık yükleme kurulumda yalnız günlük harcama hesabında sorulur.
+  const sources = credit || (purposes && purpose !== "daily") ? [] : allowanceSources(state, null, prepaid ? "TRY" : currency);
 
   const save = () => {
     if (!name.trim()) return setErrors(["hesabın adını yazın"]);
@@ -204,8 +213,8 @@ export function AccountSheet({ state, commit, onClose, today, initialType, payMe
       const id = newId();
       // Kartta borç eksi bakiye olarak tutulur (çekirdek kuralı); kesim ve son ödeme günü isteğe bağlıdır.
       const card = credit ? { ...(cutoff ? { cutoffDay: Number(cutoff) } : {}), ...(payment ? { paymentDay: Number(payment) } : {}) } : {};
-      let next = addAccount(s, { id, name: name.trim(), type, currency: prepaid ? "TRY" : currency, ...card, ...(payMethod ? { payMethod } : {}), opening: { date: today, balance: credit ? -Math.abs(minor) : minor } });
-      if (!s.settings.defaultAccountId && !credit && !prepaid) next = { ...next, settings: { ...next.settings, defaultAccountId: id } };
+      let next = addAccount(s, { id, name: name.trim(), type, currency: prepaid ? "TRY" : currency, ...card, ...(purposes ? { purpose } : {}), ...(payMethod ? { payMethod } : {}), opening: { date: today, balance: credit ? -Math.abs(minor) : minor } });
+      if (!s.settings.defaultAccountId && !credit && !prepaid && side !== "expense" && purpose !== "savings") next = { ...next, settings: { ...next.settings, defaultAccountId: id } };
       if (weekly) next = setAllowance(next, id, weekly, today);
       return next;
     });
@@ -213,10 +222,22 @@ export function AccountSheet({ state, commit, onClose, today, initialType, payMe
   };
 
   return (
-    <Sheet title="Hesap ekle" onClose={onClose}>
+    <Sheet title={side === "card" ? "Kredi kartı ekle" : side === "expense" ? "Gider takibi hesabı ekle" : "Hesap ekle"} onClose={onClose}>
+      {typesInfo ? (
+        <>
+          <dl className="setup-types">
+            {purposes.map(t => <div key={t.value}><dt className="t-sub b">{t.label}</dt><dd className="t-meta">{t.info}</dd></div>)}
+          </dl>
+          <div className="v3-actions"><button type="button" className="v3-submit" style={{ flex: 1 }} onClick={() => setTypesInfo(false)}>Tamam</button></div>
+        </>
+      ) : (
       <Form onSubmit={save}>
-        <Field label="Hesap adı" value={name} onChange={setName} placeholder={credit ? "Örn: Bonus kart" : prepaid ? "Örn: Konfor kartı, Multinet" : "Örn: Maaş hesabı"} />
-        <Chips label="Tür" value={type} options={ACCOUNT_TYPES} onChange={v => v && setType(v)} wrap />
+        <Field label="Hesap adı" value={name} onChange={setName} placeholder={purposes ? PLACEHOLDER[purpose] : credit ? "Örn: Bonus kart" : prepaid ? "Örn: Konfor kartı, Multinet" : "Örn: Maaş hesabı"} />
+        {purposes ? <>
+          <Chips label="Tür" value={purpose} options={purposes} onChange={v => v && setPurpose(v)} wrap />
+          <p className="v3-hint" style={{ margin: "-8px 4px 4px" }}>{purposeOf(purpose).info}</p>
+          <button type="button" className="v3-link" style={{ minHeight: 44, margin: "0 4px 8px" }} onClick={() => setTypesInfo(true)}>Türler hakkında bilgi</button>
+        </> : side !== "card" && <Chips label="Tür" value={type} options={ACCOUNT_TYPES} onChange={v => v && setType(v)} wrap />}
         {prepaid && <p className="v3-hint" style={{ margin: "-8px 4px 14px" }}>Konfor kartı, yemek kartı (Setcard, Multinet) gibi önceden para yüklenen kart.</p>}
         {!credit && !prepaid && <SelectField label="Para birimi" value={currency} onChange={setCurrency} options={CURRENCY_OPTIONS} />}
         <Field label={credit ? "Güncel kart borcu" : "Bugünkü bakiye"} value={balance} onChange={setBalance} inputMode="decimal" placeholder="0,00"
@@ -226,15 +247,19 @@ export function AccountSheet({ state, commit, onClose, today, initialType, payMe
           <SelectField label="Son ödeme günü" value={payment} onChange={setPayment} options={DAYS_OPT} hint="Boş bırakılırsa kesimden 10 gün sonrası sayılır." />
         </>}
         <AllowanceFields f={allowance} sources={sources} />
+        {side && <p className="v3-hint" style={{ margin: "0 4px 12px" }}>{LATER_NOTE}</p>}
         <ErrorText errors={errors} />
         <Actions submit="Kaydet" onCancel={onClose} />
       </Form>
+      )}
     </Sheet>
   );
 }
 
 // ── Kategori ───────────────────────────────────────────────────────────────────
-export function CategorySheet({ commit, onClose }) {
+// group: kurulumdan gelen dal ("fixed" sabit gider, "variable" değişken gider); verilmezse Ayarlar'dan eklenir ve seçilir.
+export function CategorySheet({ commit, onClose, group: initialGroup }) {
+  const [group, setGroup] = useState(initialGroup || "variable");
   const [name, setName] = useState("");
   const [budget, setBudget] = useState("");
   const [keywords, setKeywords] = useState("");
@@ -245,17 +270,20 @@ export function CategorySheet({ commit, onClose }) {
     const limit = budget.trim() ? parseAmount(budget) : null;
     if (budget.trim() && !limit) return setErrors(["aylık bütçeyi rakamla yazın ya da boş bırakın"]);
     const words = keywords.split(",").map(w => w.trim()).filter(Boolean);
-    const errs = commit(s => putRecord(s, "categories", { id: newId(), name: name.trim(), budget: limit, keywords: words }));
+    const errs = commit(s => putRecord(s, "categories", { id: newId(), name: name.trim(), group, budget: limit, keywords: words }));
     if (errs) setErrors(errs); else onClose();
   };
+  const fixed = group === "fixed";
 
   return (
-    <Sheet title="Kategori ekle" onClose={onClose}>
+    <Sheet title={initialGroup ? (fixed ? "Sabit gider kategorisi ekle" : "Değişken gider kategorisi ekle") : "Kategori ekle"} onClose={onClose}>
       <Form onSubmit={save}>
-        <Field label="Kategori adı" value={name} onChange={setName} placeholder="Örn: Market" />
+        <Field label="Kategori adı" value={name} onChange={setName} placeholder={fixed ? "Örn: Kira, faturalar" : "Örn: Market"} />
+        {!initialGroup && <Chips label="Dal" value={group} options={CATEGORY_GROUPS} onChange={v => v && setGroup(v)} />}
         <Field label="Aylık bütçe (isteğe bağlı)" value={budget} onChange={setBudget} inputMode="decimal" placeholder="Örn: 5.000" />
         <Field label="Tanıma kelimeleri (isteğe bağlı)" value={keywords} onChange={setKeywords} placeholder="Örn: migros, bim, a101"
           hint="Açıklamada bu kelimeler geçerse kategori kendiliğinden seçilir. Virgülle ayırın." />
+        {initialGroup && <p className="v3-hint" style={{ margin: "0 4px 12px" }}>{LATER_NOTE}</p>}
         <ErrorText errors={errors} />
         <Actions submit="Kaydet" onCancel={onClose} />
       </Form>
@@ -266,15 +294,17 @@ export function CategorySheet({ commit, onClose }) {
 // ── Düzenli ödeme ya da gelir (her ay) ─────────────────────────────────────────
 // İlk maaş, henüz işlem yokken girilirse bütçe ayı maaş gününden başlar (settings.payDay).
 // Talimatlı ödeme (autopayFrom) banka hesabında işaret beklemeden düşer; kredi kartında zaten kendiliğindendir.
-export function ObligationSheet({ state, commit, onClose, kind, period, today }) {
+// Gelir yalnız gelir tarafındaki hesaplara yatar; gider birikim hesabından ödenmez. Sabit ödemede önce sabit gider
+// kategorileri listelenir. setup: kurulumdan açıldı (düzenleme notu gösterilir).
+export function ObligationSheet({ state, commit, onClose, kind, period, today, setup }) {
   const income = kind === "income";
-  // Maaş kredi kartına yatmaz; gelir için kart listelenmez.
-  const accounts = Object.values(state.accounts).filter(a => !income || a.type !== "credit");
+  const accounts = Object.values(state.accounts).filter(a => income ? a.type !== "credit" && !isExpenseAccount(a) : !isSavingsAccount(a));
+  const fixedCats = activeCategories(state).filter(c => groupOf(c) === "fixed");
   const firstSalary = income && !Object.values(state.obligations).some(o => o.kind === "income") && !Object.keys(state.transactions).length;
   const [name, setName] = useState(income ? "Maaş" : "");
   const [amount, setAmount] = useState("");
   const [accountId, setAccountId] = useState(accounts.find(a => a.id === state.settings.defaultAccountId)?.id || accounts[0]?.id || "");
-  const [categoryId, setCategoryId] = useState("");
+  const [categoryId, setCategoryId] = useState(!income && kind === "fixed" ? fixedCats[0]?.id || "" : "");
   const [day, setDay] = useState(String(income ? state.settings.payDay : 1));
   const [autopay, setAutopay] = useState(false);
   const [errors, setErrors] = useState(null);
@@ -303,7 +333,8 @@ export function ObligationSheet({ state, commit, onClose, kind, period, today })
         <Field label="Aylık tutar" value={amount} onChange={setAmount} inputMode="decimal" placeholder="0,00"
           hint={income ? null : "Fatura gibi değişen tutarlarda ortalamayı yazın; öderken gerçeğini girersiniz."} />
         <SelectField label={income ? "Yattığı hesap" : "Ödendiği hesap"} value={accountId} onChange={setAccountId} options={accountOptions(accounts)} />
-        {!income && <SelectField label="Kategori" value={categoryId} onChange={setCategoryId} options={categoryOptions(state)} />}
+        {!income && <SelectField label="Kategori" value={categoryId} onChange={setCategoryId}
+          options={kind === "fixed" ? [{ value: "", label: "Kategorisiz" }, ...fixedCats.map(c => ({ value: c.id, label: c.name })), ...activeCategories(state).filter(c => groupOf(c) !== "fixed").map(c => ({ value: c.id, label: `${c.name} · değişken` }))] : categoryOptions(state)} />}
         <SelectField label={income ? "Ayın kaçında yatıyor?" : "Son ödeme günü"} value={day} onChange={setDay} options={DAYS}
           hint={firstSalary ? "Bütçe ayınız bu günden başlar ve her ay tekrarlanır." : "Bu dönemden başlayarak her ay tekrarlanır."} />
         {canAutopay && (
@@ -312,6 +343,7 @@ export function ObligationSheet({ state, commit, onClose, kind, period, today })
             <span>Otomatik talimatla ödeniyor: ödeme günü gelince işaretlemeden düşer</span>
           </label>
         )}
+        {setup && <p className="v3-hint" style={{ margin: "0 4px 12px" }}>{LATER_NOTE}</p>}
         <ErrorText errors={errors} />
         <Actions submit="Kaydet" onCancel={onClose} />
       </Form>

@@ -58,6 +58,13 @@ input { font: inherit; color: inherit; }
 .li { display: flex; align-items: center; gap: 12px; padding: 11px 16px; min-height: 58px; width: 100%; text-align: left; position: relative; }
 .li + .li::before { content: ""; position: absolute; top: 0; right: 0; left: var(--inset, 114px); height: .5px; background: var(--sep); }
 .li:active { background: var(--fill2); }
+.setup-act { width: 44px; height: 44px; margin: -6px -8px -6px 0; flex: none; display: grid; place-items: center; color: var(--blue); border-radius: 10px; }
+.setup-check { width: 22px; height: 30px; flex: none; margin: 0 4px; accent-color: var(--blue-t, var(--blue)); }
+.setup-act.c-red { color: var(--red); }
+.setup-act:active { background: var(--fill2); }
+.setup-types { margin: 0 4px 14px; display: flex; flex-direction: column; gap: 10px; }
+.setup-types dd { margin: 2px 0 0; }
+.v3-overlay, .sheet-wrap { transition: padding-bottom .2s ease; }
 
 .date { width: 34px; display: flex; flex-direction: column; align-items: center; line-height: 1.05; flex: none; }
 .date .d { font-family: var(--font-num); font-weight: 700; font-size: 19px; }
@@ -169,6 +176,11 @@ a.li:active { background: var(--fill2); }
 .v3-sheet { width: 100%; max-height: 94%; overflow-y: auto; background: var(--bg); border-radius: 30px 30px 0 0; padding: 8px 16px calc(env(safe-area-inset-bottom, 0px) + 16px); animation: up .25s cubic-bezier(.2,.8,.2,1); }
 .v3-handle { width: 36px; height: 5px; border-radius: 3px; background: var(--gray4); margin: 0 auto 14px; }
 .v3-sheet-title { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; margin: 0 4px 14px; }
+.v3-sheet-grip { touch-action: none; }
+.v3-sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: -12px 0 14px; min-height: 44px; }
+.v3-sheet-head .v3-sheet-title { flex: 1; min-width: 0; margin: 0 4px; }
+.v3-sheet-x { min-height: 44px; padding: 0 4px; flex: none; font-size: 17px; color: var(--blue-t, var(--blue)); }
+.v3-sheet { transition: transform .18s ease; }
 .v3-sheet-text { font-size: var(--fs-sub); color: var(--label2); line-height: 1.5; margin: 0 4px 14px; }
 .v3-field { margin: 0 0 14px; border: 0; padding: 0; min-width: 0; }
 .v3-label { font-size: var(--fs-meta); font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--label2); margin: 0 4px 6px; display: block; padding: 0; }

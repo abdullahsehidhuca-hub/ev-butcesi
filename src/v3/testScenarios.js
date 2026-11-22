@@ -12,7 +12,7 @@ const fresh = mode => {
   const s = emptyState();
   return mode ? { ...s, settings: { ...s.settings, trackingMode: mode } } : s;
 };
-const withBank = s => addAccount(s, { id: "ana", name: "Ana hesap", type: "bank", currency: "TRY", opening: { date: TODAY, balance: TL(25000) } });
+const withBank = s => addAccount(s, { id: "ana", name: "Bütçe hesabı", type: "bank", currency: "TRY", purpose: "salary", opening: { date: TODAY, balance: TL(25000) } });
 const withCard = s => addAccount(s, { id: "kart", name: "Bonus kart", type: "credit", currency: "TRY", cutoffDay: 28, paymentDay: 10, opening: { date: TODAY, balance: 0 } });
 const withIncome = s => addObligation(s, { id: "maas", kind: "income", name: "Maaş", amount: TL(60000), currency: "TRY", accountId: "ana", startPeriod: "2026-11", dueDay: 15 });
 
@@ -22,7 +22,7 @@ function separateFull() {
   let s = dolu.buildSampleState();
   s = { ...s, settings: { ...s.settings, trackingMode: "separate", setupDone: true } };
   s = addAccount(s, { id: "konfor", name: "Konfor kartı", type: "prepaid", currency: "TRY", opening: { date: "2026-11-15", balance: 0 } });
-  s = addAccount(s, { id: "talimat", name: "Talimat hesabı", type: "bank", currency: "TRY", opening: { date: "2026-11-15", balance: 0 } });
+  s = addAccount(s, { id: "talimat", name: "Talimat hesabı", type: "bank", currency: "TRY", purpose: "autopay", opening: { date: "2026-11-15", balance: 0 } });
   s = setAllowance(s, "konfor", { amount: TL(1500), weekday: 1, fromAccountId: "maas" }, "2026-11-15");
   return addObligation(s, { id: "internet", kind: "fixed", name: "İnternet", icon: "repeat", color: "teal", amount: TL(650), currency: "TRY",
     accountId: "talimat", categoryId: "fatura", startPeriod: "2026-01", dueDay: 28, autopayFrom: "2026-11" });
@@ -30,9 +30,9 @@ function separateFull() {
 
 export const SCENARIOS = [
   { id: "duzen", group: "Hoş geldiniz", title: "Kurulumu baştan başlat", sub: "Hiçbir şey girilmemiş yeni bütçe · hesap düzeni sorusu", build: () => fresh(null) },
-  { id: "tek", group: "Hoş geldiniz", title: "Tek hesap", sub: "Düzen seçilmiş, adımların hepsi boş", build: () => fresh("single") },
-  { id: "kart", group: "Hoş geldiniz", title: "Kartlarımı da izlerim · kredi kartı adımı", sub: "Ana hesap eklenmiş", build: () => withBank(fresh("cards")) },
-  { id: "ayri", group: "Hoş geldiniz", title: "Her hesabı ayrı izlerim · talimat hesabı adımı", sub: "Ana hesap ve kredi kartı eklenmiş", build: () => withCard(withBank(fresh("separate"))) },
+  { id: "tek", group: "Hoş geldiniz", title: "Tek bir hesaptan takip ederim", sub: "Düzen seçilmiş, adımların hepsi boş", build: () => fresh("single") },
+  { id: "kart", group: "Hoş geldiniz", title: "Hesaplarımı kategorilendiririm · kredi kartı adımı", sub: "Bütçe hesabı eklenmiş", build: () => withBank(fresh("cards")) },
+  { id: "ayri", group: "Hoş geldiniz", title: "Hesaplarımı kategorilendiririm · gider takibi adımı", sub: "Bütçe hesabı ve kredi kartı eklenmiş; satırlarda kalem ve ×", build: () => withCard(withBank(fresh("cards"))) },
   { id: "basla", group: "Hoş geldiniz", title: "Başla düğmesi", sub: "Hesap ve maaş eklenmiş, sabit ödeme yok", build: () => withIncome(withCard(withBank(fresh("cards")))) },
   { id: "dolu", group: "Özet", title: "Dolu özet", sub: "İki kişilik örnek bütçe, ay ortası", build: dolu.buildSampleState },
   { id: "harclik", group: "Özet", title: "Haftalık harçlık ve talimat aktarımı", sub: "Konfor kartı, talimat hesabı, bankayla karşılaştırma hatırlatması", build: separateFull },

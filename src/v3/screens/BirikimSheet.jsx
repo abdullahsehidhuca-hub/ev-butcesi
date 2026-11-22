@@ -8,6 +8,7 @@ import { Tile, Icon } from "../components/ui.jsx";
 import { parseAmount, amountText } from "../format.js";
 import { newId } from "../store.js";
 import { savingsView, fmt } from "../selectors.js";
+import { isExpenseAccount } from "../setupGuide.js";
 
 const UNIT = { TRY: "₺", USD: "$", EUR: "€", XAU: "gram" };
 const RATE_CURRENCIES = [["USD", "Dolar", "1 $ kaç ₺"], ["EUR", "Euro", "1 € kaç ₺"], ["XAU", "Gram altın", "1 gram kaç ₺"]];
@@ -143,7 +144,8 @@ export default function BirikimSheet({ state, commit, onClose, today, open, onTo
 // mode "buy": TL hesabından birikim hesabına; "sell": birikim hesabından TL hesabına. Yön değiştirilebilir.
 export function AlSatSheet({ state, commit, onClose, today, mode = "buy", onToast }) {
   const v = savingsView(state, today);
-  const accounts = Object.values(state.accounts).filter(a => a.type !== "credit" && !a.archived).sort((a, b) => a.name.localeCompare(b.name, "tr"));
+  // Birikim aktarımında yalnız gelir tarafındaki hesaplar (maaş, birikim, nakit) listelenir.
+  const accounts = Object.values(state.accounts).filter(a => a.type !== "credit" && !isExpenseAccount(a) && !a.archived).sort((a, b) => a.name.localeCompare(b.name, "tr"));
   const savings = accounts.filter(a => a.id !== v.main);
   const [fromAccountId, setFrom] = useState(mode === "buy" ? v.main : savings[0]?.id || "");
   const [toAccountId, setTo] = useState(mode === "buy" ? savings[0]?.id || "" : v.main);

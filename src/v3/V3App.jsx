@@ -3,7 +3,7 @@
 // Veri durumunu tutar, sekmeler arası geçişi ve kullanıcı işlemlerini çekirdek fonksiyonlarına iletir.
 
 import React, { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
-import { computePeriod, periodOf, quickAdd, today, ValidationError, dueAllowances, applyAllowances, fundingNeeds, reconcileDue, eventCategoryName } from "../core/index.js";
+import { computePeriod, periodOf, quickAdd, today, ValidationError, dueAllowances, applyAllowances, fundingNeeds, reconcileDue, eventCategoryName, deleteAccount, deleteObligation, deleteCategory } from "../core/index.js";
 import { loadState, saveState, loadPref, savePref, newId, exportBackup, parseBackup, transactionsCsv, STORAGE_KEY, PLAN_KEY, THEME_KEY, BACKUP_KEY, CLOUD_BASE_KEY, LOCAL_COPY_KEY, SAMPLE_KEY, SAMPLE_PLAN_KEY } from "./store.js";
 import { useCloud } from "./useCloud.js";
 import { stampCreatedBy } from "./sync.js";
@@ -30,6 +30,7 @@ import DanismanSheet from "./screens/DanismanSheet.jsx";
 import Giris from "./screens/Giris.jsx";
 import { AccountEditSheet, CategoryEditSheet, ObligationEditSheet } from "./screens/TanimSheet.jsx";
 import OdemeSecenekSheet from "./screens/OdemeSecenekSheet.jsx";
+import KurulumBilgiSheet from "./screens/KurulumBilgiSheet.jsx";
 import { PaySheet, AccountSheet, CategorySheet, ObligationSheet, InstallmentSheet, PayDaySheet, ResetSheet } from "./Sheets.jsx";
 import "./v3.css";
 
@@ -246,6 +247,21 @@ export default function V3App({ sample }) {
     catch { setToast("Çıkış yapılamadı; bağlantınızı kontrol edip yeniden deneyin"); }
   };
   const props = { state, commit, onClose: close, today: todayDate, period, members, aiUser };
+  // Karşılamadaki satırın × düğmesi: hesap, kategori ya da düzenli kalem onay sorulup silinir. Maaşı ya da ödemesi bağlı
+  // hesap, ödemesi bağlı kategori silinmez.
+  const setupRemove = (kind, id) => {
+    const rec = kind === "account" ? state.accounts[id] : kind === "category" ? state.categories[id] : state.obligations[id];
+    if (!rec || !confirm(`${rec.name} silinsin mi?`)) return;
+    const errs = commit(s => {
+      if (kind === "category") return deleteCategory(s, id);
+      if (kind !== "account") return deleteObligation(s, id);
+      const next = deleteAccount(s, id);
+      return next.settings.defaultAccountId === id ? { ...next, settings: { ...next.settings, defaultAccountId: null } } : next;
+    });
+    setToast(!errs ? `${rec.name} silindi` : kind === "account" ? "Bu hesaba bağlı maaş ya da ödeme var; önce onları silin"
+      : kind === "category" ? "Bu kategoriye bağlı ödeme var; önce ödemeyi silin" : errs[0].charAt(0).toLocaleUpperCase("tr-TR") + errs[0].slice(1));
+  };
+  const setupSetting = (key, value) => commit(s => ({ ...s, settings: { ...s.settings, [key]: value } }));
   const loginDone = msg => { setSheet(null); setToast(msg); cloud.reload(); };
 
   // İlk açılış ekranı: oturum ya da aile yoksa uygulama yerine giriş / kayıt / davet kodu seçenekleri gösterilir.
@@ -313,6 +329,7 @@ export default function V3App({ sample }) {
         {tab === "home" && <Ozet {...common} onResolve={() => setSheet({ name: "resolve" })} onPay={pay} onOpenPayments={() => go("plan")} onOpenSettings={() => go("settings")} backupDue={backupDue}
           onSetupDone={() => commit(s => ({ ...s, settings: { ...s.settings, setupDone: true } }))}
           onSetupMode={mode => commit(s => ({ ...s, settings: { ...s.settings, trackingMode: mode } }))}
+          onSetupRemove={setupRemove} onSetupSetting={setupSetting}
           reconcileReminder={reconcileReminder} funding={funding} />}
         {tab === "report" && <Rapor {...common} onCategory={(categoryId, p) => setSheet({ name: "txlist", filter: { period: p, categoryId } })}
           onGoal={id => setSheet({ name: "goal", id })} onSavings={() => setSheet({ name: "savings" })} onAdvisor={() => setSheet({ name: "advisor" })} />}
@@ -348,10 +365,11 @@ export default function V3App({ sample }) {
       {sheet?.name === "move" && <AlSatSheet {...props} mode={sheet.mode} onToast={setToast} onClose={closeTo(sheet.back)} />}
       {sheet?.name === "goal" && <HedefSheet {...props} key={sheet.id || "new"} id={sheet.id} preset={sheet.preset} onToast={setToast} onClose={closeTo(sheet.back)} />}
       {sheet?.name === "trial" && <TaksitDeneSheet {...props} onSave={initial => setSheet({ name: "installment", initial })} />}
-      {sheet?.name === "account" && <AccountSheet {...props} initialType={sheet.type} payMethod={sheet.payMethod} onClose={closeTo(sheet.back)} />}
+      {sheet?.name === "account" && <AccountSheet {...props} key={sheet.side || "account"} initialType={sheet.type} payMethod={sheet.payMethod} side={sheet.side} onClose={closeTo(sheet.back)} />}
+      {sheet?.name === "setupInfo" && <KurulumBilgiSheet key={sheet.topic} topic={sheet.topic} onClose={close} onNext={sheet.next ? () => setSheet(sheet.next) : null} />}
       {sheet?.name === "payMethods" && <OdemeSecenekSheet {...props} onToast={setToast} />}
-      {sheet?.name === "category" && <CategorySheet {...props} />}
-      {sheet?.name === "obligation" && <ObligationSheet {...props} kind={sheet.kind} />}
+      {sheet?.name === "category" && <CategorySheet {...props} key={sheet.group || "category"} group={sheet.group} />}
+      {sheet?.name === "obligation" && <ObligationSheet {...props} kind={sheet.kind} setup={sheet.setup} />}
       {sheet?.name === "accountEdit" && <AccountEditSheet {...props} key={sheet.id} id={sheet.id} onToast={setToast} />}
       {sheet?.name === "categoryEdit" && <CategoryEditSheet {...props} key={sheet.id} id={sheet.id} onToast={setToast} />}
       {sheet?.name === "obligationEdit" && <ObligationEditSheet {...props} key={sheet.id} id={sheet.id} onToast={setToast} />}

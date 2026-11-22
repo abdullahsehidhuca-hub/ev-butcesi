@@ -3,23 +3,24 @@
 // Dokununca bankadaki tutar, bloke ve bankayla karşılaştırma çekmecesi açılır (BakiyeSheet).
 // Kurulum bitene kadar karşılama gösterilir: önce hesap düzeni sorulur, adımlar düzene göre değişir (setupSteps).
 // Kredi kartı varsa altında tek satır "Kart blokesi" durur; dokununca kart kart döküm açılır (BlokeSheet).
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { pendingCarryover, formatUnits, balanceOf, nextAllowanceDate } from "../../core/index.js";
 import { Icon, Tile, DateBadge, Avatar, Check } from "../components/ui.jsx";
+import { LATER_NOTE, purposeOf, isExpenseAccount, groupOf } from "../setupGuide.js";
 import { overview, upcoming, recent, forecast, paymentsView, accountsView, balanceView, closeCandidate, categoryName, periodLabel, fmt, fmtNum, dayNum, monthShort, monthLong, setupSteps } from "../selectors.js";
 
 // Hesap düzeni: karşılamada ilk hesaptan önce sorulur; yalnız kurulum adımlarını belirler.
+// Eski "Her hesabı ayrı izlerim" (separate) seçimi kategorili düzenin içinde açılır (setupSteps).
 const MODES = [
-  { id: "single", title: "Tek hesap", sub: "Her şey maaş hesabımdan çıkar", icon: "wallet", color: "blue" },
-  { id: "cards", title: "Kartlarımı da izlerim", sub: "Önerilen · kart harcaması karta yazılır, ekstreyi ayda bir ödersiniz", icon: "card", color: "pink", primary: true },
-  { id: "separate", title: "Her hesabı ayrı izlerim", sub: "Talimat hesabı, konfor kartı gibi hesapları bankayla karşılaştırırsınız", icon: "repeat", color: "teal" }
+  { id: "single", title: "Tek bir hesaptan takip ederim", sub: "Tüm harcama ve birikim hareketleri aynı banka hesabımdan yapılır", icon: "wallet", color: "blue" },
+  { id: "cards", title: "Hesaplarımı kategorilendiririm", sub: "Önerilen · Kredi kartı harcamalarını, otomatik ödeme talimatlı vb. hareketleri farklı hesaplardan takip edersiniz; her ay başında uygulamada görünen tutarları ilgili hesaplara aktarırsınız", icon: "card", color: "pink", primary: true }
 ];
 
 function ModeChoice({ onMode }) {
   return (
     <>
       <header className="stack gap2" style={{ padding: "0 4px" }}>
-        <h1 className="t-title" style={{ margin: 0 }}>Paranızı nasıl takip edersiniz?</h1>
+        <h1 className="t-title" style={{ margin: 0 }}>Bütçenizi nasıl takip edersiniz?</h1>
         <span className="t-sub">Sonradan istediğiniz hesabı ekleyebilirsiniz.</span>
       </header>
       <section className="list" aria-label="Hesap düzeni" style={{ "--inset": "64px" }}>
@@ -38,39 +39,115 @@ function ModeChoice({ onMode }) {
   );
 }
 
-function Welcome({ state, open, onDone, onMode }) {
+// Kurulum adımları. Her adımın altında eklenen kayıtlar listelenir: kalem düzenleme çekmecesini açar, × onay sorup siler
+// (onRemove). Boş adıma dokununca önce bilgi penceresi (setupInfo) açılır, oradan ekleme çekmecesine geçilir; dolu adımın
+// başlığı yalnız bilgi penceresini açar, yeni kayıt altındaki "… ekle" satırıyla eklenir.
+function Welcome({ state, today, open, onDone, onMode, onRemove, onSetting }) {
   const st = setupSteps(state);
   // Düzen seçilmeden hesap eklenmişse (eski kurulum) tek hesap adımları gösterilir.
   const mode = st.mode || (st.account || !onMode ? "single" : null);
   if (!mode) return <ModeChoice onMode={onMode} />;
   const single = mode === "single";
-  const later = st.bank ? null : "Önce ana hesabı ekleyin";
+  const needBank = st.bank ? null : "Önce bütçe hesabını ekleyin";
+  const accounts = Object.values(state.accounts);
+  const categories = Object.values(state.categories).filter(c => !c.archived).sort((a, b) => a.name.localeCompare(b.name, "tr"));
+  const obligations = Object.values(state.obligations);
+  const money = (v, cur) => cur && cur !== "TRY" ? `${fmtNum(v)} ${cur}` : fmt(v);
+  const acc = a => ({ id: a.id, kind: "account", name: a.name, tag: a.id === state.settings.defaultAccountId ? "Bütçe hesabı" : purposeOf(a.purpose)?.label, value: money(balanceOf(state, a.id, today), a.currency) });
+  const ob = o => ({ id: o.id, kind: "obligation", name: o.name, tag: o.categoryId ? categoryName(state, o.categoryId) : null, value: money(o.amount, o.currency) });
+  const cat = c => ({ id: c.id, kind: "category", name: c.name, value: c.budget ? `${fmt(c.budget)} / ay` : "" });
+  const noExpense = !!state.settings.noExpenseAccounts;
   const steps = [
-    { title: single ? "Maaş hesabı ve bugünkü bakiye" : "Ana hesap ve bugünkü bakiye", sub: single ? "Bütün ödemeler bu hesaptan düşer" : "Maaşın yattığı, ödemelerin çıktığı hesap", icon: "wallet", color: "blue", sheet: { name: "account", type: "bank" }, on: true, done: st.bank },
-    !single && { title: "Kredi kartları", sub: later || "Kart harcaması karta yazılır; ekstreyi ayda bir ödersiniz", icon: "card", color: "pink", sheet: { name: "account", type: "credit" }, on: st.bank, done: st.credit },
-    mode === "separate" && { title: "Talimat hesabı, konfor kartı", sub: later || "Bankayla karşılaştırmak istediğiniz diğer hesaplar", icon: "repeat", color: "teal", sheet: { name: "account", type: "bank" }, on: st.bank, done: st.extra },
-    { title: "Maaş ve maaş günü", sub: later || "Bütçe ayı maaş gününden başlar", icon: "cash", color: "green", sheet: { name: "obligation", kind: "income" }, on: st.bank, done: st.income },
-    { title: "Kira, fatura gibi sabit ödemeler", sub: later || "Talimatla ödenenler işaretlemeden düşer", icon: "repeat", color: "orange", sheet: { name: "obligation", kind: "fixed" }, on: st.bank, done: st.fixed }
+    { id: "budget", title: "Bütçe hesabı ve bugünkü bakiye", sub: "Maaş ve diğer gelirlerinizi bu hesapta toplayın, bütçeniz bu hesaptan takip edilsin", icon: "wallet", color: "blue",
+      add: "Hesap ekle", sheet: { name: "account", side: "income" }, on: true, done: st.bank,
+      items: accounts.filter(a => a.type !== "credit" && !isExpenseAccount(a)).map(acc) },
+    !single && { id: "cards", title: "Kredi kartları", sub: needBank || "Her kartı ayrı ekleyin; kart harcaması kartın borcuna yazılır", icon: "card", color: "pink",
+      add: "Kart ekle", sheet: { name: "account", side: "card" }, on: st.bank, done: st.credit,
+      items: accounts.filter(a => a.type === "credit").map(acc) },
+    !single && { id: "expense", title: "Gider takibi hesapları", sub: needBank || "Otomatik ödemeler, kredi kartı aktarımları, günlük harcama · isteğe bağlı", icon: "repeat", color: "teal",
+      add: "Hesap ekle", sheet: { name: "account", side: "expense" }, on: st.bank && !noExpense, done: st.extra, skip: true,
+      items: accounts.filter(isExpenseAccount).map(acc) },
+    { id: "income", title: "Maaş ve diğer gelirler", sub: needBank || "Bütçe ayı ilk maaşın gününden başlar", icon: "cash", color: "green",
+      add: "Gelir ekle", sheet: { name: "obligation", kind: "income", setup: true }, on: st.bank, done: st.income,
+      items: obligations.filter(o => o.kind === "income").map(ob) },
+    { id: "categories", title: "Gider kategorileri", sub: "Sabit ve değişken giderler için ayrı kategoriler", icon: "tag", color: "indigo",
+      on: true, done: st.catFixed && st.catVariable, items: [],
+      groups: [
+        { id: "catFixed", title: "Sabit gider kategorileri", add: "Sabit gider kategorisi ekle", sheet: { name: "category", group: "fixed" }, items: categories.filter(c => groupOf(c) === "fixed").map(cat) },
+        { id: "catVariable", title: "Değişken gider kategorileri", add: "Değişken gider kategorisi ekle", sheet: { name: "category", group: "variable" }, items: categories.filter(c => groupOf(c) === "variable").map(cat) }
+      ] },
+    { id: "fixed", title: "Kira, fatura gibi sabit ödemeler", sub: needBank || (st.catFixed ? "Talimatla ödenenler işaretlemeden düşer" : "Önce sabit gider kategorisi ekleyin"), icon: "repeat", color: "orange",
+      add: "Ödeme ekle", sheet: { name: "obligation", kind: "fixed", setup: true }, on: st.bank && st.catFixed, done: st.fixed,
+      items: obligations.filter(o => o.kind !== "income").map(ob) }
   ].filter(Boolean);
   const canStart = st.bank && st.income;
+  // Adım başlığı ve ⓘ her zaman bilgi penceresini açar; adım boşsa pencerenin "Ekle" düğmesi ekleme çekmecesine geçer.
+  const info = (topic, next) => open({ name: "setupInfo", topic, next: next || null });
+  // Satırlar Ayarlar'daki liste düzenini izler: küçük renkli kare, ad ve alt satır, sağda tutar.
+  const rowStyle = { minHeight: 52, padding: "10px 16px" };
+  const itemRows = (items, icon, color) => items.map(it => (
+    <div key={it.id} className="li" style={rowStyle}>
+      <Tile icon={icon} color={color} small />
+      <span className="stack grow gap2" style={{ minWidth: 0 }}>
+        <span className="t-body ellipsis">{it.name}</span>
+        {it.tag && <span className="t-meta ellipsis">{it.tag}</span>}
+      </span>
+      {it.value && <span className={`t-body c-2 num${/^[-−]/.test(it.value) ? " c-red" : ""}`} style={{ whiteSpace: "nowrap" }}>{it.value}</span>}
+      <button type="button" className="setup-act" aria-label={`${it.name} düzelt`}
+        onClick={() => open({ name: `${it.kind}Edit`, id: it.id })}><Icon name="pencil" size={18} /></button>
+      {onRemove && <button type="button" className="setup-act c-red" aria-label={`${it.name} sil`} onClick={() => onRemove(it.kind, it.id)}><Icon name="close" size={18} /></button>}
+    </div>
+  ));
+  const addRow = (key, label, onClick) => (
+    <button key={key} type="button" className="li" style={rowStyle} onClick={onClick}>
+      <Tile icon="plus" color="blue" solid small />
+      <span className="t-body c-blue grow">{label}</span>
+    </button>
+  );
   return (
     <>
       <header className="stack gap2" style={{ padding: "0 4px" }}>
         <h1 className="t-title" style={{ margin: 0 }}>Hoş geldiniz</h1>
-        <span className="t-sub">Hesap ve maaşla başlayın; diğer adımları sonra da ekleyebilirsiniz.</span>
+        <span className="t-sub">Hesap ve maaşla başlayın. {LATER_NOTE}</span>
       </header>
       <section className="list" aria-label="Başlangıç adımları" style={{ "--inset": "64px" }}>
-        {steps.map((s, i) => (
-          <button key={s.title} type="button" className="li" disabled={!s.on} onClick={() => open(s.sheet)} style={{ opacity: s.on ? 1 : .55 }}
-            aria-label={`${i + 1}. ${s.title}${s.done ? ", eklendi. Bir tane daha ekle" : ""}`}>
-            <Tile icon={s.done ? "check" : s.icon} color={s.done ? "green" : s.color} />
-            <span className="stack grow gap2">
-              <span className="t-body b">{i + 1}. {s.title}</span>
-              <span className="t-meta">{s.done ? "Eklendi · bir tane daha eklemek için dokunun" : s.sub}</span>
-            </span>
-            {s.on && <Icon name={s.done ? "plus" : "chev"} size={14} style={{ color: "var(--label3)" }} />}
-          </button>
-        ))}
+        {steps.map((s, i) => {
+          const empty = !s.items.length && !s.groups;
+          const adds = s.on && empty;
+          return (
+            <Fragment key={s.id}>
+              <button type="button" className="li" disabled={!s.on && empty} style={{ opacity: s.on ? 1 : .55 }}
+                onClick={() => info(s.id, adds ? s.sheet : null)}
+                aria-label={`${i + 1}. ${s.title}${s.done ? ", eklendi" : ""}. ${adds ? "Bilgi ve ekle" : "Bilgi"}`}>
+                <Tile icon={s.done ? "check" : s.icon} color={s.done ? "green" : s.color} />
+                <span className="stack grow gap2">
+                  <span className="t-body b">{i + 1}. {s.title}</span>
+                  <span className="t-meta">{s.sub}</span>
+                </span>
+                <Icon name={adds ? "chev" : "info"} size={adds ? 14 : 20} style={{ color: adds ? "var(--label3)" : "var(--blue)", flex: "none" }} />
+              </button>
+              {itemRows(s.items, s.icon, s.color)}
+              {s.items.length > 0 && s.on && addRow(`${s.id}-add`, s.add, () => open(s.sheet))}
+              {s.skip && st.bank && !s.items.length && (
+                <label className="li" style={rowStyle}>
+                  <input type="checkbox" className="setup-check" checked={noExpense} onChange={e => onSetting?.("noExpenseAccounts", e.target.checked)} />
+                  <span className="t-sub grow">Ayrı hesap açmayacağım; ödemeleri bütçe hesabından takip edeceğim</span>
+                </label>
+              )}
+              {s.groups?.map(g => (
+                <Fragment key={g.id}>
+                  <button type="button" className="li" style={rowStyle} onClick={() => info(g.id)} aria-label={`${g.title}. Bilgi`}>
+                    <span className="tile sq30" aria-hidden="true" />
+                    <span className="t-sub b grow">{g.title}</span>
+                    <Icon name="info" size={20} style={{ color: "var(--blue)", flex: "none" }} />
+                  </button>
+                  {itemRows(g.items, "tag", g.id === "catFixed" ? "orange" : "indigo")}
+                  {addRow(`${g.id}-add`, g.add, () => g.items.length ? open(g.sheet) : info(g.id, g.sheet))}
+                </Fragment>
+              ))}
+            </Fragment>
+          );
+        })}
       </section>
       {canStart && onDone && (
         <button type="button" className="pill blue" style={{ justifyContent: "center", minHeight: 50, borderRadius: 14, fontSize: 17 }} onClick={onDone}>Başla</button>
@@ -124,9 +201,9 @@ function Allowances({ state, today }) {
   );
 }
 
-export default function Ozet({ state, today, members = {}, overrides, open, onResolve, onPay, onOpenPayments, onOpenSettings, backupDue, onSetupDone, onSetupMode, reconcileReminder, funding = [] }) {
+export default function Ozet({ state, today, members = {}, overrides, open, onResolve, onPay, onOpenPayments, onOpenSettings, backupDue, onSetupDone, onSetupMode, onSetupRemove, onSetupSetting, reconcileReminder, funding = [] }) {
   const [list, setList] = useState("upcoming");
-  if (setupSteps(state).show) return <Welcome state={state} open={open} onDone={onSetupDone} onMode={onSetupMode} />;
+  if (setupSteps(state).show) return <Welcome state={state} today={today} open={open} onDone={onSetupDone} onMode={onSetupMode} onRemove={onSetupRemove} onSetting={onSetupSetting} />;
 
   const o = overview(state, today);
   const fc = forecast(state, today, { overrides });

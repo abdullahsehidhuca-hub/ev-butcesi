@@ -53,18 +53,63 @@ export function Row({ title, sub, value, valueClass = "", tag, tagClass = "v3-ta
   return <button type="button" className="v3-row" onClick={onClick} aria-label={label}>{body}</button>;
 }
 
-// Alt çekmece (modal). Esc, arka plana dokunma ve Android geri tuşu kapatır; açılınca ilk alana odaklanır,
-// kapanınca odak açan düğmeye döner.
+// iOS kabuğunda klavye sayfayı küçültmez, alttan açılan çekmecenin üstüne biner. Görünür alan (visualViewport)
+// daralınca arka plana klavye yüksekliği kadar alt boşluk verilir; odaklanan alan çekmece içinde ortaya kaydırılır.
+// Android kabuğu sayfayı zaten küçülttüğü için orada boşluk sıfır kalır.
+export function useKeyboardInset(ref) {
+  useEffect(() => {
+    const el = ref.current;
+    const vv = window.visualViewport;
+    if (!el) return;
+    const fit = () => {
+      const kb = vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0;
+      el.style.paddingBottom = kb > 80 ? `${Math.round(kb)}px` : "";
+    };
+    let timer;
+    const reveal = e => {
+      if (!e.target.matches?.("input, select, textarea")) return;
+      clearTimeout(timer);
+      timer = setTimeout(() => { fit(); e.target.scrollIntoView?.({ block: "center", behavior: "smooth" }); }, 320);
+    };
+    vv?.addEventListener("resize", fit);
+    vv?.addEventListener("scroll", fit);
+    el.addEventListener("focusin", reveal);
+    fit();
+    return () => { clearTimeout(timer); vv?.removeEventListener("resize", fit); vv?.removeEventListener("scroll", fit); el.removeEventListener("focusin", reveal); };
+  }, []);
+}
+
+// Tutamak ve başlıktan aşağı kaydırınca çekmece parmağı izler; yeterince çekilirse kapanır, az çekilirse yerine döner.
+// Kaydırma başlayınca klavye kapanır ki çekmece klavyeyle birlikte takılı kalmasın.
+function useSwipeClose(panel, close) {
+  const drag = useRef(null);
+  const move = y => { if (panel.current) panel.current.style.transform = y > 0 ? `translateY(${y}px)` : ""; };
+  return {
+    onTouchStart: e => { drag.current = { y0: e.touches[0].clientY, dy: 0 }; document.activeElement?.blur?.(); },
+    onTouchMove: e => { if (!drag.current) return; drag.current.dy = e.touches[0].clientY - drag.current.y0; move(drag.current.dy); },
+    onTouchEnd: () => {
+      const dy = drag.current?.dy || 0;
+      drag.current = null;
+      if (dy > 90) close.current(); else move(0);
+    }
+  };
+}
+
+// Alt çekmece (modal). Sağ üstteki Kapat düğmesi, tutamaktan aşağı kaydırma, Esc, arka plana dokunma ve Android geri tuşu
+// kapatır; açılınca ilk alana odaklanır, kapanınca odak açan düğmeye döner.
 export function Sheet({ title, onClose, children }) {
   const titleId = useId();
   const panel = useRef(null);
+  const overlay = useRef(null);
+  useKeyboardInset(overlay);
   const close = useRef(onClose);
   close.current = onClose;
+  const swipe = useSwipeClose(panel, close);
   // Yalnız açılışta çalışır; her tuş vuruşunda odak ilk alana atlamasın.
   useEffect(() => {
     const opener = document.activeElement;
     // Form alanı yoksa (onay çekmecesi) odak "Vazgeç"e gider; Enter yanlışlıkla silmesin.
-    const first = panel.current?.querySelector("input, select") || panel.current?.querySelector(".v3-cancel");
+    const first = panel.current?.querySelector(".v3-sheet-body input, .v3-sheet-body select") || panel.current?.querySelector(".v3-cancel");
     first?.focus();
     const onKey = e => { if (e.key === "Escape") close.current(); };
     document.addEventListener("keydown", onKey);
@@ -72,11 +117,16 @@ export function Sheet({ title, onClose, children }) {
     return () => { document.removeEventListener("keydown", onKey); offBack(); opener?.focus?.(); };
   }, []);
   return (
-    <div className="v3-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className="v3-overlay" ref={overlay} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="v3-sheet" role="dialog" aria-modal="true" aria-labelledby={titleId} ref={panel}>
-        <div className="v3-handle" aria-hidden="true" />
-        <h3 className="v3-sheet-title" id={titleId}>{title}</h3>
-        {children}
+        <div className="v3-sheet-grip" {...swipe}>
+          <div className="v3-handle" aria-hidden="true" />
+          <div className="v3-sheet-head">
+            <h3 className="v3-sheet-title" id={titleId}>{title}</h3>
+            <button type="button" className="v3-sheet-x" onClick={() => close.current()}>Kapat</button>
+          </div>
+        </div>
+        <div className="v3-sheet-body">{children}</div>
       </div>
     </div>
   );

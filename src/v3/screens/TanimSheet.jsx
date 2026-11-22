@@ -11,6 +11,7 @@ import { Sheet, Field, SelectField, Chips, Actions, ErrorText, Form } from "../u
 import { parseAmount, amountText, symbolOf } from "../format.js";
 import { parseBalance, useAllowance, allowanceValue, allowanceSources, AllowanceFields } from "../Sheets.jsx";
 import { periodLabel, prevPeriod, fmt, dayNum, monthShort } from "../selectors.js";
+import { INCOME_PURPOSES, EXPENSE_PURPOSES, CATEGORY_GROUPS, purposeOf, isExpenseAccount, groupOf } from "../setupGuide.js";
 
 const byName = (a, b) => a.name.localeCompare(b.name, "tr");
 const DAYS = Array.from({ length: 31 }, (_, i) => ({ value: String(i + 1), label: `${i + 1}` }));
@@ -50,6 +51,9 @@ export function AccountEditSheet({ state, commit, onClose, id, onToast, today })
   const [payment, setPayment] = useState(a?.paymentDay ? String(a.paymentDay) : "");
   const [minRate, setMinRate] = useState(a?.minPaymentRate ? String(Math.round(a.minPaymentRate * 100)) : "");
   const [isDefault, setIsDefault] = useState(state.settings.defaultAccountId === id);
+  // Kurulumda eklenen hesabın türü (amacı) kendi tarafındaki türler arasında değiştirilebilir; kayıtlı hesapta banka tipi korunur.
+  const [purpose, setPurpose] = useState(a?.purpose || null);
+  const purposeOptions = !a?.purpose ? null : (isExpenseAccount(a) ? EXPENSE_PURPOSES : INCOME_PURPOSES).filter(p => !used || p.type === a.type);
   const [errors, setErrors] = useState(null);
   const allowance = useAllowance(state, a);
   if (!a) return <Sheet title="Hesap" onClose={onClose}><p className="v3-sheet-text">Hesap bulunamadı.</p></Sheet>;
@@ -66,7 +70,7 @@ export function AccountEditSheet({ state, commit, onClose, id, onToast, today })
     const weekly = sources.length ? allowanceValue(allowance, sources) : null;
     if (weekly?.error) return setErrors([weekly.error]);
     const errs = commit(s => {
-      const rec = { ...a, name: name.trim(), type, currency: prepaid ? "TRY" : currency };
+      const rec = { ...a, name: name.trim(), type: purposeOptions ? purposeOf(purpose).type : type, currency: prepaid ? "TRY" : currency, ...(purposeOptions ? { purpose } : {}) };
       if (a.opening) rec.opening = { ...a.opening, balance: credit ? -Math.abs(minor) : minor };
       delete rec.cutoffDay; delete rec.paymentDay; delete rec.minPaymentRate;
       if (credit) {
@@ -95,7 +99,8 @@ export function AccountEditSheet({ state, commit, onClose, id, onToast, today })
     <Sheet title={`Hesap · ${a.name}`} onClose={onClose}>
       <Form onSubmit={save}>
         <Field label="Hesap adı" value={name} onChange={setName} placeholder={credit ? "Örn: Bonus kart" : "Örn: Maaş hesabı"} />
-        {used
+        {purposeOptions && <Chips label="Tür" value={purpose} options={purposeOptions} onChange={v => v && setPurpose(v)} wrap />}
+        {purposeOptions ? null : used
           ? <p className="v3-hint" style={{ margin: "0 4px 12px" }}>{ACCOUNT_TYPES.find(t => t.value === type)?.label}{currency !== "TRY" ? ` · ${currency}` : ""}. Kayıtları olan hesabın türü ve para birimi değiştirilemez.</p>
           : <>
             <Chips label="Tür" value={type} options={ACCOUNT_TYPES} onChange={v => v && setType(v)} wrap />
@@ -137,6 +142,7 @@ export function CategoryEditSheet({ state, commit, onClose, id, onToast }) {
   const [name, setName] = useState(c?.name || "");
   const [budget, setBudget] = useState(c?.budget ? amountText(c.budget) : "");
   const [keywords, setKeywords] = useState((c?.keywords || []).join(", "));
+  const [group, setGroup] = useState(groupOf(c));
   const [errors, setErrors] = useState(null);
   if (!c) return <Sheet title="Kategori" onClose={onClose}><p className="v3-sheet-text">Kategori bulunamadı.</p></Sheet>;
 
@@ -145,7 +151,7 @@ export function CategoryEditSheet({ state, commit, onClose, id, onToast }) {
     const limit = budget.trim() ? parseAmount(budget) : null;
     if (budget.trim() && !limit) return setErrors(["aylık bütçeyi rakamla yazın ya da boş bırakın"]);
     const words = keywords.split(",").map(w => w.trim()).filter(Boolean);
-    const errs = commit(s => putRecord(s, "categories", { ...c, name: name.trim(), budget: limit, keywords: words }));
+    const errs = commit(s => putRecord(s, "categories", { ...c, name: name.trim(), group, budget: limit, keywords: words }));
     if (errs) setErrors(errs); else { onToast?.("Kategori güncellendi"); onClose(); }
   };
   const archive = () => {
@@ -161,6 +167,7 @@ export function CategoryEditSheet({ state, commit, onClose, id, onToast }) {
     <Sheet title={`Kategori · ${c.name}`} onClose={onClose}>
       <Form onSubmit={save}>
         <Field label="Kategori adı" value={name} onChange={setName} placeholder="Örn: Market" />
+        <Chips label="Dal" value={group} options={CATEGORY_GROUPS} onChange={v => v && setGroup(v)} />
         <Field label="Aylık bütçe (isteğe bağlı)" value={budget} onChange={setBudget} inputMode="decimal" placeholder="Örn: 5.000"
           hint="Limit bu dönemden itibaren geçerli olur; kapanmış dönemlerin raporu değişmez." />
         <Field label="Tanıma kelimeleri (isteğe bağlı)" value={keywords} onChange={setKeywords} placeholder="Örn: migros, bim, a101"
