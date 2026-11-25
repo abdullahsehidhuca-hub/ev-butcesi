@@ -142,3 +142,18 @@ export function stampCreatedBy(prev, next, userId) {
   }
   return changed ? { ...next, transactions: txs } : next;
 }
+
+// Kullanıcının bütçe listesi: userBudgets/{uid} (çoklu bütçe) ile eski tek bütçe kaydı userFamilies/{uid} birleşir.
+export function budgetEntries(list, legacy) {
+  const out = Object.entries(list || {}).map(([id, b]) => ({ id, role: b?.role || "member" }));
+  if (legacy?.familyId && !out.some(b => b.id === legacy.familyId)) out.unshift({ id: legacy.familyId, role: legacy.role || "member" });
+  return out;
+}
+
+// Açılacak bütçe: tek bütçe varsa o; birden çoksa kişinin bu açılışta seçtiği. null: seçim ekranı gösterilir
+// (birden çok bütçe takip eden her açılışta sorulur; ask: Ayarlar'dan "Başka bütçeye geç").
+export function chooseBudget(list, chosen, ask = false) {
+  if (ask || !list.length) return null;
+  if (list.some(b => b.id === chosen)) return chosen;
+  return list.length === 1 ? list[0].id : null;
+}

@@ -154,7 +154,7 @@ export default function Ayarlar({ state, today, open, theme, onTheme, backup, cl
         <Row icon="cloud" color="cyan" {...cloudRow(cloud, Object.keys(members).length, open)} />
         {cloud?.familyId && cloud.user && (
           <Row icon="people" color="indigo" title="Aile üyeleri"
-            sub={cloud.familyId === cloud.user.uid ? "Üye davet edin: davet kodu oluşturup gönderin" : "Hesabı kimlerle paylaştığınızı görün"}
+            sub={cloud.current?.admin ? "Üye davet edin: davet kodu oluşturup gönderin" : "Hesabı kimlerle paylaştığınızı görün"}
             value={Object.keys(members).length || null} onClick={() => open({ name: "family" })} />
         )}
         {cloud?.user && (
@@ -174,6 +174,12 @@ export default function Ayarlar({ state, today, open, theme, onTheme, backup, cl
         <>
           <span className="t-cap">Hesap</span>
           <section className="list" style={group} aria-label="Hesap">
+            {cloud.familyId && cloud.choose && (
+              <Row icon="wallet" color="blue" title="Başka bütçeye geç" value={cloud.current?.name || null} onClick={() => cloud.choose(null)} />
+            )}
+            {cloud.familyId && cloud.current?.admin && (
+              <Row icon="pencil" color="blue" title="Bütçenin adı" value={cloud.current.name || "Ad verin"} onClick={() => open({ name: "budgetName" })} />
+            )}
             <Row icon="login" color="gray" title="Hesaptan çık" sub={cloud.user.email ? `${cloud.user.email} ile giriş yapıldı` : null} danger onClick={onLogOut} />
           </section>
         </>

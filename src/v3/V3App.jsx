@@ -27,16 +27,18 @@ import KartOdemeSheet from "./screens/KartOdemeSheet.jsx";
 import BirikimSheet, { AlSatSheet, HedefSheet } from "./screens/BirikimSheet.jsx";
 import TaksitDeneSheet from "./screens/TaksitDeneSheet.jsx";
 import DanismanSheet from "./screens/DanismanSheet.jsx";
-import Giris from "./screens/Giris.jsx";
+import Giris, { BudgetPicker } from "./screens/Giris.jsx";
 import { AccountEditSheet, CategoryEditSheet, ObligationEditSheet } from "./screens/TanimSheet.jsx";
 import OdemeSecenekSheet from "./screens/OdemeSecenekSheet.jsx";
 import KurulumBilgiSheet from "./screens/KurulumBilgiSheet.jsx";
-import { PaySheet, AccountSheet, CategorySheet, ObligationSheet, InstallmentSheet, PayDaySheet, ResetSheet } from "./Sheets.jsx";
+import { PaySheet, AccountSheet, CategorySheet, ObligationSheet, InstallmentSheet, PayDaySheet, ResetSheet, ConfirmSheet } from "./Sheets.jsx";
+import { isExpenseAccount } from "./setupGuide.js";
 import "./v3.css";
 
 // Hesap ve aile çekmeceleri Firebase'i doğrudan kullanır; tembel yüklenir ki Firebase kodu ilk çizimi geciktirmesin.
 const HesapSheet = lazy(() => import("./screens/HesapSheet.jsx"));
 const AileSheet = lazy(() => import("./screens/AileSheet.jsx"));
+const BudgetNameSheet = lazy(() => import("./screens/AileSheet.jsx").then(m => ({ default: m.BudgetNameSheet })));
 const EtkinlikSheet = lazy(() => import("./screens/EtkinlikSheet.jsx"));
 
 const tabFromHash = () => {
@@ -242,16 +244,22 @@ export default function V3App({ sample }) {
   const toLogin = sample ? null : () => setSheet({ name: "login" });
   // Hesaptan çıkış (Ayarlar › Hesap): oturum kapanınca giriş ekranı açılır. Firebase kodu tembel yüklenir.
   const logOut = sample ? null : async () => {
-    if (!confirm("Hesaptan çıkılsın mı? Yeniden girmek için e-posta adresiniz ve şifreniz gerekir.")) return;
+    if (!confirm("Çıkış yapılsın mı? Verileriniz silinmez. Tekrar giriş yaptığınızda yerinde olur.")) return;
     try { await (await import("./family.js")).logOut(); go("home"); }
     catch { setToast("Çıkış yapılamadı; bağlantınızı kontrol edip yeniden deneyin"); }
   };
   const props = { state, commit, onClose: close, today: todayDate, period, members, aiUser };
-  // Karşılamadaki satırın × düğmesi: hesap, kategori ya da düzenli kalem onay sorulup silinir. Maaşı ya da ödemesi bağlı
-  // hesap, ödemesi bağlı kategori silinmez.
-  const setupRemove = (kind, id) => {
-    const rec = kind === "account" ? state.accounts[id] : kind === "category" ? state.categories[id] : state.obligations[id];
-    if (!rec || !confirm(`${rec.name} silinsin mi?`)) return;
+  // Karşılamadaki satırın × düğmesi: hesap, kategori ya da düzenli kalem onay çekmecesiyle (ConfirmSheet) silinir. Maaşı ya da
+  // ödemesi bağlı hesap, ödemesi bağlı kategori silinmez.
+  const recordOf = (kind, id) => kind === "account" ? state.accounts[id] : kind === "category" ? state.categories[id] : state.obligations[id];
+  const setupRemove = (kind, id) => { if (recordOf(kind, id)) setSheet({ name: "remove", kind, id }); };
+  const removeText = (kind, rec) => kind === "account" ? ["Hesabı sil", "Hesap ve bugünkü tutarı kurulumdan ve Ayarlar'dan kalkar. Geri alınamaz."]
+    : kind === "category" ? ["Kategoriyi sil", "Kategori ve limiti listeden kalkar. Geri alınamaz."]
+    : rec.kind === "income" ? ["Geliri sil", "Bu gelir artık dönem hesabına girmez. Geri alınamaz."] : ["Ödemeyi sil", "Bu ödeme artık yaklaşan ödemelerde görünmez. Geri alınamaz."];
+  const removeNow = (kind, id) => {
+    const rec = recordOf(kind, id);
+    setSheet(null);
+    if (!rec) return;
     const errs = commit(s => {
       if (kind === "category") return deleteCategory(s, id);
       if (kind !== "account") return deleteObligation(s, id);
@@ -261,21 +269,32 @@ export default function V3App({ sample }) {
     setToast(!errs ? `${rec.name} silindi` : kind === "account" ? "Bu hesaba bağlı maaş ya da ödeme var; önce onları silin"
       : kind === "category" ? "Bu kategoriye bağlı ödeme var; önce ödemeyi silin" : errs[0].charAt(0).toLocaleUpperCase("tr-TR") + errs[0].slice(1));
   };
+  // Hesap düzeni kurulum bitene kadar değişir. Kartlı düzenden tek hesaba geçerken kart ya da gider takibi hesabı varsa önce
+  // sorulur: hesaplar silinmez, yalnız kurulum adımlarında görünmez.
+  const saveMode = mode => commit(s => ({ ...s, settings: { ...s.settings, trackingMode: mode } }));
+  const setupMode = mode => {
+    const hidden = mode === "single" && Object.values(state.accounts).some(a => a.type === "credit" || isExpenseAccount(a));
+    if (hidden && state.settings.trackingMode !== "single") setSheet({ name: "modeSwitch" });
+    else saveMode(mode);
+  };
   const setupSetting = (key, value) => commit(s => ({ ...s, settings: { ...s.settings, [key]: value } }));
-  const loginDone = msg => { setSheet(null); setToast(msg); cloud.reload(); };
+  // Yeni kurulan ya da katılınan bütçe (familyId) doğrudan açılır.
+  const loginDone = (msg, familyId) => { setSheet(null); setToast(msg); if (familyId) cloud.choose(familyId); else cloud.reload(); };
 
   // İlk açılış ekranı: oturum ya da aile yoksa uygulama yerine giriş / kayıt / davet kodu seçenekleri gösterilir.
   // Oturum durumu daha bilinmiyorken (açılışın ilk anı) ekran zıplamasın diye yalnız "Yükleniyor" yazılır.
   // Oturum durumu gelene kadar bu cihazda son bilinen durum (cloud.hint) kullanılır: girişsizse giriş ekranı, aile
   // hesabındaysa uygulama hemen çizilir. İpucu yoksa (ilk kurulum) en çok 5 sn beklenir.
   const authWaiting = !sample && cloud.status === "loading" && !cloud.user;
-  const gate = !sample && (cloud.status === "signedOut" || cloud.status === "noFamily" || (authWaiting && (cloud.hint === "signedOut" || (!cloud.hint && authSlow))));
+  const gate = !sample && (cloud.status === "signedOut" || cloud.status === "noFamily" || cloud.status === "choose" || (authWaiting && (cloud.hint === "signedOut" || (!cloud.hint && authSlow))));
   const authPending = authWaiting && !cloud.hint && !authSlow;
   if (gate || authPending) {
     return (
       <div className="v3">
         <main className="v3-scroll is-gate">
-          <Giris status={authPending ? "loading" : cloud.status === "noFamily" ? "noFamily" : "signedOut"} email={cloud.user?.email} open={start => setSheet(start === "events" ? { name: "events", start: "new" } : { name: "login", start })} />
+          {cloud.status === "choose"
+            ? <BudgetPicker budgets={cloud.budgets} onPick={cloud.choose} open={start => setSheet({ name: "login", start })} />
+            : <Giris status={authPending ? "loading" : cloud.status === "noFamily" ? "noFamily" : "signedOut"} email={cloud.user?.email} open={start => setSheet(start === "events" ? { name: "events", start: "new" } : { name: "login", start })} />}
         </main>
         <Suspense fallback={null}>
           {sheet?.name === "login" && <HesapSheet key={sheet.start} cloud={cloud} start={sheet.start} onClose={close} onDone={loginDone} />}
@@ -328,7 +347,7 @@ export default function V3App({ sample }) {
         )}
         {tab === "home" && <Ozet {...common} onResolve={() => setSheet({ name: "resolve" })} onPay={pay} onOpenPayments={() => go("plan")} onOpenSettings={() => go("settings")} backupDue={backupDue}
           onSetupDone={() => commit(s => ({ ...s, settings: { ...s.settings, setupDone: true } }))}
-          onSetupMode={mode => commit(s => ({ ...s, settings: { ...s.settings, trackingMode: mode } }))}
+          onSetupMode={setupMode}
           onSetupRemove={setupRemove} onSetupSetting={setupSetting}
           reconcileReminder={reconcileReminder} funding={funding} />}
         {tab === "report" && <Rapor {...common} onCategory={(categoryId, p) => setSheet({ name: "txlist", filter: { period: p, categoryId } })}
@@ -376,9 +395,18 @@ export default function V3App({ sample }) {
       {sheet?.name === "installment" && <InstallmentSheet {...props} initial={sheet.initial} />}
       {sheet?.name === "payday" && <PayDaySheet {...props} />}
       {sheet?.name === "reset" && <ResetSheet {...props} synced={synced} />}
+      {sheet?.name === "modeSwitch" && <ConfirmSheet title="Tek hesap düzenine geçilsin mi?" submit="Geç" onClose={close}
+        text="Kredi kartlarınız ve gider takibi hesaplarınız silinmez. Kurulum adımlarında görünmez, Ayarlar'da durur."
+        onConfirm={() => { saveMode("single"); close(); }} />}
+      {sheet?.name === "remove" && recordOf(sheet.kind, sheet.id) && (() => {
+        const rec = recordOf(sheet.kind, sheet.id);
+        const [submit, text] = removeText(sheet.kind, rec);
+        return <ConfirmSheet title={`${rec.name} silinsin mi?`} text={text} submit={submit} onClose={close} onConfirm={() => removeNow(sheet.kind, sheet.id)} />;
+      })()}
       <Suspense fallback={null}>
         {sheet?.name === "login" && !sample && <HesapSheet cloud={cloud} start={sheet.start} onClose={close} onDone={loginDone} />}
         {sheet?.name === "family" && !sample && <AileSheet cloud={cloud} members={members} onClose={close} onToast={setToast} />}
+        {sheet?.name === "budgetName" && !sample && <BudgetNameSheet cloud={cloud} onClose={close} onToast={setToast} />}
         {sheet?.name === "events" && !sample && <EtkinlikSheet user={cloud.user} today={todayDate} start={sheet.start} onClose={close} onToast={setToast}
           onExport={Object.keys(state.accounts).length ? exportEvent : null} exportedOf={id => new Set(state.settings.eventExports?.[id] || [])} />}
       </Suspense>

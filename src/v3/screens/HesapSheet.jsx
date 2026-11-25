@@ -1,8 +1,9 @@
 // Hesap çekmecesi: giriş yap / şifreyi sıfırla / üye hesabı aç / davet koduyla katıl; giriş yapılmış ama bütçe yoksa
-// bütçe kurma ya da davet koduyla katılma. Üye hesabı açan kişi bütçeyi de kurar; davet kodunu sonra Ayarlar › Üyeler'den
-// gönderir. Davetliler "Davet kodum var" ile katılır. Veri işlemleri ../family.js'tedir.
+// bütçe kurma ya da davet koduyla katılma. Üye hesabı açan kişi ardından ne kuracağını seçer (bütçe, davet, kısa süreli
+// bütçe); bütçe kurucusu davet kodunu Ayarlar › Üyeler'den gönderir. Davetliler "Davet kodum var" ile katılır: önce kod,
+// kod doğrulanınca davetteki e-posta ve şifre (invitePass). Veri işlemleri ../family.js'tedir.
 // start: açılış kipi (ilk açılış ekranındaki düğmeden gelir).
-// Davete katılım doğrulanmış e-posta ister: hesap yeni açıldıysa "verify" adımında e-postadaki bağlantı beklenir.
+// Davete katılım doğrulanmış e-posta ister: doğrulama bağlantısı yalnız bu akışta gönderilir, "verify" adımında beklenir.
 // Davetteki e-postayla zaten hesap varsa hata yerine soru (inviteAccount) ve davetle giriş (inviteLogin) gelir.
 // Kayıt sırasında oturum değişince çekmece yeniden açılır; bekleyen davet kodu bu yüzden cihazda tutulur.
 import React, { useState } from "react";
@@ -12,17 +13,18 @@ import { loadPref, savePref } from "../store.js";
 
 const TITLES = {
   login: "Tekrar hoş geldiniz", reset: "Şifreyi sıfırla", register: "Üye hesabı aç", invite: "Davet koduyla katıl",
-  inviteAccount: "Bu davet kodunu kullanmak istiyor musunuz?", inviteLogin: "Davet kodunuz kaydedildi",
+  invitePass: "Şifre belirleyin", inviteLogin: "Davet kodunuz kaydedildi",
   family: "Bütçe kur", verify: "E-postanızı kontrol edin"
 };
 const SUBMIT = {
-  login: "Giriş yap", reset: "Bağlantı gönder", register: "Devam", invite: "Devam", inviteAccount: "Giriş yap",
+  login: "Giriş yap", reset: "Bağlantı gönder", register: "Devam", invite: "Devam", invitePass: "Katıl", inviteAccount: "Giriş yap",
   inviteLogin: "Giriş yap", family: "Başla", verify: "Doğruladım"
 };
 // Bekleme metni işin adını taşır.
 const BUSY = {
   login: "Giriş yapılıyor…", reset: "Bağlantı gönderiliyor…", register: "Üye hesabı açılıyor…", invite: "Kod kontrol ediliyor…",
-  inviteAccount: "Bekleyin…", inviteLogin: "Giriş yapılıyor…", family: "Bütçe kuruluyor…", verify: "E-posta kontrol ediliyor…"
+  invitePass: "Üye hesabı açılıyor…", inviteAccount: "Giriş yap", inviteLogin: "Giriş yapılıyor…", family: "Bütçe kuruluyor…",
+  verify: "Doğrulama kontrol ediliyor…"
 };
 const PENDING_INVITE_KEY = "evb-v3-bekleyen-davet";
 
@@ -31,6 +33,9 @@ export default function HesapSheet({ cloud, onClose, onDone, start }) {
   const [pending] = useState(() => loadPref(PENDING_INVITE_KEY, null));
   const [mode, setMode] = useState(user ? (pending ? (user.emailVerified ? "invite" : "verify") : start === "invite" ? "invite" : "family") : start || "login");
   const [name, setName] = useState(user?.displayName || "");
+  const [budgetName, setBudgetName] = useState("");
+  // Doğrulanan davet (2. adımda bütçenin adı ve e-posta gösterilir).
+  const [inv, setInv] = useState(null);
   const [email, setEmail] = useState("");
   const [pass, setPass] = useState("");
   const [code, setCode] = useState(pending || "");
@@ -52,15 +57,16 @@ export default function HesapSheet({ cloud, onClose, onDone, start }) {
   const cleanCode = normalizeCode(code);
 
   // Doğrulanmış e-postayla bütçeye katılır; doğrulanmamışsa doğrulama adımına geçer.
-  const finishJoin = async (u, inv) => {
+  const finishJoin = async (u, found) => {
     if (!(await refreshVerified(u))) {
-      if (mode === "verify") throw new Error("E-postanız henüz doğrulanmadı. Bağlantıya dokunduktan sonra tekrar deneyin");
+      if (mode === "verify") throw new Error("E-postanız henüz doğrulanmadı. Size gönderdiğimiz bağlantıya dokunun. Gelmediyse “Bağlantıyı tekrar gönder”i seçin.");
+      try { await resendVerification(u); } catch { /* "Bağlantıyı tekrar gönder" ile yeniden denenir */ }
       go("verify");
       return;
     }
-    await joinFamily(u, cleanCode, inv, inv.name);
+    const joined = await joinFamily(u, cleanCode, found, found.name);
     savePref(PENDING_INVITE_KEY, null);
-    onDone("Bütçeye katıldınız");
+    onDone("Bütçeye katıldınız", joined.familyId);
   };
   const findInvitation = async () => {
     if (cleanCode.length !== 6) throw new Error("6 karakterli davet kodunu yazın");
@@ -69,27 +75,32 @@ export default function HesapSheet({ cloud, onClose, onDone, start }) {
     return inv;
   };
 
-  // Davet kodunu doğrular; hesabı yoksa davetteki e-postayla hesap açar, hesap varsa giriş yapıp katılmayı sorar.
-  const joinWithCode = () => run(async () => {
-    const inv = await findInvitation();
+  // 1. adım: davet kodunu doğrular. Giriş yapılmışsa hemen katılır; yapılmamışsa 2. adımda davetteki e-posta gösterilip
+  // şifre istenir.
+  const checkCode = () => run(async () => {
+    const found = await findInvitation();
     // Kurallar da denetler: davet yalnız davetteki e-postayla açılmış ve doğrulanmış hesaba geçer.
-    if (user && user.email?.toLowerCase() !== String(inv.email || "").toLowerCase()) throw new Error(`Bu davet ${inv.email} adresi için. Farklı bir e-postayla giriş yapıp o adresi kullanın`);
+    if (user && user.email?.toLowerCase() !== String(found.email || "").toLowerCase()) throw new Error(`Bu davet ${found.email} adresi için. Farklı bir e-postayla giriş yapıp o adresi kullanın.`);
     savePref(PENDING_INVITE_KEY, cleanCode);
-    let u = user;
-    if (!u) {
-      if (pass.length < 6) throw new Error("Şifre en az 6 karakter olmalı");
-      try { u = await registerEmail(inv.name || "", inv.email, pass); } catch (e) {
-        if (e?.code !== "auth/email-already-in-use") throw e;
-        setInviteEmail(inv.email); setPass(""); go("inviteAccount");
-        return;
-      }
+    setInv(found); setInviteEmail(found.email);
+    if (user) await finishJoin(user, found);
+    else go("invitePass");
+  });
+  // 2. adım: davetteki e-postayla üye hesabı açar; bu adresle hesap zaten varsa katılmayı sorar.
+  const joinWithPassword = () => run(async () => {
+    if (pass.length < 6) throw new Error("Şifre en az 6 karakter olmalı.");
+    let u;
+    try { u = await registerEmail(inv.name || "", inv.email, pass); } catch (e) {
+      if (e?.code !== "auth/email-already-in-use") throw e;
+      setPass(""); go("inviteAccount");
+      return;
     }
     await finishJoin(u, inv);
   });
 
   const resend = () => run(async () => {
     await resendVerification(user);
-    setNotice("E-posta tekrar gönderildi.");
+    setNotice("Bağlantı tekrar gönderildi.");
   });
   const openReset = from => { setResetBack(from); if (from === "inviteLogin") setEmail(inviteEmail); go("reset"); };
 
@@ -107,12 +118,12 @@ export default function HesapSheet({ cloud, onClose, onDone, start }) {
     register: () => run(async () => {
       if (!name.trim() || !email.trim()) throw new Error("Adınızı ve e-postanızı yazın");
       if (pass.length < 6) throw new Error("Şifre en az 6 karakter olmalı");
-      const u = await registerEmail(name.trim(), email, pass);
-      await createFamily(u, name.trim());
+      await registerEmail(name.trim(), email, pass);
       onDone("Üye hesabınız açıldı");
     }),
-    invite: joinWithCode,
-    verify: joinWithCode,
+    invite: checkCode,
+    invitePass: joinWithPassword,
+    verify: checkCode,
     inviteAccount: () => go("inviteLogin"),
     inviteLogin: () => run(async () => {
       if (!pass) throw new Error("Şifrenizi yazın");
@@ -121,9 +132,9 @@ export default function HesapSheet({ cloud, onClose, onDone, start }) {
       await finishJoin(u, inv);
     }),
     family: () => run(async () => {
-      if (!name.trim()) throw new Error("Adınızı yazın");
-      await createFamily(user, name.trim());
-      onDone("Bütçeniz kuruldu");
+      if (!budgetName.trim() || !name.trim()) throw new Error(!budgetName.trim() && !name.trim() ? "Bütçenin adını ve kendi adınızı yazın." : !name.trim() ? "Adınızı yazın." : "Bütçenin adını yazın.");
+      const made = await createFamily(user, name.trim(), budgetName);
+      onDone("Bütçeniz kuruldu", made.familyId);
     }),
   };
 
@@ -140,35 +151,38 @@ export default function HesapSheet({ cloud, onClose, onDone, start }) {
     reset: resetSent ? [link("Giriş yap", () => go(resetBack))] : [],
     register: [link("Giriş yap", () => go("login")), link("Davet kodum var", () => go("invite"))],
     invite: user ? [link("Farklı bir e-postayla giriş yap", switchAccount)] : [link("Giriş yap", () => go("login")), link("Üye hesabı aç", () => go("register"))],
+    invitePass: [link("Başka bir kod gir", () => { setPass(""); go("invite"); })],
     inviteAccount: [],
     inviteLogin: [link("Şifremi unuttum", () => openReset("inviteLogin"))],
     family: [link("Davet kodum var", () => go("invite")), link("Farklı bir e-postayla giriş yap", switchAccount)],
-    verify: [link("E-postayı tekrar gönder", resend), link("Farklı bir e-postayla giriş yap", switchAccount)],
+    verify: [link("Bağlantıyı tekrar gönder", resend), link("Farklı bir e-postayla giriş yap", switchAccount)],
   }[mode];
 
   const text = {
     reset: "Yeni şifre belirlemeniz için bu adrese bir bağlantı göndereceğiz.",
-    register: "Girdiğiniz her veriyi sadece siz ve onay verdiğiniz üyeler görebilir.",
+    register: "Girdiğiniz her veriyi sadece siz ve bütçenizi paylaştığınız üyeler görebilir.",
     invite: user ? null : "Size gönderilen kodu yazın.",
-    inviteAccount: `${inviteEmail} adresiyle bir üye hesabınız zaten var. Giriş yaptığınızda bütçeye katılırsınız.`,
+    invitePass: `${inv?.budgetName ? `“${inv.budgetName}” adlı bütçeye katılıyorsunuz. ` : ""}Üye hesabınız ${inviteEmail} adresiyle açılır.`,
+    inviteAccount: `${inviteEmail} adresiyle bir üye hesabınız var. Giriş yapınca bu bütçe listenize eklenir, şu an kullandıklarınız olduğu gibi kalır.`,
     inviteLogin: "Üye hesabınızın şifresini yazın.",
-    verify: `${user?.email || inviteEmail || "E-posta"} adresine bir e-posta gönderdik. İçindeki bağlantıya dokunup buraya dönün.`,
+    verify: user?.email || inviteEmail ? `${user?.email || inviteEmail} adresine bir doğrulama bağlantısı gönderdik. Ona dokunup buraya dönün.` : "Size bir doğrulama bağlantısı gönderdik. Ona dokunup buraya dönün.",
   }[mode];
 
   return (
-    <Sheet title={TITLES[mode]} onClose={onClose}>
+    <Sheet title={mode === "inviteAccount" ? (inv?.budgetName ? `“${inv.budgetName}” adlı bütçeye katılmak istiyor musunuz?` : "Bu bütçeye katılmak istiyor musunuz?") : TITLES[mode]} onClose={onClose}>
       {mode === "reset" && resetSent ? (
         <p className="v3-sheet-done" role="status">Bu adresle bir üye hesabı varsa birkaç dakika içinde e-posta gelir. Gelen kutunuzda yoksa gereksiz klasörüne bakın.</p>
       ) : <>
         {text && <p className="v3-sheet-text">{text}</p>}
         <Form onSubmit={submit[mode]}>
+          {mode === "family" && <Field label="Bütçenin adı" value={budgetName} onChange={setBudgetName} autoComplete="off" hint="Birden fazlası olursa açılışta bu adla seçersiniz." />}
           {(mode === "register" || mode === "family") && <Field label="Adınız" value={name} onChange={setName} autoComplete="name" hint="Uygulamada bu adla görünürsünüz" />}
           {(mode === "login" || mode === "register" || mode === "reset") && <Field label="E-posta" type="email" inputMode="email" value={email} onChange={setEmail} placeholder="ad@ornek.com" autoComplete="email" />}
-          {mode === "inviteLogin" && <Field label="E-posta" type="email" value={inviteEmail} onChange={() => {}} readOnly autoComplete="username" />}
+          {(mode === "inviteLogin" || mode === "invitePass") && <Field label="E-posta" type="email" value={inviteEmail} onChange={() => {}} readOnly autoComplete="username" />}
           {mode === "invite" && <Field label="Davet kodu" value={code} onChange={v => setCode(v.toLocaleUpperCase("en-US"))} placeholder="K7M2QX" autoComplete="off" hint="6 karakter, harf ve rakam" />}
           {(mode === "login" || mode === "inviteLogin") && <Field label="Şifre" type="password" value={pass} onChange={setPass} autoComplete="current-password" />}
           {mode === "register" && <Field label="Şifre" type="password" value={pass} onChange={setPass} autoComplete="new-password" hint="En az 6 karakter" />}
-          {mode === "invite" && !user && <Field label="Şifre belirleyin" type="password" value={pass} onChange={setPass} autoComplete="new-password" hint="En az 6 karakter" />}
+          {mode === "invitePass" && <Field label="Şifre" type="password" value={pass} onChange={setPass} autoComplete="new-password" hint="En az 6 karakter" />}
           {notice && <p className="v3-hint" role="status">{notice}</p>}
           <ErrorText errors={errors} />
           <Actions onCancel={onClose} disabled={busy} submit={busy ? BUSY[mode] : SUBMIT[mode]} />

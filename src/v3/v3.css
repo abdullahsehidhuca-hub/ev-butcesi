@@ -268,3 +268,9 @@ a.li:active { background: var(--fill2); }
 /* Dokunulabilir uyarı bandı (ay kapatma) ve çekmecedeki "İşlemi sil" düğmesi */
 button.v3-alert { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; color: inherit; min-height: 44px; }
 .v3-cancel.c-red { color: var(--red-t, var(--red)); }
+
+/* Bütçe seçimi (onaylı taslak 2): bütçe adının ilk harfi, sıraya göre dolu renk; kırmızı uyarılara ayrıldığı için yok. */
+.tile.v3-budget-tile { color: #fff; font-family: var(--font-num); font-size: 17px; font-weight: 600; line-height: 22px; }
+.v3-budget-tile.bc0 { background: #0064D2; } .v3-budget-tile.bc1 { background: #248A3D; }
+.v3-budget-tile.bc2 { background: #C93400; } .v3-budget-tile.bc3 { background: #5856D6; }
+.v3-gate-row .v3-gate-t { overflow-wrap: anywhere; }

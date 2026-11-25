@@ -7,13 +7,15 @@
 // İpucu yalnız hangi ekranın önce çizileceğini seçer; veri erişimini Firebase kuralları denetler.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { cloudPath, mergeRemote, pendingFor, toCloud } from "./sync.js";
+import { budgetEntries, chooseBudget, cloudPath, mergeRemote, pendingFor, toCloud } from "./sync.js";
+import { emptyState } from "../core/index.js";
 import { loadPref, savePref } from "./store.js";
 
 const COLORS = ["indigo", "orange", "teal", "pink", "green"];
 export const AUTH_HINT_KEY = "evb-v3-oturum-ipucu";
 
-// status: off (örnek veri) · loading · signedOut · noFamily · synced · offline · needsUpload · error
+// status: off (örnek veri) · loading · signedOut · noFamily · choose · synced · offline · needsUpload · error
+// Birden çok bütçe takip eden kişiye her açılışta hangisini açacağı sorulur (choose); seçim yalnız bu açılış için tutulur.
 export function useCloud({ enabled, stateRef, replaceState, baseKey, localCopyKey }) {
   const [status, setStatus] = useState(enabled ? "loading" : "off");
   const [error, setError] = useState(null);
@@ -21,6 +23,8 @@ export function useCloud({ enabled, stateRef, replaceState, baseKey, localCopyKe
   const [user, setUser] = useState(null);
   const [familyId, setFamilyId] = useState(null);
   const [nonce, setNonce] = useState(0);
+  const [budgets, setBudgets] = useState([]); // [{ id, role, name, count, admin }]
+  const pick = useRef({ id: null, ask: false });
   const [hint] = useState(() => (enabled ? loadPref(AUTH_HINT_KEY, null)?.state || null : null));
   const base = useRef(null);
   const online = useRef(true);
@@ -49,12 +53,30 @@ export function useCloud({ enabled, stateRef, replaceState, baseKey, localCopyKe
         setUser(u);
         if (!u) { savePref(AUTH_HINT_KEY, { state: "signedOut" }); setStatus("signedOut"); return; }
         setStatus("loading");
-        let fid = null;
-        try { fid = (await get(ref(db, `userFamilies/${u.uid}`))).val()?.familyId || null; }
+        let list = [];
+        try {
+          // userBudgets yeni kuraldır; kurallar yayınlanmadan okunamazsa eski tek bütçe kaydıyla devam edilir.
+          const [legacy, multi] = await Promise.all([
+            get(ref(db, `userFamilies/${u.uid}`)).then(x => x.val()),
+            get(ref(db, `userBudgets/${u.uid}`)).then(x => x.val(), () => null)
+          ]);
+          // Erişimi kaldırılmış bütçe okunamaz; listeden düşer.
+          // Bütçe verisinin tamamı değil, yalnız adı, kurucusu ve üyeleri okunur.
+          const info = id => Promise.all(["name", "admin", "members"].map(k => get(ref(db, `families/${id}/${k}`)).then(x => x.val())));
+          list = (await Promise.all(budgetEntries(multi, legacy).map(b => info(b.id).then(([name, adminUid, mem]) => {
+            const admin = b.id === u.uid || adminUid === u.uid;
+            if (!admin && !mem?.[u.uid]) return null;
+            return { id: b.id, role: admin ? "admin" : "member", admin, name: name || null, count: Object.keys(mem || {}).length || 1 };
+          }, () => null)))).filter(Boolean);
+        }
         catch (e) { if (alive) fail(e); return; }
         if (!alive) return;
-        if (!fid) { savePref(AUTH_HINT_KEY, null); setStatus("noFamily"); return; }
+        setBudgets(list);
+        if (!list.length) { savePref(AUTH_HINT_KEY, null); setStatus("noFamily"); return; }
         savePref(AUTH_HINT_KEY, { state: "family" });
+        const fid = chooseBudget(list, pick.current.id, pick.current.ask);
+        if (!fid) { setFamilyId(null); setMembers({}); setStatus("choose"); return; }
+        pick.current = { id: fid, ask: false };
         setFamilyId(fid);
         get(ref(db, `families/${fid}/members`)).then(s => {
           const list = Object.entries(s.val() || {});
@@ -64,6 +86,11 @@ export function useCloud({ enabled, stateRef, replaceState, baseKey, localCopyKe
         // Son görülen bulut (base) bu cihazda saklanır; çevrimdışı değişiklikler ona göre bulunur.
         const saved = loadPref(baseKey, null);
         base.current = saved?.familyId === fid ? saved.tree : null;
+        // Başka bütçeye geçildi: bu cihazdaki veri önceki bütçenindir; yenisine karışmasın diye kopyası saklanıp boşaltılır.
+        if (saved?.familyId && saved.familyId !== fid) {
+          savePref(localCopyKey, { savedAt: new Date().toISOString(), familyId: saved.familyId, state: stateRef.current });
+          replaceState(emptyState());
+        }
         target.current = ref(db, cloudPath(fid));
         stopConn = onValue(ref(db, ".info/connected"), s => {
           online.current = !!s.val();
@@ -88,6 +115,8 @@ export function useCloud({ enabled, stateRef, replaceState, baseKey, localCopyKe
 
   // Aile kurulunca ya da katılınca oturum değişmez; bağlantı yeniden kurulup aile okunur.
   const reload = useCallback(() => setNonce(n => n + 1), []);
+  // Bütçe seçimi: id verilirse o açılır; verilmezse seçim ekranı gösterilir (Ayarlar › Başka bütçeye geç).
+  const choose = useCallback(id => { pick.current = id ? { id, ask: false } : { id: null, ask: true }; setNonce(n => n + 1); }, []);
 
   // Her yerel değişiklikten sonra çağrılır: son görülen buluttan farkı yazar.
   const push = useCallback(state => {
@@ -103,5 +132,6 @@ export function useCloud({ enabled, stateRef, replaceState, baseKey, localCopyKe
     dbApi.current.set(target.current, toCloud(stateRef.current)).catch(fail);
   }, [fail]);
 
-  return { status, error, members, user, familyId, hint, push, upload, reload };
+  const current = budgets.find(b => b.id === familyId) || null;
+  return { status, error, members, user, familyId, hint, push, upload, reload, budgets, current, choose };
 }

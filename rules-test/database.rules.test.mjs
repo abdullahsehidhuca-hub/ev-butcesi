@@ -171,3 +171,22 @@ test("kısa süreli bütçe: kuran yazar, kodla katılan üye harcama ekler, yab
   await ok(req("PUT", "eventInvites/EXP777", OWN, { eventId: EV, createdBy: OWN, expiresAt: Date.now() - 1000 }), "süresi dolmuş kod (deneme için)");
   await denied(req("PUT", `events/${EV}/members/${STRANGER}`, STRANGER, { name: "X", code: "EXP777" }), "süresi dolan kodla katılınamaz");
 });
+
+test("çoklu bütçe: ikinci bütçe b- kimliğiyle kurulur, davetle katılan kendi bütçesini kaybetmez", async () => {
+  const FID = "b-ikinci0butce", JOINER = "uye2";
+  await denied(req("PUT", `families/${STRANGER}x/admin`, ADMIN, ADMIN), "başkasının kimliğiyle aile kurma");
+  await denied(req("PUT", `families/B-BUYUKHARF000/admin`, ADMIN, ADMIN), "kurala uymayan kimlik");
+  await ok(req("PUT", `families/${FID}/admin`, ADMIN, ADMIN), "ikinci bütçe");
+  await denied(req("PUT", `families/${FID}/admin`, STRANGER, STRANGER), "kurulmuş bütçeyi ele geçirme");
+  await ok(req("PATCH", `families/${FID}`, ADMIN, { name: "İş yeri", [`members/${ADMIN}`]: { name: "Abdullah", role: "admin" } }), "kurucu ad ve üye yazar");
+  await ok(req("PUT", `userBudgets/${ADMIN}/${FID}`, ADMIN, { role: "admin" }), "kendi bütçe listesi");
+  await denied(req("PUT", `userBudgets/${ADMIN}/${FID}`, STRANGER, { role: "admin" }), "başkasının listesine yazma");
+  await denied(req("GET", `userBudgets/${ADMIN}`, STRANGER), "başkasının listesini okuma");
+  await ok(req("PUT", "invitations/B2B2B2", ADMIN, invite("uye2@x", { familyId: FID })), "ikinci bütçeye davet");
+  await denied(req("PUT", "invitations/B2B2B3", STRANGER, invite("x@x", { familyId: FID })), "yabancı başkasının bütçesine davet üretemez");
+  await ok(req("PATCH", "", JOINER, { [`families/${FID}/members/${JOINER}`]: { name: "Can", email: "uye2@x", role: "member", inviteCode: "B2B2B2" }, "invitations/B2B2B2/used": true }), "katılım");
+  await ok(req("PUT", `userBudgets/${JOINER}/${FID}`, JOINER, { role: "member", code: "B2B2B2" }), "katılanın listesi");
+  await ok(req("GET", `families/${FID}/name`, JOINER), "üye bütçe adını okur");
+  await denied(req("PUT", `families/${FID}/name`, JOINER, "x"), "üye adı değiştiremez");
+  await ok(req("PUT", `userBudgets/${JOINER}/${FID}`, ADMIN, null), "kurucu üyenin listesinden bütçeyi siler");
+});

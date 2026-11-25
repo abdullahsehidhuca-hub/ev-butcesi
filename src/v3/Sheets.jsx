@@ -418,3 +418,14 @@ export function ResetSheet({ commit, onClose, synced }) {
     </Sheet>
   );
 }
+
+// ── Silme onayı (karşılamadaki ×) ──────────────────────────────────────────────
+// Sistemin uyarı kutusu yerine "Tüm verileri sil" düzeninde: başlık neyin silineceğini, gövde neyin kaybolacağını söyler.
+export function ConfirmSheet({ title, text, submit, onConfirm, onClose }) {
+  return (
+    <Sheet title={title} onClose={onClose}>
+      <p className="v3-sheet-text">{text}</p>
+      <Form onSubmit={onConfirm}><Actions submit={submit} onCancel={onClose} danger /></Form>
+    </Sheet>
+  );
+}
