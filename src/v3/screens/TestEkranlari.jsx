@@ -5,7 +5,7 @@ import { Tile, Icon } from "../components/ui.jsx";
 import { SCENARIOS, stateKey, planKey } from "../testScenarios.js";
 import "../v3.css";
 
-const GROUP_ICON = { "Hoş geldiniz": ["plus", "blue"], "Özet": ["wallet", "indigo"], "Ayarlar": ["cal", "gray"] };
+const GROUP_ICON = { "Giriş ve bütçeler": ["login", "green"], "Hoş geldiniz": ["plus", "blue"], "Özet": ["wallet", "indigo"], "Ayarlar": ["cal", "gray"] };
 
 // Önceki denemenin verisi silinir; senaryo her açılışta ilk haliyle başlar.
 function start(sc) {
@@ -28,7 +28,7 @@ export default function TestEkranlari() {
             <div className="list" style={{ "--inset": "64px" }}>
               {SCENARIOS.filter(s => s.group === g).map(s => (
                 <button key={s.id} type="button" className="li" onClick={() => start(s)}>
-                  <Tile icon={icon} color={color} />
+                  <Tile icon={s.icon || icon} color={color} />
                   <span className="stack grow gap2">
                     <span className="t-body b">{s.title}</span>
                     <span className="t-meta">{s.sub}</span>

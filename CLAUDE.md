@@ -21,8 +21,10 @@ Yeni hesap motoru `src/core/` altındadır ve `npm test` ile doğrulanır.
 - Hızlı deneme: `npm run ios:canli` iPhone'daki uygulamayı Mac'teki geliştirme sunucusuna bağlar, kod
   değişince ekran kendiliğinden yenilenir. Kapatmak: `npm run ios:canli -- --durdur`.
 - Ekran seçici: Ayarlar › Test ekranları (`/?test`). Yalnız geliştirmede ve TestFlight derlemesinde görünür
-  (`src/v3/testTools.js`). Bir ekranı düzelttiğinde gerekiyorsa `src/v3/testScenarios.js`'e senaryo ekle ve
-  özette hangi satırın açılacağını yaz (ör. "Test ekranları › Kurulumu baştan başlat").
+  (`src/v3/testTools.js`). Her yeni düzenlemede (25 Kasım 2026 kararı) değişen ekran `src/v3/testScenarios.js`'e
+  senaryo olarak eklenir ya da mevcut senaryosu güncellenir; özette hangi satırın açılacağını yaz (ör. "Test
+  ekranları › Kurulumu baştan başlat"). Giriş, davet ve bütçe ekranları gerçek hesap yerine bellekteki sahte
+  hesapla (`src/v3/testCloud.js`, senaryoda `cloud`) açılır; Firebase'e hiçbir şey gitmez.
 
 ## Kullanıcı Profili
 

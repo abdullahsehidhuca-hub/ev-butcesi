@@ -1,6 +1,9 @@
 // Test senaryoları: ekran seçicideki (TestEkranlari.jsx) her satır uygulamayı bu verilerden biriyle açar (/?ornek=<id>).
 // Örnek veri modudur: bulut kapalıdır, her senaryo kendi anahtarında tutulur; gerçek veri okunmaz ve yazılmaz.
 // Kayıtlar core fonksiyonlarıyla eklenir; geçersiz bir kayıt olursa core hata verir.
+// cloud: giriş ve bütçe ekranları bellekteki sahte hesapla açılır (testCloud.js); start hesabın başlangıç durumudur.
+// icon: satırın simgesi (yoksa grubun simgesi). note: örnek veri bandında görünen ek satır.
+// Bu projede her yeni düzenleme bu listeye işlenir: değişen ekran için satır eklenir ya da mevcut satır güncellenir.
 
 import { emptyState, addAccount, addObligation, setAllowance } from "../core/index.js";
 import * as dolu from "./sampleData.js";
@@ -28,7 +31,13 @@ function separateFull() {
     accountId: "talimat", categoryId: "fatura", startPeriod: "2026-01", dueDay: 28, autopayFrom: "2026-11" });
 }
 
+const INVITE_NOTE = "Deneme kodları: K7M2QX yeni@ornek.com için, H3P8WD uye@ornek.com için (üye hesabı var). Bunların dışındakiler geçersiz sayılır.";
+
 export const SCENARIOS = [
+  { id: "giris", group: "Giriş ve bütçeler", icon: "login", title: "Giriş ekranı", sub: "Oturum kapalı · davet koduyla katılma adımları", build: () => fresh(null), cloud: { start: "signedOut" }, note: INVITE_NOTE },
+  { id: "butcesiz", group: "Giriş ve bütçeler", icon: "plus", title: "Bütçesi olmayan üye hesabı", sub: "Kurma, davet koduyla katılma, kısa süreli bütçe", build: () => fresh(null), cloud: { start: "noFamily" }, note: INVITE_NOTE },
+  { id: "secim", group: "Giriş ve bütçeler", icon: "repeat", title: "Bütçe seçimi", sub: "İki bütçesi olan kişinin açılışı", build: dolu.buildSampleState, cloud: { start: "choose" } },
+  { id: "butceler", group: "Giriş ve bütçeler", icon: "people", title: "Ayarlar · bütçe ve üyeler", sub: "Başka bütçeye geçme, adı düzeltme, davet kodu ekleme", build: dolu.buildSampleState, cloud: { start: "synced" }, tab: "settings" },
   { id: "duzen", group: "Hoş geldiniz", title: "Kurulumu baştan başlat", sub: "Hiçbir şey girilmemiş yeni bütçe · hesap düzeni sorusu", build: () => fresh(null) },
   { id: "tek", group: "Hoş geldiniz", title: "Tek bir hesaptan takip ederim", sub: "Düzen seçilmiş, adımların hepsi boş", build: () => fresh("single") },
   { id: "kart", group: "Hoş geldiniz", title: "Hesaplarımı kategorilendiririm · kredi kartı adımı", sub: "Bütçe hesabı eklenmiş", build: () => withBank(fresh("cards")) },
@@ -49,6 +58,8 @@ export function scenario(id) {
     SAMPLE_TODAY: TODAY,
     SAMPLE_MEMBERS: dolu.SAMPLE_MEMBERS,
     SAMPLE_LABEL: `Test · ${sc.title}`,
+    SAMPLE_NOTE: sc.note || null,
+    cloud: sc.cloud || null,
     STATE_KEY: stateKey(sc.id),
     PLAN_KEY: planKey(sc.id),
     buildSampleState: sc.build

@@ -2,13 +2,13 @@
 // bütçe kurma ya da davet koduyla katılma. Üye hesabı açan kişi ardından ne kuracağını seçer (bütçe, davet, kısa süreli
 // bütçe); bütçe kurucusu davet kodunu Ayarlar › Üyeler'den gönderir. Davetliler "Davet kodum var" ile katılır: önce kod,
 // kod doğrulanınca davetteki e-posta ve şifre (invitePass). Veri işlemleri ../family.js'tedir.
-// start: açılış kipi (ilk açılış ekranındaki düğmeden gelir).
+// start: açılış kipi (ilk açılış ekranındaki düğmeden gelir). api: test ekranlarında family.js yerine sahte hesap (testCloud.js).
 // Davete katılım doğrulanmış e-posta ister: doğrulama bağlantısı yalnız bu akışta gönderilir, "verify" adımında beklenir.
 // Davetteki e-postayla zaten hesap varsa hata yerine soru (inviteAccount) ve davetle giriş (inviteLogin) gelir.
 // Kayıt sırasında oturum değişince çekmece yeniden açılır; bekleyen davet kodu bu yüzden cihazda tutulur.
 import React, { useState } from "react";
 import { Sheet, Field, Actions, ErrorText, Form } from "../ui.jsx";
-import { authMessage, createFamily, joinFamily, lookupInvitation, normalizeCode, registerEmail, signInEmail, signInGoogle, googleAvailable, logOut, refreshVerified, resendVerification, sendPasswordReset } from "../family.js";
+import * as family from "../family.js";
 import { loadPref, savePref } from "../store.js";
 
 const TITLES = {
@@ -28,7 +28,8 @@ const BUSY = {
 };
 const PENDING_INVITE_KEY = "evb-v3-bekleyen-davet";
 
-export default function HesapSheet({ cloud, onClose, onDone, start }) {
+export default function HesapSheet({ cloud, onClose, onDone, start, api = family }) {
+  const { authMessage, createFamily, joinFamily, lookupInvitation, normalizeCode, registerEmail, signInEmail, signInGoogle, googleAvailable, logOut, refreshVerified, resendVerification, sendPasswordReset } = api;
   const user = cloud.user;
   const [pending] = useState(() => loadPref(PENDING_INVITE_KEY, null));
   const [mode, setMode] = useState(user ? (pending ? (user.emailVerified ? "invite" : "verify") : start === "invite" ? "invite" : "family") : start || "login");

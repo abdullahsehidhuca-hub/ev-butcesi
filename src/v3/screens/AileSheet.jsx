@@ -1,19 +1,21 @@
 // Aile üyeleri (Ayarlar › Aile üyeleri): üye listesi; aileyi kuran kişi yeni üye için davet kodu üretir ve gönderir.
 // Davet kodunu yalnız kurucu üretebilir; veritabanı kuralı da bunu denetler (invitations/$code: bütçenin kurucusu).
 // BudgetNameSheet: kurucu bütçenin adını değiştirir (Ayarlar › Hesap › Bütçenin adı).
+// api: test ekranlarında family.js yerine sahte hesap (testCloud.js).
 // Üye, uygulamanın ilk ekranındaki "Davet kodum var" ile kodu ve kendi şifresini girerek katılır.
 // Gönderme: WhatsApp, e-posta ve mesaj doğrudan bağlantıyla açılır (kabukta da çalışır; uygulama yüklü değilse
 // WhatsApp web sayfası açılır). "Diğer" sistemin paylaşım penceresidir; orada yalnız cihazda yüklü uygulamalar görünür.
 import { useState } from "react";
 import { Sheet, Field, Actions, ErrorText, Form } from "../ui.jsx";
-import { authMessage, createInvitation, logOut, renameBudget, INVITE_DAYS } from "../family.js";
+import * as family from "../family.js";
 
 const isApple = () => typeof navigator !== "undefined" && /iPhone|iPad|iPod|Macintosh/.test(navigator.userAgent);
 const linkStyle = { minHeight: 44, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "0 14px", borderRadius: 12, background: "var(--card)", color: "var(--blue)", fontWeight: 600, textDecoration: "none" };
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export default function AileSheet({ cloud, members = {}, onClose, onToast }) {
+export default function AileSheet({ cloud, members = {}, onClose, onToast, api = family }) {
+  const { authMessage, createInvitation, logOut, INVITE_DAYS } = api;
   const admin = !!cloud.user && !!cloud.current?.admin;
   const budgetName = cloud.current?.name || "";
   const list = Object.values(members).sort((a, b) => (b.self ? 1 : 0) - (a.self ? 1 : 0) || a.name.localeCompare(b.name, "tr"));
@@ -97,7 +99,8 @@ export default function AileSheet({ cloud, members = {}, onClose, onToast }) {
   );
 }
 
-export function BudgetNameSheet({ cloud, onClose, onToast }) {
+export function BudgetNameSheet({ cloud, onClose, onToast, api = family }) {
+  const { authMessage, renameBudget } = api;
   const [name, setName] = useState(cloud.current?.name || "");
   const [errors, setErrors] = useState(null);
   const [busy, setBusy] = useState(false);

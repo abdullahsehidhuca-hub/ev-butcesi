@@ -6,6 +6,7 @@ import React, { Suspense, lazy, useCallback, useEffect, useRef, useState } from 
 import { computePeriod, periodOf, quickAdd, today, ValidationError, dueAllowances, applyAllowances, fundingNeeds, reconcileDue, eventCategoryName, deleteAccount, deleteObligation, deleteCategory } from "../core/index.js";
 import { loadState, saveState, loadPref, savePref, newId, exportBackup, parseBackup, transactionsCsv, STORAGE_KEY, PLAN_KEY, THEME_KEY, BACKUP_KEY, CLOUD_BASE_KEY, LOCAL_COPY_KEY, SAMPLE_KEY, SAMPLE_PLAN_KEY } from "./store.js";
 import { useCloud } from "./useCloud.js";
+import { useTestCloud } from "./testCloud.js";
 import { stampCreatedBy } from "./sync.js";
 import { convertLegacy, isLegacyData } from "./legacyImport.js";
 import { mainAccountId, daysBetween, addDays, fmt } from "./selectors.js";
@@ -74,8 +75,12 @@ export default function V3App({ sample }) {
 
   // Buluttan gelen veri (aile üyesinin değişikliği ya da ilk yükleme) durumun yerine geçer.
   const replaceState = useCallback(next => { stateRef.current = next; setState(next); }, []);
-  // Örnek veri modunda bulut kapalıdır; örnek veri hiçbir zaman Firebase'e yazılmaz.
-  const cloud = useCloud({ enabled: !sample, stateRef, replaceState, baseKey: CLOUD_BASE_KEY, localCopyKey: LOCAL_COPY_KEY });
+  // Örnek veri modunda bulut kapalıdır; örnek veri hiçbir zaman Firebase'e yazılmaz. Giriş ve bütçe senaryoları
+  // (testScenarios.js › cloud) bellekteki sahte hesapla (testCloud.js) çalışır; cloudOn giriş ve hesap ekranlarını açar.
+  const realCloud = useCloud({ enabled: !sample, stateRef, replaceState, baseKey: CLOUD_BASE_KEY, localCopyKey: LOCAL_COPY_KEY });
+  const testCloud = useTestCloud(sample?.cloud);
+  const cloud = testCloud || realCloud;
+  const cloudOn = !sample || !!testCloud;
   userRef.current = cloud.user?.uid || null;
   const synced = cloud.status === "synced" || cloud.status === "offline";
 
@@ -238,14 +243,14 @@ export default function V3App({ sample }) {
     });
     setToast(errs ? errs[0] : `${list.length} harcama ev bütçesine eklendi`);
   };
-  const reloadSample = () => { commit(() => sample.buildSampleState()); setOverrides({}); setToast("Örnek veri yeniden yüklendi"); };
+  const reloadSample = () => { testCloud?.reset(); setSheet(null); commit(() => sample.buildSampleState()); setOverrides({}); setToast("Örnek veri yeniden yüklendi"); };
   // Yapay zekâ çağrıları oturum jetonuyla yapılır; örnek veri modunda kapalıdır (giriş çekmecesi de yoktur).
   const aiUser = sample ? null : cloud.user;
-  const toLogin = sample ? null : () => setSheet({ name: "login" });
+  const toLogin = cloudOn ? () => setSheet({ name: "login" }) : null;
   // Hesaptan çıkış (Ayarlar › Hesap): oturum kapanınca giriş ekranı açılır. Firebase kodu tembel yüklenir.
-  const logOut = sample ? null : async () => {
+  const logOut = !cloudOn ? null : async () => {
     if (!confirm("Çıkış yapılsın mı? Verileriniz silinmez. Tekrar giriş yaptığınızda yerinde olur.")) return;
-    try { await (await import("./family.js")).logOut(); go("home"); }
+    try { await (testCloud ? testCloud.api : await import("./family.js")).logOut(); go("home"); }
     catch { setToast("Çıkış yapılamadı; bağlantınızı kontrol edip yeniden deneyin"); }
   };
   const props = { state, commit, onClose: close, today: todayDate, period, members, aiUser };
@@ -285,20 +290,35 @@ export default function V3App({ sample }) {
   // Oturum durumu daha bilinmiyorken (açılışın ilk anı) ekran zıplamasın diye yalnız "Yükleniyor" yazılır.
   // Oturum durumu gelene kadar bu cihazda son bilinen durum (cloud.hint) kullanılır: girişsizse giriş ekranı, aile
   // hesabındaysa uygulama hemen çizilir. İpucu yoksa (ilk kurulum) en çok 5 sn beklenir.
-  const authWaiting = !sample && cloud.status === "loading" && !cloud.user;
-  const gate = !sample && (cloud.status === "signedOut" || cloud.status === "noFamily" || cloud.status === "choose" || (authWaiting && (cloud.hint === "signedOut" || (!cloud.hint && authSlow))));
+  // Örnek veri bandı: test ekranında giriş ekranından da Baştan yükle, Test ekranları ve Gerçek veriye geç'e ulaşılır.
+  const sampleBand = sample && (
+    <div className="v3-alert" role="status">
+      <strong>{sample.SAMPLE_LABEL || "Örnek veri"} · bugün {new Date(`${todayDate}T12:00:00`).toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" })} sayılıyor</strong>
+      Yalnız bu cihazda, gerçek veriden ayrı tutulur. Değişiklikleri deneyebilirsiniz.
+      {sample.SAMPLE_NOTE && <span>{sample.SAMPLE_NOTE}</span>}
+      <span className="row" style={{ gap: 16, flexWrap: "wrap" }}>
+        <button type="button" className="v3-link" style={{ padding: 0 }} onClick={reloadSample}>Baştan yükle</button>
+        <a className="v3-link" href="/?test">Test ekranları</a>
+        <a className="v3-link" href="/v3">Gerçek veriye geç</a>
+      </span>
+    </div>
+  );
+
+  const authWaiting = cloudOn && cloud.status === "loading" && !cloud.user;
+  const gate = cloudOn && (cloud.status === "signedOut" || cloud.status === "noFamily" || cloud.status === "choose" || (authWaiting && (cloud.hint === "signedOut" || (!cloud.hint && authSlow))));
   const authPending = authWaiting && !cloud.hint && !authSlow;
   if (gate || authPending) {
     return (
       <div className="v3">
         <main className="v3-scroll is-gate">
+          {sampleBand}
           {cloud.status === "choose"
             ? <BudgetPicker budgets={cloud.budgets} onPick={cloud.choose} open={start => setSheet({ name: "login", start })} />
-            : <Giris status={authPending ? "loading" : cloud.status === "noFamily" ? "noFamily" : "signedOut"} email={cloud.user?.email} open={start => setSheet(start === "events" ? { name: "events", start: "new" } : { name: "login", start })} />}
+            : <Giris status={authPending ? "loading" : cloud.status === "noFamily" ? "noFamily" : "signedOut"} email={cloud.user?.email} open={start => start === "events" && testCloud ? setToast("Kısa süreli bütçe kurmak gerçek veri gerektirdiği için test ekranlarında açılmıyor.") : setSheet(start === "events" ? { name: "events", start: "new" } : { name: "login", start })} />}
         </main>
         <Suspense fallback={null}>
-          {sheet?.name === "login" && <HesapSheet key={sheet.start} cloud={cloud} start={sheet.start} onClose={close} onDone={loginDone} />}
-          {sheet?.name === "events" && <EtkinlikSheet user={cloud.user} today={todayDate} start={sheet.start} onClose={close} onToast={setToast} />}
+          {sheet?.name === "login" && <HesapSheet key={sheet.start} cloud={cloud} api={testCloud?.api} start={sheet.start} onClose={close} onDone={loginDone} />}
+          {sheet?.name === "events" && !sample && <EtkinlikSheet user={cloud.user} today={todayDate} start={sheet.start} onClose={close} onToast={setToast} />}
         </Suspense>
         {toast && <div className="toast" role="status">{toast}</div>}
       </div>
@@ -308,17 +328,7 @@ export default function V3App({ sample }) {
   return (
     <div className="v3">
       <main className="v3-scroll" ref={scroll} key={tab}>
-        {sample && (
-          <div className="v3-alert" role="status">
-            <strong>{sample.SAMPLE_LABEL || "Örnek veri"} · bugün {new Date(`${todayDate}T12:00:00`).toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" })} sayılıyor</strong>
-            Yalnız bu cihazda, gerçek veriden ayrı tutulur. Değişiklikleri deneyebilirsiniz.
-            <span className="row" style={{ gap: 16, flexWrap: "wrap" }}>
-              <button type="button" className="v3-link" style={{ padding: 0 }} onClick={reloadSample}>Baştan yükle</button>
-              <a className="v3-link" href="/?test">Test ekranları</a>
-              <a className="v3-link" href="/v3">Gerçek veriye geç</a>
-            </span>
-          </div>
-        )}
+        {sampleBand}
         {loaded.error && (
           <div className="v3-alert is-error" role="alert">
             <strong>Kayıtlı veri okunamadı</strong>
@@ -355,7 +365,7 @@ export default function V3App({ sample }) {
         {tab === "plan" && <Odemeler {...common} onPay={pay} onAdd={Object.keys(state.accounts).length ? () => setSheet({ name: "obligation", kind: "fixed" }) : null}
           onTrial={Object.keys(state.accounts).length ? () => setSheet({ name: "trial" }) : null}
           onItem={it => setSheet(it.type === "card" ? { name: "blocked" } : { name: "obligationEdit", id: it.obligationId })} />}
-        {tab === "settings" && <Ayarlar {...common} theme={theme} onTheme={setTheme} backup={backup} cloud={sample ? { status: "off" } : cloud} onLogOut={logOut} />}
+        {tab === "settings" && <Ayarlar {...common} theme={theme} onTheme={setTheme} backup={backup} cloud={cloudOn ? cloud : { status: "off" }} onLogOut={logOut} />}
       </main>
 
       <TabBar tab={tab} onTab={go} onAdd={() => setSheet({ name: "quick" })} />
@@ -404,9 +414,9 @@ export default function V3App({ sample }) {
         return <ConfirmSheet title={`${rec.name} silinsin mi?`} text={text} submit={submit} onClose={close} onConfirm={() => removeNow(sheet.kind, sheet.id)} />;
       })()}
       <Suspense fallback={null}>
-        {sheet?.name === "login" && !sample && <HesapSheet cloud={cloud} start={sheet.start} onClose={close} onDone={loginDone} />}
-        {sheet?.name === "family" && !sample && <AileSheet cloud={cloud} members={members} onClose={close} onToast={setToast} />}
-        {sheet?.name === "budgetName" && !sample && <BudgetNameSheet cloud={cloud} onClose={close} onToast={setToast} />}
+        {sheet?.name === "login" && cloudOn && <HesapSheet cloud={cloud} api={testCloud?.api} start={sheet.start} onClose={close} onDone={loginDone} />}
+        {sheet?.name === "family" && cloudOn && <AileSheet cloud={cloud} api={testCloud?.api} members={members} onClose={close} onToast={setToast} />}
+        {sheet?.name === "budgetName" && cloudOn && <BudgetNameSheet cloud={cloud} api={testCloud?.api} onClose={close} onToast={setToast} />}
         {sheet?.name === "events" && !sample && <EtkinlikSheet user={cloud.user} today={todayDate} start={sheet.start} onClose={close} onToast={setToast}
           onExport={Object.keys(state.accounts).length ? exportEvent : null} exportedOf={id => new Set(state.settings.eventExports?.[id] || [])} />}
       </Suspense>
