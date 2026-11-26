@@ -13,32 +13,37 @@ import { overview, upcoming, recent, forecast, paymentsView, accountsView, balan
 // Eski "Her hesabı ayrı izlerim" (separate) seçimi kategorili düzenin içinde açılır (setupSteps).
 const MODES = [
   { id: "single", title: "Tek bir hesaptan takip ederim", sub: "Tüm harcama ve birikim hareketleri aynı banka hesabımdan yapılır", icon: "wallet", color: "blue" },
-  { id: "cards", title: "Hesaplarımı kategorilendiririm", sub: "Önerilen · Kredi kartı harcamalarını, otomatik ödeme talimatlı vb. hareketleri farklı hesaplardan takip edersiniz; her ay başında uygulamada görünen tutarları ilgili hesaplara aktarırsınız", icon: "card", color: "pink", primary: true }
+  { id: "cards", title: "Hesaplarımı kategorilendiririm", sub: "Kredi kartı harcamalarını, otomatik ödeme talimatlı vb. hareketleri farklı hesaplardan takip edersiniz; her ay başında uygulamada görünen tutarları ilgili hesaplara aktarırsınız", icon: "card", color: "pink", primary: true, badge: "Önerilen" }
 ];
 
-// current: kurulum sırasında düzen yeniden seçilirken şu anki düzen (işaretli); onCancel: seçimden vazgeç.
+// current: kurulum sırasında düzen yeniden seçilirken şu anki düzen (işaretli); onCancel: seçimden vazgeç (üstte, yalnız yeniden seçimde).
+// Her seçenek kendi kartıdır; karta dokunmak seçimi yapar. badge kartın en üstünde rozet olarak durur.
 function ModeChoice({ onMode, current, onCancel }) {
   return (
     <>
-      <header className="stack gap2" style={{ padding: "0 4px" }}>
+      {onCancel && <button type="button" className="t-sub c-blue setup-back" onClick={onCancel}>Vazgeç</button>}
+      <header className="setup-head">
         <h1 className="t-title" style={{ margin: 0 }}>Bütçenizi nasıl takip edersiniz?</h1>
         <span className="t-sub">Sonradan istediğiniz hesabı ekleyebilirsiniz.</span>
       </header>
-      <section className="list" aria-label="Hesap düzeni" style={{ "--inset": "64px" }}>
-        {MODES.map(m => (
-          <button key={m.id} type="button" className="li" onClick={() => onMode(m.id)} aria-current={current === m.id ? "true" : undefined}>
-            <Tile icon={m.icon} color={m.color} solid={m.primary} />
-            <span className="stack grow gap2">
-              <span className="t-body b">{m.title}</span>
-              <span className="t-meta">{m.sub}</span>
-            </span>
-            {current === m.id
-              ? <Icon name="check" size={20} style={{ color: "var(--blue)", flex: "none" }} />
-              : <Icon name="chev" size={14} style={{ color: "var(--label3)" }} />}
-          </button>
-        ))}
+      <section className="setup-modes" aria-label="Hesap düzeni">
+        {MODES.map(m => {
+          const on = current === m.id;
+          return (
+            <button key={m.id} type="button" className={`setup-mode${on ? " is-on" : ""}`} onClick={() => onMode(m.id)} aria-current={on ? "true" : undefined}>
+              {m.badge && <span className="badge" style={{ "--bc": "var(--blue)" }}>{m.badge}</span>}
+              <span className="row">
+                <Tile icon={m.icon} color={m.color} solid={m.primary} />
+                <span className="setup-mode-t grow">{m.title}</span>
+                {on
+                  ? <span className="radio on" aria-hidden="true"><Icon name="check" size={14} stroke={3} /></span>
+                  : <Icon name="chev" size={14} style={{ color: "var(--label3)", flex: "none" }} />}
+              </span>
+              <span className="setup-mode-d">{m.sub}</span>
+            </button>
+          );
+        })}
       </section>
-      {onCancel && <button type="button" className="t-sub c-blue" style={{ minHeight: 44, fontWeight: 500 }} onClick={onCancel}>Vazgeç</button>}
     </>
   );
 }
@@ -55,7 +60,7 @@ function Welcome({ state, today, open, onDone, onMode, onRemove, onSetting }) {
   const mode = st.mode || (st.account || !onMode ? "single" : null);
   if (!mode || choosing) return <ModeChoice current={choosing ? mode : null} onCancel={choosing ? () => setChoosing(false) : null} onMode={m => { setChoosing(false); onMode(m); }} />;
   const single = mode === "single";
-  const needBank = st.bank ? null : "Önce bütçe hesabını ekleyin";
+  const needBank = st.bank ? null : "Önce bütçe hesabını ekleyin.";
   const accounts = Object.values(state.accounts);
   const categories = Object.values(state.categories).filter(c => !c.archived).sort((a, b) => a.name.localeCompare(b.name, "tr"));
   const obligations = Object.values(state.obligations);
@@ -71,23 +76,25 @@ function Welcome({ state, today, open, onDone, onMode, onRemove, onSetting }) {
     !single && { id: "cards", title: "Kredi kartları", sub: needBank || "Her kartı ayrı ekleyin. Harcamalar o kartın borcuna yazılır.", icon: "card", color: "pink",
       add: "Kart ekle", sheet: { name: "account", side: "card" }, on: st.bank, done: st.credit,
       items: accounts.filter(a => a.type === "credit").map(acc) },
-    !single && { id: "expense", title: "Gider takibi hesapları", sub: needBank || "Otomatik ödemeler, kredi kartı aktarımları, günlük harcama · isteğe bağlı", icon: "repeat", color: "teal",
+    !single && { id: "expense", title: "Gider takibi hesapları", sub: needBank || "Otomatik ödemeler, kredi kartı aktarımları ya da günlük harcama için ayrı bir hesabınız varsa ekleyin.", badge: "İsteğe bağlı", icon: "repeat", color: "teal",
       add: "Hesap ekle", sheet: { name: "account", side: "expense" }, on: st.bank && !noExpense, done: st.extra, skip: true,
       items: accounts.filter(isExpenseAccount).map(acc) },
     { id: "income", title: "Maaş ve diğer gelirler", sub: needBank || "İlk maaşın yattığı gün, bütçe döneminizin başlangıcı olur.", icon: "cash", color: "green",
       add: "Gelir ekle", sheet: { name: "obligation", kind: "income", setup: true }, on: st.bank, done: st.income,
       items: obligations.filter(o => o.kind === "income").map(ob) },
-    { id: "categories", title: "Gider kategorileri", sub: "Sabit ve değişken giderler için ayrı kategoriler", icon: "tag", color: "indigo",
+    { id: "categories", title: "Gider kategorileri", sub: "Sabit ve değişken giderler için ayrı kategoriler ekleyin.", icon: "tag", color: "indigo",
       on: true, done: st.catFixed && st.catVariable, items: [],
       groups: [
         { id: "catFixed", title: "Sabit gider kategorileri", add: "Sabit gider kategorisi ekle", sheet: { name: "category", group: "fixed" }, items: categories.filter(c => groupOf(c) === "fixed").map(cat) },
         { id: "catVariable", title: "Değişken gider kategorileri", add: "Değişken gider kategorisi ekle", sheet: { name: "category", group: "variable" }, items: categories.filter(c => groupOf(c) === "variable").map(cat) }
       ] },
-    { id: "fixed", title: "Kira, fatura gibi sabit ödemeler", sub: needBank || (st.catFixed ? "Talimatla ödenenler işaretlemeden düşer" : "Önce sabit gider kategorisi ekleyin"), icon: "repeat", color: "orange",
+    { id: "fixed", title: "Kira, fatura gibi sabit ödemeler", sub: needBank || (st.catFixed ? "Otomatik olarak işaretlediğiniz ödemeler, günü gelince kendiliğinden düşer." : "Önce sabit gider kategorisi ekleyin."), icon: "repeat", color: "orange",
       add: "Ödeme ekle", sheet: { name: "obligation", kind: "fixed", setup: true }, on: st.bank && st.catFixed, done: st.fixed,
       items: obligations.filter(o => o.kind !== "income").map(ob) }
   ].filter(Boolean);
   const canStart = st.bank && st.income;
+  // Başla açıkken boş adım kaldıysa düğmenin üstünde sonradan tamamlama notu görünür.
+  const skipped = canStart && steps.some(s => !s.done);
   // Adım başlığı ve ⓘ her zaman bilgi penceresini açar; adım boşsa pencerenin "Ekle" düğmesi ekleme çekmecesine geçer.
   const info = (topic, next) => open({ name: "setupInfo", topic, next: next || null });
   // Satırlar Ayarlar'daki liste düzenini izler: küçük renkli kare, ad ve alt satır, sağda tutar.
@@ -111,52 +118,59 @@ function Welcome({ state, today, open, onDone, onMode, onRemove, onSetting }) {
       <span className="t-body c-blue grow">{label}</span>
     </button>
   );
+  // Etkin adım: Başla'yı açmak için gereken ilk eksik adım. Açıklama yalnız etkin, devre dışı ve dolu adımda görünür;
+  // diğer adımların açıklaması bilgi penceresinde (STEP_INFO) anlatılır.
+  const active = !st.bank ? "budget" : !st.income ? "income" : null;
   return (
     <>
-      <header className="stack gap2" style={{ padding: "0 4px" }}>
+      <header className="setup-head">
         <h1 className="t-title" style={{ margin: 0 }}>Hoş geldiniz</h1>
         <span className="t-sub">Bütçe ve harcama hesap bilgilerinizi girerek uygulamayı kullanmaya başlayabilirsiniz. Bilgilerinizi daha sonra Ayarlar'dan da düzenleyebilirsiniz.</span>
       </header>
-      <section className="list" aria-label="Başlangıç adımları" style={{ "--inset": "64px" }}>
+      <section className="list" aria-label="Başlangıç adımları" style={{ "--inset": "68px" }}>
         {steps.map((s, i) => {
           const all = s.groups ? s.groups.flatMap(g => g.items) : s.items;
           const adds = s.on && !s.groups && !s.items.length;
           const expanded = !adds && openStep === s.id;
           const panel = `setup-${s.id}`;
+          const cta = adds && s.id === active;
           // Kapalı akordiyonda alt satır eklenenleri sayar; adım açılınca kayıtlar görünür.
-          const sub = all.length && !expanded ? all.map(it => it.name).join(" · ") : s.sub;
+          const sub = all.length ? (expanded ? null : all.map(it => it.name).join(" · ")) : (!s.on || cta ? s.sub : null);
+          const name = `${i + 1}. ${s.title}${s.badge ? `, ${s.badge.toLocaleLowerCase("tr")}` : ""}`;
           const head = (
             <>
               <Tile icon={s.done ? "check" : s.icon} color={s.done ? "green" : s.color} />
-              <span className="stack grow gap2" style={{ minWidth: 0 }}>
-                <span className="t-body b">{i + 1}. {s.title}</span>
-                <span className="t-meta">{sub}</span>
+              <span className="stack grow" style={{ minWidth: 0, gap: 4 }}>
+                <span className="setup-step-t">
+                  <span className="t-body b">{i + 1}. {s.title}</span>
+                  {s.badge && <span className="badge" style={{ "--bc": "var(--gray)" }}>{s.badge}</span>}
+                </span>
+                {sub && <span className="t-note">{sub}</span>}
+                {cta && <span className="setup-cta" aria-hidden="true"><Icon name="plus" size={16} stroke={2.5} />{s.add}</span>}
               </span>
+              <Icon name="chev" size={14} style={{ color: "var(--label3)", flex: "none", transform: expanded ? "rotate(90deg)" : "none", transition: "transform .15s ease" }} />
             </>
           );
           return (
             <Fragment key={s.id}>
               {adds || !s.on ? (
-                <button type="button" className="li" disabled={!s.on} style={{ opacity: s.on ? 1 : .55 }}
+                <button type="button" className="li setup-step" disabled={!s.on}
                   onClick={() => info(s.id, adds ? s.sheet : null)}
-                  aria-label={`${i + 1}. ${s.title}. ${s.sub.replace(/\.$/, "")}. ${adds ? "Bilgi ve ekle" : "Bilgi"}`}>
+                  aria-label={adds ? `${name}. ${s.sub} Bilgi penceresini açar.` : `${name}. ${s.sub}`}>
                   {head}
-                  <Icon name="chev" size={14} style={{ color: "var(--label3)", flex: "none" }} />
                 </button>
               ) : (
-                <div className="li" style={{ padding: "0 8px 0 0" }}>
-                  <button type="button" className="row grow" style={{ minHeight: 58, padding: "11px 0 11px 16px", textAlign: "left" }}
-                    aria-expanded={expanded} aria-controls={panel} onClick={() => setOpenStep(expanded ? null : s.id)}>
+                <div className="li setup-row">
+                  <button type="button" className="setup-step" aria-expanded={expanded} aria-controls={panel} onClick={() => setOpenStep(expanded ? null : s.id)}>
                     {head}
-                    <Icon name="chev" size={14} style={{ color: "var(--label3)", flex: "none", transform: expanded ? "rotate(90deg)" : "none", transition: "transform .15s ease" }} />
                   </button>
-                  <button type="button" className="setup-act" style={{ margin: 0 }} aria-label={`Bilgi: ${s.title}`} onClick={() => info(s.id)}>
+                  <button type="button" className="setup-act setup-info" aria-label={`Bilgi: ${s.title}`} onClick={() => info(s.id)}>
                     <Icon name="info" size={20} />
                   </button>
                 </div>
               )}
               {expanded && (
-                <div id={panel} role="region" aria-label={s.title}>
+                <div id={panel} className="setup-panel" role="region" aria-label={s.title}>
                   {itemRows(s.items, s.icon, s.color)}
                   {s.items.length > 0 && addRow(`${s.id}-add`, s.add, () => open(s.sheet))}
                   {s.groups?.map(g => (
@@ -173,22 +187,27 @@ function Welcome({ state, today, open, onDone, onMode, onRemove, onSetting }) {
                 </div>
               )}
               {s.skip && st.bank && !s.items.length && (
-                <label className="li" style={rowStyle}>
-                  <input type="checkbox" className="setup-check" checked={noExpense} onChange={e => onSetting?.("noExpenseAccounts", e.target.checked)} />
-                  <span className="t-sub grow">Ayrı hesap açmayacağım; ödemeleri bütçe hesabından takip edeceğim</span>
+                <label className="setup-skip">
+                  <input type="checkbox" className="setup-check" aria-describedby="setup-skip-note" checked={noExpense} onChange={e => onSetting?.("noExpenseAccounts", e.target.checked)} />
+                  <span className="t-sub grow">Ayrı hesap açmayacağım, ödemeleri bütçe hesabından takip edeceğim</span>
                 </label>
+              )}
+              {s.skip && st.bank && !s.items.length && (
+                <p id="setup-skip-note" className="t-note setup-skip-note">Fikrinizi değiştirirseniz Ayarlar'dan hesap ekleyebilirsiniz.</p>
               )}
             </Fragment>
           );
         })}
       </section>
-      {onDone && <>
-        {!canStart && <p id="setup-start-why" className="t-sub" style={{ margin: "0 4px" }}>{st.bank ? "Başlamak için gelirinizi ekleyin." : "Başlamak için bütçe hesabınızı ve gelirinizi ekleyin."}</p>}
-        <button type="button" className="pill blue" style={{ justifyContent: "center", minHeight: 50, borderRadius: 14, fontSize: 17, opacity: canStart ? 1 : .45 }}
-          disabled={!canStart} aria-describedby={canStart ? undefined : "setup-start-why"} onClick={onDone}>Başla</button>
-      </>}
       {onMode && (
-        <button type="button" className="t-sub c-blue" style={{ minHeight: 44, fontWeight: 500 }} onClick={() => setChoosing(true)}>Hesap düzenini değiştir</button>
+        <button type="button" className="t-sub c-blue setup-link" onClick={() => setChoosing(true)}>Hesap düzenini değiştir</button>
+      )}
+      {onDone && (
+        <div className={`setup-foot${canStart ? "" : " is-off"}`}>
+          {skipped && <p id="setup-start-note" className="t-sub" style={{ margin: "0 4px" }}>Boş bıraktığınız adımları istediğiniz zaman Ayarlar'dan tamamlayabilirsiniz.</p>}
+          {!canStart && <p id="setup-start-why" className="t-sub" style={{ margin: "0 4px" }}>{st.bank ? "Başlamak için gelirinizi ekleyin." : "Başlamak için bütçe hesabınızı ve gelirinizi ekleyin."}</p>}
+          <button type="button" className="setup-start" disabled={!canStart} aria-describedby={canStart ? (skipped ? "setup-start-note" : undefined) : "setup-start-why"} onClick={onDone}>Başla</button>
+        </div>
       )}
     </>
   );

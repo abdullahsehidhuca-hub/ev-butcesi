@@ -274,3 +274,53 @@ button.v3-alert { display: flex; flex-direction: column; align-items: flex-start
 .v3-budget-tile.bc0 { background: #0064D2; } .v3-budget-tile.bc1 { background: #248A3D; }
 .v3-budget-tile.bc2 { background: #C93400; } .v3-budget-tile.bc3 { background: #5856D6; }
 .v3-gate-row .v3-gate-t { overflow-wrap: anywhere; }
+
+/* Karşılama ve hesap düzeni (2026-11-26): ferah yerleşim. Yalnız setup-* sınıfları; diğer ekranlar etkilenmez.
+   Satır açıklaması 14 px (--fs-note); etkin adım dışında açıklama bilgi penceresindedir. */
+:root { --fs-note: 14px; }
+.t-note { font-size: var(--fs-note); color: var(--label2); line-height: 1.35; }
+.setup-head { display: flex; flex-direction: column; gap: 8px; padding: 0 4px; margin-bottom: 6px; } /* + bölüm aralığı 14 = 20 */
+.setup-head .t-sub { line-height: 1.4; }
+.setup-back { align-self: flex-start; min-height: 44px; padding: 0 4px; font-size: 17px; font-weight: 500; margin-bottom: -8px; }
+
+.setup-modes { display: flex; flex-direction: column; gap: 12px; }
+.setup-mode { display: flex; flex-direction: column; align-items: stretch; gap: 12px; width: 100%; padding: 18px; border-radius: var(--r-card); background: var(--card); text-align: left; }
+.setup-mode > .badge { align-self: flex-start; }
+.setup-mode.is-on { box-shadow: inset 0 0 0 2px var(--blue-t); }
+.setup-mode:active { background: color-mix(in srgb, var(--card) 92%, var(--label)); }
+.setup-mode:focus-visible { outline-offset: 2px; border-radius: var(--r-card); }
+.setup-mode .tile { width: 44px; height: 44px; border-radius: 12px; }
+.setup-mode-t { font-size: 17px; font-weight: 600; line-height: 1.3; }
+.setup-mode-d { font-size: var(--fs-sub); color: var(--label2); line-height: 1.35; }
+
+.setup-step { display: flex; align-items: flex-start; gap: 12px; width: 100%; min-height: 72px; padding: 14px 16px; text-align: left; }
+.setup-step .tile { width: 40px; height: 40px; border-radius: 11px; }
+.setup-step > svg:last-child { align-self: center; }
+.setup-step > .stack { min-height: 40px; justify-content: center; }
+.setup-step:active { background: var(--fill2); }
+.setup-step:focus-visible { outline-offset: -3px; }
+.setup-step:disabled .t-body { color: var(--label2); }
+.setup-step:disabled .tile { opacity: .5; }
+.setup-step-t { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.setup-cta { display: inline-flex; align-items: center; gap: 4px; align-self: flex-start; margin-top: 6px; min-height: 32px; padding: 0 14px; border-radius: 16px; background: var(--blue-fill); color: #fff; font-size: var(--fs-sub); font-weight: 600; }
+/* Dolu adım: satırın tamamı akordiyonu açar; ⓘ okun hemen solunda, satırın üstünde durur. */
+.setup-row { padding: 0; }
+.setup-row .setup-step { padding-right: 74px; }
+.setup-row .setup-step > svg:last-child { position: absolute; right: 16px; top: 50%; margin-top: -7px; }
+.setup-info { position: absolute; right: 30px; top: 50%; margin: 0; transform: translateY(-50%); }
+.setup-panel { background: var(--fill2); }
+.setup-skip { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 16px 10px var(--inset); margin-top: -6px; cursor: pointer; }
+.setup-skip .setup-check { width: 24px; height: 24px; margin: 0; }
+.setup-skip-note { margin: -8px 16px 0 var(--inset); padding-bottom: 12px; }
+.setup-skip + .li::before, .setup-skip-note + .li::before, .setup-panel + .li::before { content: ""; position: absolute; top: 0; right: 0; left: var(--inset); height: .5px; background: var(--sep); }
+
+.setup-link { align-self: center; min-height: 44px; padding: 0 12px; font-weight: 500; }
+/* Başla: sekme çubuğunun hemen üstünde sabit durur (kaydırma alanı konumlu olmadığı için .v3'e göre); arkası sayfa rengine solar.
+   Kaydırma alanının alt boşluğu bu alan kadar artar; liste sonu ve Hesap düzenini değiştir altında kalmaz. */
+.v3-scroll:has(> .setup-foot:not(.is-off)) { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 84px + 128px); }
+.setup-foot { position: absolute; left: 0; right: 0; bottom: 0; z-index: 4; display: flex; flex-direction: column; gap: 8px; padding: 24px var(--pad) calc(env(safe-area-inset-bottom, 0px) + 84px); background: linear-gradient(to bottom, transparent, var(--bg) 24px); }
+/* Başla kapalıyken alan sabitlenmez, listenin altında akışta durur: küçük ekranda etkin adımın düğmesini örtmesin. */
+.setup-foot.is-off { position: static; order: 1; padding: 0; background: none; }
+.setup-link { order: 2; }
+.setup-start { width: 100%; min-height: 50px; border-radius: 14px; background: var(--blue-fill); color: #fff; font-size: 17px; font-weight: 600; }
+.setup-start:disabled { background: var(--fill); color: var(--label2); }
