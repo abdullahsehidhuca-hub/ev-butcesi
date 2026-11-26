@@ -18,6 +18,7 @@ const PATHS = {
   alert: <><path d="M12 4l9 16H3z" /><path d="M12 10v4M12 17v.5" /></>,
   check: <path d="M5 12.5l4.5 4.5L19 7.5" />,
   plus: <path d="M12 5v14M5 12h14" />,
+  minus: <path d="M6 12h12" />,
   chev: <path d="M9 5l7 7-7 7" />,
   login: <path d="M10 17l5-5-5-5M15 12H3M14 4h5a1 1 0 011 1v14a1 1 0 01-1 1h-5" />,
   back: <path d="M15 5l-7 7 7 7" />,

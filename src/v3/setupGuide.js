@@ -50,7 +50,7 @@ export const STEP_INFO = {
     body: [
       "Bazı giderleri bütçe hesabı yerine ayrı bir hesaptan ödüyorsanız o hesapları burada ekleyin.",
       "Her ay başında uygulama bu hesaplara ne kadar aktarmanız gerektiğini gösterir. Gidere aktarırken yalnız bu adımda eklediğiniz hesaplar listelenir.",
-      "Ayrı hesap kullanmıyorsanız adımdaki kutuyu işaretleyin. Ödemeleri bütçe hesabından takip edersiniz."
+      "Ayrı hesap kullanmıyorsanız bu adımı atlayabilirsiniz. Ödemeleri bütçe hesabından takip edersiniz."
     ],
     types: EXPENSE_PURPOSES
   },

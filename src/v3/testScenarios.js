@@ -32,7 +32,8 @@ function separateFull() {
 }
 
 const INVITE_NOTE = "Deneme kodları: K7M2QX yeni@ornek.com için, H3P8WD uye@ornek.com için (üye hesabı var). Bunların dışındakiler geçersiz sayılır.";
-const MODE_NOTE = "Hesap düzenini yeniden seçmek için listenin altındaki Hesap düzenini değiştir'e dokunun; Vazgeç üstte görünür.";
+const MODE_NOTE = "Hesap düzenini yeniden seçmek için ilk adımda “Geri” düğmesine ya da özetteki “Hesap düzenini değiştir” düğmesine dokunun. “Vazgeç” üstte görünür.";
+const skip = (s, ids) => ({ ...s, settings: { ...s.settings, setupSkipped: ids } });
 
 export const SCENARIOS = [
   { id: "giris", group: "Giriş ve bütçeler", icon: "login", title: "Giriş ekranı", sub: "Oturum kapalı · davet koduyla katılma adımları", build: () => fresh(null), cloud: { start: "signedOut" }, note: INVITE_NOTE },
@@ -40,11 +41,12 @@ export const SCENARIOS = [
   { id: "secim", group: "Giriş ve bütçeler", icon: "repeat", title: "Bütçe seçimi", sub: "İki bütçesi olan kişinin açılışı", build: dolu.buildSampleState, cloud: { start: "choose" } },
   { id: "butceler", group: "Giriş ve bütçeler", icon: "people", title: "Ayarlar · bütçe ve üyeler", sub: "Başka bütçeye geçme, adı düzeltme, davet kodu ekleme", build: dolu.buildSampleState, cloud: { start: "synced" }, tab: "settings" },
   { id: "duzen", group: "Hoş geldiniz", title: "Kurulumu baştan başlat", sub: "Hesap düzeni sorusu · iki ayrı kart, Önerilen rozeti", build: () => fresh(null) },
-  { id: "tek", group: "Hoş geldiniz", title: "Tek bir hesaptan takip ederim", sub: "Düzen seçilmiş, adımların hepsi boş", build: () => fresh("single"), note: MODE_NOTE },
-  { id: "kategori", group: "Hoş geldiniz", title: "Hesaplarımı kategorilendiririm · boş", sub: "Hiçbir şey girilmemiş · etkin adım bütçe hesabı, Başla altta gri", build: () => fresh("cards"), note: MODE_NOTE },
-  { id: "kart", group: "Hoş geldiniz", title: "Hesaplarımı kategorilendiririm · yalnız bütçe hesabı", sub: "Bütçe hesabı eklenmiş · etkin adım gelir, gider takibi kutusu", build: () => withBank(fresh("cards")) },
-  { id: "ayri", group: "Hoş geldiniz", title: "Hesaplarımı kategorilendiririm · gider takibi adımı", sub: "Bütçe hesabı ve kredi kartı eklenmiş; satırlarda kalem ve ×", build: () => withCard(withBank(fresh("cards"))) },
-  { id: "basla", group: "Hoş geldiniz", title: "Başla düğmesi", sub: "Hesap ve maaş eklenmiş · etkin adım yok, Başla mavi", build: () => withIncome(withCard(withBank(fresh("cards")))) },
+  { id: "tek", group: "Hoş geldiniz", title: "Tek bir hesaptan takip ederim", sub: "Düzen seçilmiş · adım 1 / 5 boş, Geri hesap düzenine döner", build: () => fresh("single"), note: MODE_NOTE },
+  { id: "kategori", group: "Hoş geldiniz", title: "Hesaplarımı kategorilendiririm · adım 1 boş", sub: "Adım 1 / 7 · bütçe hesabı, Hesap ekle doğrudan çekmeceyi açar", build: () => fresh("cards"), note: MODE_NOTE },
+  { id: "kart", group: "Hoş geldiniz", title: "Hesaplarımı kategorilendiririm · gelir adımı", sub: "Bütçe hesabı eklenmiş · adım 2 / 7; Geri ile dolu adım ve Devam", build: () => withBank(fresh("cards")) },
+  { id: "ayri", group: "Hoş geldiniz", title: "Hesaplarımı kategorilendiririm · Şimdilik atla", sub: "Hesap, maaş ve kart eklenmiş · gider takibi adımı, atla düğmesi", build: () => withIncome(withCard(withBank(fresh("cards")))) },
+  { id: "kilitli", group: "Hoş geldiniz", title: "Sabit ödeme adımı kilitli", sub: "Kategoriler atlanmış · Sabit ödemeler adımı kilitli, düğme kategori ekleme çekmecesini açar", build: () => skip(withIncome(withCard(withBank(fresh("cards")))), ["expense", "catFixed", "catVariable"]) },
+  { id: "basla", group: "Hoş geldiniz", title: "Kurulum özeti ve Başla", sub: "Atlanmış adımlarla özet · Başla mavi, satıra dokununca adıma gider", build: () => skip(withIncome(withCard(withBank(fresh("cards")))), ["expense", "catFixed", "catVariable", "fixed"]) },
   { id: "dolu", group: "Özet", title: "Dolu özet", sub: "İki kişilik örnek bütçe, ay ortası", build: dolu.buildSampleState },
   { id: "harclik", group: "Özet", title: "Haftalık harçlık ve talimat aktarımı", sub: "Konfor kartı, talimat hesabı, bankayla karşılaştırma hatırlatması", build: separateFull },
   { id: "ayarlar", group: "Ayarlar", title: "Ayarlar · hesaplar ve haftalık yükleme", sub: "Konfor kartına dokunup haftalık yüklemeyi görün", build: separateFull, tab: "settings" }

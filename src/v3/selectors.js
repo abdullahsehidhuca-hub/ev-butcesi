@@ -166,7 +166,9 @@ export function setupSteps(state) {
   const saved = state.settings?.trackingMode || null;
   const mode = saved === "separate" ? "cards" : saved;
   // Hesap yoksa (ör. hepsi silindiyse) özet hesaplanamaz; karşılama her durumda gösterilir.
-  return { account, bank, credit, extra, catFixed, catVariable, income, fixed, mode, show: !account || (!state.settings?.setupDone && !(income && fixed)) };
+  // Kurulumda "Şimdilik atla" denen adımlar; eski "ayrı hesap açmayacağım" işareti gider takibi adımını atlanmış sayar.
+  const skipped = [...new Set([...(Array.isArray(state.settings?.setupSkipped) ? state.settings.setupSkipped : []), ...(state.settings?.noExpenseAccounts ? ["expense"] : [])])];
+  return { account, bank, credit, extra, catFixed, catVariable, income, fixed, mode, skipped, show: !account || (!state.settings?.setupDone && !(income && fixed)) };
 }
 
 // Özet ekranı: serbest para, tempo, maaş çubuğu.

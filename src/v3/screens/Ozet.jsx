@@ -3,7 +3,7 @@
 // Dokununca bankadaki tutar, bloke ve bankayla karşılaştırma çekmecesi açılır (BakiyeSheet).
 // Kurulum bitene kadar karşılama gösterilir: önce hesap düzeni sorulur, adımlar düzene göre değişir (setupSteps).
 // Kredi kartı varsa altında tek satır "Kart blokesi" durur; dokununca kart kart döküm açılır (BlokeSheet).
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { pendingCarryover, formatUnits, balanceOf, nextAllowanceDate } from "../../core/index.js";
 import { Icon, Tile, DateBadge, Avatar, Check } from "../components/ui.jsx";
 import { purposeOf, isExpenseAccount, groupOf } from "../setupGuide.js";
@@ -33,7 +33,7 @@ function ModeChoice({ onMode, current, onCancel }) {
             <button key={m.id} type="button" className={`setup-mode${on ? " is-on" : ""}`} onClick={() => onMode(m.id)} aria-current={on ? "true" : undefined}>
               {m.badge && <span className="badge" style={{ "--bc": "var(--blue)" }}>{m.badge}</span>}
               <span className="row">
-                <Tile icon={m.icon} color={m.color} solid={m.primary} />
+                <SetupIcon icon={m.icon} color={m.color} />
                 <span className="setup-mode-t grow">{m.title}</span>
                 {on
                   ? <span className="radio on" aria-hidden="true"><Icon name="check" size={14} stroke={3} /></span>
@@ -48,19 +48,37 @@ function ModeChoice({ onMode, current, onCancel }) {
   );
 }
 
-// Kurulum adımları. Dolu adımın kayıtları kapalı akordiyondadır (açılışta hepsi kapalı, aynı anda tek adım açık): kalem
-// düzenleme çekmecesini açar, × onay çekmecesiyle siler (onRemove). Dolu adımın ⓘ düğmesi bilgi penceresini açar. Boş adıma
-// dokununca önce bilgi penceresi (setupInfo) açılır, oradan ekleme çekmecesine geçilir. Hesap düzeni kurulum bitene kadar
-// "Hesap düzenini değiştir" ile yeniden seçilir.
+// Kurulum sihirbazı: hesap düzeni seçildikten sonra her adım ekranda tek bir soru kartıdır; zorunlu iki adım (bütçe hesabı,
+// gelir) öndedir. Boş adımda ana düğme doğrudan ekleme çekmecesini açar; kayıt eklenince Devam çıkar. İsteğe bağlı adım
+// "Şimdilik atla" ile geçilir; atlanan adımlar settings.setupSkipped'e yazılır (setupSteps().skipped). Son ekran kurulum
+// özetidir: adımlar, atlananlar ve Başla. Açılışta ilk "tamamlanmamış ve atlanmamış" adım açılır; hepsi öyleyse özet.
+// Kayıt satırında kalem düzenleme çekmecesini açar, × onay çekmecesiyle siler (onRemove). ⓘ bilgi penceresini açar.
+// Şimdilik atla altındaki cümle: atlanan adımın kayıtları adıyla anılır.
+const LATER = {
+  cards: "Kartları daha sonra Ayarlar'dan ekleyebilirsiniz.",
+  expense: "Gider takibi hesaplarını daha sonra Ayarlar'dan ekleyebilirsiniz.",
+  catFixed: "Sabit gider kategorilerini daha sonra Ayarlar'dan ekleyebilirsiniz.",
+  catVariable: "Değişken gider kategorilerini daha sonra Ayarlar'dan ekleyebilirsiniz.",
+  fixed: "Sabit ödemeleri daha sonra Ayarlar'dan ekleyebilirsiniz."
+};
+
+function SetupIcon({ icon, color, small }) {
+  return (
+    <span className={`setup-icon${small ? " sm" : ""}`} style={{ "--tc": `var(--${color})` }} aria-hidden="true">
+      <Icon name={icon} size={small ? 18 : 26} />
+    </span>
+  );
+}
+
 function Welcome({ state, today, open, onDone, onMode, onRemove, onSetting }) {
-  const [openStep, setOpenStep] = useState(null);
   const [choosing, setChoosing] = useState(false);
+  const [cur, setCur] = useState(null);
+  const headRef = useRef(null);
+  const moved = useRef(false);
   const st = setupSteps(state);
   // Düzen seçilmeden hesap eklenmişse (eski kurulum) tek hesap adımları gösterilir.
   const mode = st.mode || (st.account || !onMode ? "single" : null);
-  if (!mode || choosing) return <ModeChoice current={choosing ? mode : null} onCancel={choosing ? () => setChoosing(false) : null} onMode={m => { setChoosing(false); onMode(m); }} />;
-  const single = mode === "single";
-  const needBank = st.bank ? null : "Önce bütçe hesabını ekleyin.";
+  const single = mode !== "cards";
   const accounts = Object.values(state.accounts);
   const categories = Object.values(state.categories).filter(c => !c.archived).sort((a, b) => a.name.localeCompare(b.name, "tr"));
   const obligations = Object.values(state.obligations);
@@ -68,40 +86,54 @@ function Welcome({ state, today, open, onDone, onMode, onRemove, onSetting }) {
   const acc = a => ({ id: a.id, kind: "account", name: a.name, tag: a.id === state.settings.defaultAccountId ? "Bütçe hesabı" : purposeOf(a.purpose)?.label, value: money(balanceOf(state, a.id, today), a.currency) });
   const ob = o => ({ id: o.id, kind: "obligation", name: o.name, tag: o.categoryId ? categoryName(state, o.categoryId) : null, value: money(o.amount, o.currency) });
   const cat = c => ({ id: c.id, kind: "category", name: c.name, value: c.budget ? `${fmt(c.budget)} / ay` : "" });
-  const noExpense = !!state.settings.noExpenseAccounts;
+  const expenseAccounts = accounts.filter(isExpenseAccount);
   const steps = [
     { id: "budget", title: "Bütçe hesabı ve bugünkü bakiye", sub: "Maaşınızın ve diğer gelirlerinizin yattığı hesapları, bugünkü tutarlarıyla ekleyin.", icon: "wallet", color: "blue",
-      add: "Hesap ekle", sheet: { name: "account", side: "income" }, on: true, done: st.bank,
+      add: "Hesap ekle", sheet: { name: "account", side: "income" }, done: st.bank, required: true,
       items: accounts.filter(a => a.type !== "credit" && !isExpenseAccount(a)).map(acc) },
-    !single && { id: "cards", title: "Kredi kartları", sub: needBank || "Her kartı ayrı ekleyin. Harcamalar o kartın borcuna yazılır.", icon: "card", color: "pink",
-      add: "Kart ekle", sheet: { name: "account", side: "card" }, on: st.bank, done: st.credit,
-      items: accounts.filter(a => a.type === "credit").map(acc) },
-    !single && { id: "expense", title: "Gider takibi hesapları", sub: needBank || "Otomatik ödemeler, kredi kartı aktarımları ya da günlük harcama için ayrı bir hesabınız varsa ekleyin.", badge: "İsteğe bağlı", icon: "repeat", color: "teal",
-      add: "Hesap ekle", sheet: { name: "account", side: "expense" }, on: st.bank && !noExpense, done: st.extra, skip: true,
-      items: accounts.filter(isExpenseAccount).map(acc) },
-    { id: "income", title: "Maaş ve diğer gelirler", sub: needBank || "İlk maaşın yattığı gün, bütçe döneminizin başlangıcı olur.", icon: "cash", color: "green",
-      add: "Gelir ekle", sheet: { name: "obligation", kind: "income", setup: true }, on: st.bank, done: st.income,
+    { id: "income", title: "Maaş ve diğer gelirler", sub: "İlk maaşın yattığı gün, bütçe döneminizin başlangıcı olur.", icon: "cash", color: "green",
+      add: "Gelir ekle", sheet: { name: "obligation", kind: "income", setup: true }, done: st.income, required: true,
       items: obligations.filter(o => o.kind === "income").map(ob) },
-    { id: "categories", title: "Gider kategorileri", sub: "Sabit ve değişken giderler için ayrı kategoriler ekleyin.", icon: "tag", color: "indigo",
-      on: true, done: st.catFixed && st.catVariable, items: [],
-      groups: [
-        { id: "catFixed", title: "Sabit gider kategorileri", add: "Sabit gider kategorisi ekle", sheet: { name: "category", group: "fixed" }, items: categories.filter(c => groupOf(c) === "fixed").map(cat) },
-        { id: "catVariable", title: "Değişken gider kategorileri", add: "Değişken gider kategorisi ekle", sheet: { name: "category", group: "variable" }, items: categories.filter(c => groupOf(c) === "variable").map(cat) }
-      ] },
-    { id: "fixed", title: "Kira, fatura gibi sabit ödemeler", sub: needBank || (st.catFixed ? "Otomatik olarak işaretlediğiniz ödemeler, günü gelince kendiliğinden düşer." : "Önce sabit gider kategorisi ekleyin."), icon: "repeat", color: "orange",
-      add: "Ödeme ekle", sheet: { name: "obligation", kind: "fixed", setup: true }, on: st.bank && st.catFixed, done: st.fixed,
+    !single && { id: "cards", title: "Kredi kartları", sub: "Her kartı ayrı ekleyin. Harcamalar o kartın borcuna yazılır.", icon: "card", color: "pink",
+      add: "Kart ekle", sheet: { name: "account", side: "card" }, done: st.credit,
+      items: accounts.filter(a => a.type === "credit").map(acc) },
+    !single && { id: "expense", title: "Gider takibi hesapları", sub: "Otomatik ödemeler, kredi kartı aktarımları ya da günlük harcama için ayrı bir hesabınız varsa ekleyin.", icon: "repeat", color: "teal",
+      add: "Hesap ekle", sheet: { name: "account", side: "expense" }, done: expenseAccounts.length > 0,
+      items: expenseAccounts.map(acc) },
+    { id: "catFixed", title: "Sabit gider kategorileri", sub: "Her dönem tekrarlanan ödemeler için kategori ekleyin.", icon: "tag", color: "orange",
+      add: "Sabit gider kategorisi ekle", sheet: { name: "category", group: "fixed" }, done: st.catFixed,
+      items: categories.filter(c => groupOf(c) === "fixed").map(cat) },
+    { id: "catVariable", title: "Değişken gider kategorileri", sub: "Dönemden döneme değişen harcamalar için kategori ekleyin.", icon: "tag", color: "indigo",
+      add: "Değişken gider kategorisi ekle", sheet: { name: "category", group: "variable" }, done: st.catVariable,
+      items: categories.filter(c => groupOf(c) === "variable").map(cat) },
+    // Sabit ödeme bir sabit gider kategorisine bağlanır; kategori yoksa kart kilitlidir ve ana düğme kategori ekletir.
+    { id: "fixed", title: "Kira, fatura gibi sabit ödemeler", sub: st.catFixed ? "Otomatik olarak işaretlediğiniz ödemeler, günü gelince kendiliğinden düşer." : "Sabit ödeme eklemek için önce bir kategori gerekir.", icon: "repeat", color: "orange",
+      add: "Ödeme ekle", sheet: { name: "obligation", kind: "fixed", setup: true }, done: st.fixed, locked: !st.catFixed,
       items: obligations.filter(o => o.kind !== "income").map(ob) }
-  ].filter(Boolean);
+  ].filter(Boolean).map(s => ({ ...s, status: s.done ? "done" : st.skipped.includes(s.id) ? "skipped" : "open" }));
+  const first = steps.find(s => s.status === "open")?.id || "summary";
+  // Bütçe hesabı yoksa başka adım açılmaz (ekleme çekmeceleri bütçe hesabı ister). Özet yalnız açık adım kalmadıysa
+  // açık kalır; bir kayıt silinir ya da veri baştan yüklenirse ilk açık adıma dönülür.
+  const valid = id => id === "budget" || (st.bank && (id === "summary" ? first === "summary" : steps.some(s => s.id === id)));
+  const shown = cur && valid(cur) ? cur : first;
+  // Açılan adım sabitlenir: kayıt eklenince sihirbaz kendiliğinden ilerlemez, Devam beklenir.
+  useEffect(() => { if (mode && !choosing && cur !== shown) setCur(shown); });
+  // Adım değişince odak yeni başlığa taşınır.
+  useEffect(() => { if (moved.current) headRef.current?.focus(); }, [shown]);
+  if (!mode || choosing) return <ModeChoice current={choosing ? mode : null} onCancel={choosing ? () => setChoosing(false) : null} onMode={m => { setChoosing(false); setCur(null); onMode(m); }} />;
+
+  const go = id => { moved.current = true; setCur(id); };
+  const i = steps.findIndex(s => s.id === shown);
+  const s = steps[i];
+  const next = () => go(steps[i + 1]?.id || "summary");
+  const back = () => !s ? go(steps[steps.length - 1].id) : i > 0 ? go(steps[i - 1].id) : setChoosing(true);
+  const skip = () => { onSetting?.("setupSkipped", [...new Set([...st.skipped, s.id])]); next(); };
   const canStart = st.bank && st.income;
-  // Başla açıkken boş adım kaldıysa düğmenin üstünde sonradan tamamlama notu görünür.
-  const skipped = canStart && steps.some(s => !s.done);
-  // Adım başlığı ve ⓘ her zaman bilgi penceresini açar; adım boşsa pencerenin "Ekle" düğmesi ekleme çekmecesine geçer.
-  const info = (topic, next) => open({ name: "setupInfo", topic, next: next || null });
-  // Satırlar Ayarlar'daki liste düzenini izler: küçük renkli kare, ad ve alt satır, sağda tutar.
-  const rowStyle = { minHeight: 52, padding: "10px 16px" };
+  const info = topic => open({ name: "setupInfo", topic, next: null });
+  // Kayıt satırları Ayarlar'daki liste düzenini izler: küçük renkli kare, ad ve alt satır, sağda tutar.
   const itemRows = (items, icon, color) => items.map(it => (
-    <div key={it.id} className="li" style={rowStyle}>
-      <Tile icon={icon} color={color} small />
+    <div key={it.id} className="li">
+      <SetupIcon icon={icon} color={color} small />
       <span className="stack grow gap2" style={{ minWidth: 0 }}>
         <span className="t-body ellipsis">{it.name}</span>
         {it.tag && <span className="t-meta ellipsis">{it.tag}</span>}
@@ -112,101 +144,100 @@ function Welcome({ state, today, open, onDone, onMode, onRemove, onSetting }) {
       {onRemove && <button type="button" className="setup-act c-red" aria-label={`Sil: ${it.name}`} onClick={() => onRemove(it.kind, it.id)}><Icon name="close" size={18} /></button>}
     </div>
   ));
-  const addRow = (key, label, onClick) => (
-    <button key={key} type="button" className="li" style={rowStyle} onClick={onClick}>
-      <Tile icon="plus" color="blue" solid small />
-      <span className="t-body c-blue grow">{label}</span>
-    </button>
+  const top = (
+    <>
+      <div className="setup-top">
+        <button type="button" className="setup-prev" onClick={back}><Icon name="back" size={20} />Geri</button>
+        <span className="setup-count" aria-hidden="true">{s ? `Adım ${i + 1} / ${steps.length}` : `${steps.filter(x => x.status === "done").length} / ${steps.length} adım tamamlandı`}</span>
+      </div>
+      <ol className="setup-progress" aria-hidden="true">
+        {steps.map((x, k) => <li key={x.id} className={`is-${k === i ? "now" : x.status}`} />)}
+      </ol>
+      <p className="visually-hidden" aria-live="polite">{s ? `Adım ${i + 1} / ${steps.length}: ${s.title}` : "Kurulum özeti"}</p>
+    </>
   );
-  // Etkin adım: Başla'yı açmak için gereken ilk eksik adım. Açıklama yalnız etkin, devre dışı ve dolu adımda görünür;
-  // diğer adımların açıklaması bilgi penceresinde (STEP_INFO) anlatılır.
-  const active = !st.bank ? "budget" : !st.income ? "income" : null;
+
+  if (!s) {
+    const skippedAny = canStart && steps.some(x => x.status !== "done");
+    const subOf = x => x.status === "done" ? x.items.map(it => it.name).join(" · ")
+      : x.required ? (x.id === "budget" ? "Başlamak için bütçe hesabınızı ekleyin." : "Başlamak için gelirinizi ekleyin.")
+      : "Atlandı. Şimdi ekleyebilirsiniz.";
+    return (
+      <>
+        {top}
+        <header className="setup-head">
+          <h1 className="t-title setup-h1" ref={headRef} tabIndex={-1}>Kurulum özeti</h1>
+        </header>
+        <ul className="setup-card setup-summary" aria-label="Kurulum adımları">
+          {steps.map((x, k) => {
+            const done = x.status === "done";
+            const missing = !done && x.required;
+            return (
+              <li key={x.id}>
+                <button type="button" className="setup-sum-row" onClick={() => go(x.id)}
+                  aria-label={`${k + 1}. ${x.title}${done ? ", tamamlandı" : ""}. ${subOf(x)} Adıma git.`}>
+                  <span className={`setup-mark is-${done ? "done" : missing ? "missing" : "skipped"}`} aria-hidden="true">
+                    <Icon name={done ? "check" : missing ? "alert" : "minus"} size={16} stroke={2.5} />
+                  </span>
+                  <span className="stack grow gap2" style={{ minWidth: 0 }}>
+                    <span className="t-body b">{x.title}</span>
+                    <span className="t-note">{subOf(x)}</span>
+                  </span>
+                  <Icon name="chev" size={14} style={{ color: "var(--label3)", flex: "none" }} />
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+        {onDone && (
+          <div className="setup-foot">
+            {skippedAny && <p id="setup-start-note" className="t-note">Atladığınız adımları istediğiniz zaman Ayarlar'dan tamamlayabilirsiniz.</p>}
+            {!canStart && <p id="setup-start-why" className="t-note">{st.bank ? "Başlamak için gelirinizi ekleyin." : "Başlamak için bütçe hesabınızı ve gelirinizi ekleyin."}</p>}
+            <button type="button" className="setup-primary setup-start" disabled={!canStart} aria-describedby={canStart ? (skippedAny ? "setup-start-note" : undefined) : "setup-start-why"} onClick={onDone}>Başla</button>
+          </div>
+        )}
+        {onMode && <button type="button" className="t-sub c-blue setup-link" onClick={() => setChoosing(true)}>Hesap düzenini değiştir</button>}
+      </>
+    );
+  }
+
+  const primary = s.done
+    ? <button type="button" className="setup-primary" onClick={next}>Devam</button>
+    : s.locked
+      ? <button type="button" className="setup-primary" onClick={() => open({ name: "category", group: "fixed" })}><Icon name="plus" size={18} stroke={2.5} />Sabit gider kategorisi ekle</button>
+      : <button type="button" className="setup-primary" onClick={() => open(s.sheet)}><Icon name="plus" size={18} stroke={2.5} />{s.add}</button>;
   return (
     <>
-      <header className="setup-head">
-        <h1 className="t-title" style={{ margin: 0 }}>Hoş geldiniz</h1>
-        <span className="t-sub">Bütçe ve harcama hesap bilgilerinizi girerek uygulamayı kullanmaya başlayabilirsiniz. Bilgilerinizi daha sonra Ayarlar'dan da düzenleyebilirsiniz.</span>
-      </header>
-      <section className="list" aria-label="Başlangıç adımları" style={{ "--inset": "68px" }}>
-        {steps.map((s, i) => {
-          const all = s.groups ? s.groups.flatMap(g => g.items) : s.items;
-          const adds = s.on && !s.groups && !s.items.length;
-          const expanded = !adds && openStep === s.id;
-          const panel = `setup-${s.id}`;
-          const cta = adds && s.id === active;
-          // Kapalı akordiyonda alt satır eklenenleri sayar; adım açılınca kayıtlar görünür.
-          const sub = all.length ? (expanded ? null : all.map(it => it.name).join(" · ")) : (!s.on || cta ? s.sub : null);
-          const name = `${i + 1}. ${s.title}${s.badge ? `, ${s.badge.toLocaleLowerCase("tr")}` : ""}`;
-          const head = (
-            <>
-              <Tile icon={s.done ? "check" : s.icon} color={s.done ? "green" : s.color} />
-              <span className="stack grow" style={{ minWidth: 0, gap: 4 }}>
-                <span className="setup-step-t">
-                  <span className="t-body b">{i + 1}. {s.title}</span>
-                  {s.badge && <span className="badge" style={{ "--bc": "var(--gray)" }}>{s.badge}</span>}
-                </span>
-                {sub && <span className="t-note">{sub}</span>}
-                {cta && <span className="setup-cta" aria-hidden="true"><Icon name="plus" size={16} stroke={2.5} />{s.add}</span>}
-              </span>
-              <Icon name="chev" size={14} style={{ color: "var(--label3)", flex: "none", transform: expanded ? "rotate(90deg)" : "none", transition: "transform .15s ease" }} />
-            </>
-          );
-          return (
-            <Fragment key={s.id}>
-              {adds || !s.on ? (
-                <button type="button" className="li setup-step" disabled={!s.on}
-                  onClick={() => info(s.id, adds ? s.sheet : null)}
-                  aria-label={adds ? `${name}. ${s.sub} Bilgi penceresini açar.` : `${name}. ${s.sub}`}>
-                  {head}
-                </button>
-              ) : (
-                <div className="li setup-row">
-                  <button type="button" className="setup-step" aria-expanded={expanded} aria-controls={panel} onClick={() => setOpenStep(expanded ? null : s.id)}>
-                    {head}
-                  </button>
-                  <button type="button" className="setup-act setup-info" aria-label={`Bilgi: ${s.title}`} onClick={() => info(s.id)}>
-                    <Icon name="info" size={20} />
-                  </button>
-                </div>
-              )}
-              {expanded && (
-                <div id={panel} className="setup-panel" role="region" aria-label={s.title}>
-                  {itemRows(s.items, s.icon, s.color)}
-                  {s.items.length > 0 && addRow(`${s.id}-add`, s.add, () => open(s.sheet))}
-                  {s.groups?.map(g => (
-                    <Fragment key={g.id}>
-                      <button type="button" className="li" style={rowStyle} onClick={() => info(g.id)} aria-label={`Bilgi: ${g.title}`}>
-                        <span className="tile sq30" aria-hidden="true" />
-                        <span className="t-sub b grow">{g.title}</span>
-                        <Icon name="info" size={20} style={{ color: "var(--blue)", flex: "none" }} />
-                      </button>
-                      {itemRows(g.items, "tag", g.id === "catFixed" ? "orange" : "indigo")}
-                      {addRow(`${g.id}-add`, g.add, () => g.items.length ? open(g.sheet) : info(g.id, g.sheet))}
-                    </Fragment>
-                  ))}
-                </div>
-              )}
-              {s.skip && st.bank && !s.items.length && (
-                <label className="setup-skip">
-                  <input type="checkbox" className="setup-check" aria-describedby="setup-skip-note" checked={noExpense} onChange={e => onSetting?.("noExpenseAccounts", e.target.checked)} />
-                  <span className="t-sub grow">Ayrı hesap açmayacağım, ödemeleri bütçe hesabından takip edeceğim</span>
-                </label>
-              )}
-              {s.skip && st.bank && !s.items.length && (
-                <p id="setup-skip-note" className="t-note setup-skip-note">Fikrinizi değiştirirseniz Ayarlar'dan hesap ekleyebilirsiniz.</p>
-              )}
-            </Fragment>
-          );
-        })}
-      </section>
-      {onMode && (
-        <button type="button" className="t-sub c-blue setup-link" onClick={() => setChoosing(true)}>Hesap düzenini değiştir</button>
+      {top}
+      {i === 0 && (
+        <header className="setup-head">
+          <h1 className="t-title" style={{ margin: 0 }}>Hoş geldiniz</h1>
+          <span className="t-sub">Bütçe ve harcama hesap bilgilerinizi girerek uygulamayı kullanmaya başlayabilirsiniz. Bilgilerinizi daha sonra Ayarlar'dan da düzenleyebilirsiniz.</span>
+        </header>
       )}
-      {onDone && (
-        <div className={`setup-foot${canStart ? "" : " is-off"}`}>
-          {skipped && <p id="setup-start-note" className="t-sub" style={{ margin: "0 4px" }}>Boş bıraktığınız adımları istediğiniz zaman Ayarlar'dan tamamlayabilirsiniz.</p>}
-          {!canStart && <p id="setup-start-why" className="t-sub" style={{ margin: "0 4px" }}>{st.bank ? "Başlamak için gelirinizi ekleyin." : "Başlamak için bütçe hesabınızı ve gelirinizi ekleyin."}</p>}
-          <button type="button" className="setup-start" disabled={!canStart} aria-describedby={canStart ? (skipped ? "setup-start-note" : undefined) : "setup-start-why"} onClick={onDone}>Başla</button>
+      <section key={s.id} className="setup-card" aria-labelledby="setup-q">
+        <div className="setup-card-top">
+          <SetupIcon icon={s.icon} color={s.color} />
+          <button type="button" className="setup-info-btn" aria-label={`Bilgi: ${s.title}`} onClick={() => info(s.id)}><Icon name="info" size={22} /></button>
+        </div>
+        {!s.required && <span className="badge" style={{ "--bc": "var(--gray)" }}>İsteğe bağlı</span>}
+        <h2 id="setup-q" className="setup-q" ref={headRef} tabIndex={-1}>{s.title}</h2>
+        <p className="setup-d">{s.sub}</p>
+        {s.items.length > 0 && (
+          <div className="setup-items">
+            {itemRows(s.items, s.icon, s.color)}
+            <button type="button" className="li" onClick={() => open(s.sheet)}>
+              <Tile icon="plus" color="blue" solid small />
+              <span className="t-body c-blue grow">{s.add}</span>
+            </button>
+          </div>
+        )}
+        {primary}
+      </section>
+      {!s.required && !s.done && (
+        <div className="setup-later-box">
+          <button type="button" className="setup-later" aria-describedby="setup-later-note" onClick={skip}>Şimdilik atla</button>
+          <p id="setup-later-note" className="t-note">{LATER[s.id]}</p>
         </div>
       )}
     </>
@@ -257,7 +288,11 @@ function Allowances({ state, today }) {
 
 export default function Ozet({ state, today, members = {}, overrides, open, onResolve, onPay, onOpenPayments, onOpenSettings, backupDue, onSetupDone, onSetupMode, onSetupRemove, onSetupSetting, reconcileReminder, funding = [] }) {
   const [list, setList] = useState("upcoming");
-  if (setupSteps(state).show) return <Welcome state={state} today={today} open={open} onDone={onSetupDone} onMode={onSetupMode} onRemove={onSetupRemove} onSetting={onSetupSetting} />;
+  // Karşılama açıldıysa Başla'ya basılana kadar kalır: son adımda sabit ödeme eklenince (show false olur) özet ekranı atlanmaz.
+  const show = setupSteps(state).show;
+  const [inSetup, setInSetup] = useState(show);
+  if (show && !inSetup) setInSetup(true);
+  if (show || inSetup) return <Welcome state={state} today={today} open={open} onDone={onSetupDone && (() => { setInSetup(false); onSetupDone(); })} onMode={onSetupMode} onRemove={onSetupRemove} onSetting={onSetupSetting} />;
 
   const o = overview(state, today);
   const fc = forecast(state, today, { overrides });

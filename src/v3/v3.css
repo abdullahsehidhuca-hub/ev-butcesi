@@ -59,7 +59,6 @@ input { font: inherit; color: inherit; }
 .li + .li::before { content: ""; position: absolute; top: 0; right: 0; left: var(--inset, 114px); height: .5px; background: var(--sep); }
 .li:active { background: var(--fill2); }
 .setup-act { width: 44px; height: 44px; margin: -6px -8px -6px 0; flex: none; display: grid; place-items: center; color: var(--blue); border-radius: 10px; }
-.setup-check { width: 22px; height: 30px; flex: none; margin: 0 4px; accent-color: var(--blue-t, var(--blue)); }
 .setup-act.c-red { color: var(--red); }
 .setup-act:active { background: var(--fill2); }
 .setup-types { margin: 0 4px 14px; display: flex; flex-direction: column; gap: 10px; }
@@ -276,51 +275,122 @@ button.v3-alert { display: flex; flex-direction: column; align-items: flex-start
 .v3-gate-row .v3-gate-t { overflow-wrap: anywhere; }
 
 /* Karşılama ve hesap düzeni (2026-11-26): ferah yerleşim. Yalnız setup-* sınıfları; diğer ekranlar etkilenmez.
-   Satır açıklaması 14 px (--fs-note); etkin adım dışında açıklama bilgi penceresindedir. */
+   Yardımcı cümle 14 px (--fs-note). */
 :root { --fs-note: 14px; }
 .t-note { font-size: var(--fs-note); color: var(--label2); line-height: 1.35; }
 .setup-head { display: flex; flex-direction: column; gap: 8px; padding: 0 4px; margin-bottom: 6px; } /* + bölüm aralığı 14 = 20 */
 .setup-head .t-sub { line-height: 1.4; }
 .setup-back { align-self: flex-start; min-height: 44px; padding: 0 4px; font-size: 17px; font-weight: 500; margin-bottom: -8px; }
+/* Karşılama sihirbazı (2026-11-26): derinlik dili. Kartlar yumuşak gölge ve hafif gradyanla zeminden ayrılır; ana düğme
+   ışıltılıdır (gradyan, renkli gölge, üst yarıda parlama). Koyu temada gölge yerine açık yüzey ve üst ışık çizgisi kullanılır.
+   Bu değişkenler yalnız setup-* sınıflarında kullanılır; diğer ekranlar değişmez. --label2-t: 14-16 px yardımcı metin için
+   AA kontrastlı ikincil renk (beyaz üstünde yaklaşık 5,6:1). */
+:root {
+  --card-grad: linear-gradient(180deg, #FFFFFF, #FBFBFD);
+  --sh-card: 0 0 0 .5px rgba(60,60,67,.08), 0 1px 2px rgba(16,24,40,.05), 0 8px 24px rgba(16,24,40,.08);
+  --sh-btn: 0 8px 20px rgba(0,100,210,.30), 0 2px 4px rgba(0,60,140,.20), inset 0 1px 0 rgba(255,255,255,.35);
+  --btn-grad: linear-gradient(180deg, #0F6FDB, #0058B8);
+  --label2-t: rgba(60,60,67,.78); --setup-glow: rgba(0,136,255,.14);
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --card-grad: linear-gradient(180deg, #2A2A2D, #1C1C1E);
+  --sh-card: 0 0 0 .5px rgba(255,255,255,.08), inset 0 1px 0 rgba(255,255,255,.07), 0 10px 30px rgba(0,0,0,.6);
+  --sh-btn: 0 8px 24px rgba(10,132,255,.28), inset 0 1px 0 rgba(255,255,255,.25);
+  --label2-t: rgba(235,235,245,.72); --setup-glow: rgba(10,132,255,.18);
+} }
+:root[data-theme="dark"] {
+  --card-grad: linear-gradient(180deg, #2A2A2D, #1C1C1E);
+  --sh-card: 0 0 0 .5px rgba(255,255,255,.08), inset 0 1px 0 rgba(255,255,255,.07), 0 10px 30px rgba(0,0,0,.6);
+  --sh-btn: 0 8px 24px rgba(10,132,255,.28), inset 0 1px 0 rgba(255,255,255,.25);
+  --label2-t: rgba(235,235,245,.72); --setup-glow: rgba(10,132,255,.18);
+}
+/* Karşılama zemini: üstten hafif mavi ışıma. Kart geçişindeki kayma yatay kaydırma çubuğu açmasın diye x ekseni kırpılır. */
+.v3-scroll:has(> .setup-top), .v3-scroll:has(> .setup-modes) {
+  background: radial-gradient(140% 420px at 50% 0, var(--setup-glow), transparent 70%) no-repeat; overflow-x: hidden; gap: 20px;
+}
+.setup-head .t-sub, .setup-mode-d, .setup-d, .setup-card .t-note, .setup-foot .t-note, .setup-later-box .t-note { color: var(--label2-t); }
 
-.setup-modes { display: flex; flex-direction: column; gap: 12px; }
-.setup-mode { display: flex; flex-direction: column; align-items: stretch; gap: 12px; width: 100%; padding: 18px; border-radius: var(--r-card); background: var(--card); text-align: left; }
+/* Derinlikli simge: rengin açık tonundan kendisine gradyan, renkli yumuşak gölge, üstte ışık çizgisi. Süstür (aria-hidden). */
+.setup-icon { width: 52px; height: 52px; border-radius: 15px; flex: none; display: grid; place-items: center; color: #fff;
+  background: linear-gradient(160deg, color-mix(in srgb, var(--tc) 55%, #fff), var(--tc));
+  box-shadow: 0 6px 14px color-mix(in srgb, var(--tc) 35%, transparent), inset 0 1px 0 rgba(255,255,255,.5); }
+.setup-icon.sm { width: 36px; height: 36px; border-radius: 10px; box-shadow: 0 3px 8px color-mix(in srgb, var(--tc) 30%, transparent), inset 0 1px 0 rgba(255,255,255,.45); }
+
+/* Hesap düzeni kartları */
+.setup-modes { display: flex; flex-direction: column; gap: 14px; }
+.setup-mode { display: flex; flex-direction: column; align-items: stretch; gap: 12px; width: 100%; padding: 20px; border-radius: 24px; background: var(--card-grad); box-shadow: var(--sh-card); text-align: left; transition: transform .12s ease, box-shadow .15s ease; }
 .setup-mode > .badge { align-self: flex-start; }
-.setup-mode.is-on { box-shadow: inset 0 0 0 2px var(--blue-t); }
-.setup-mode:active { background: color-mix(in srgb, var(--card) 92%, var(--label)); }
-.setup-mode:focus-visible { outline-offset: 2px; border-radius: var(--r-card); }
-.setup-mode .tile { width: 44px; height: 44px; border-radius: 12px; }
+.setup-mode.is-on { box-shadow: 0 0 0 2px var(--blue-t), 0 0 0 6px color-mix(in srgb, var(--blue) 18%, transparent), var(--sh-card); }
+.setup-mode:active { transform: scale(.985); }
+.setup-mode:focus-visible { outline-offset: 3px; border-radius: 24px; }
+.setup-mode .setup-icon { width: 44px; height: 44px; border-radius: 13px; }
 .setup-mode-t { font-size: 17px; font-weight: 600; line-height: 1.3; }
-.setup-mode-d { font-size: var(--fs-sub); color: var(--label2); line-height: 1.35; }
+.setup-mode-d { font-size: var(--fs-sub); line-height: 1.4; }
 
-.setup-step { display: flex; align-items: flex-start; gap: 12px; width: 100%; min-height: 72px; padding: 14px 16px; text-align: left; }
-.setup-step .tile { width: 40px; height: 40px; border-radius: 11px; }
-.setup-step > svg:last-child { align-self: center; }
-.setup-step > .stack { min-height: 40px; justify-content: center; }
-.setup-step:active { background: var(--fill2); }
-.setup-step:focus-visible { outline-offset: -3px; }
-.setup-step:disabled .t-body { color: var(--label2); }
-.setup-step:disabled .tile { opacity: .5; }
-.setup-step-t { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
-.setup-cta { display: inline-flex; align-items: center; gap: 4px; align-self: flex-start; margin-top: 6px; min-height: 32px; padding: 0 14px; border-radius: 16px; background: var(--blue-fill); color: #fff; font-size: var(--fs-sub); font-weight: 600; }
-/* Dolu adım: satırın tamamı akordiyonu açar; ⓘ okun hemen solunda, satırın üstünde durur. */
-.setup-row { padding: 0; }
-.setup-row .setup-step { padding-right: 74px; }
-.setup-row .setup-step > svg:last-child { position: absolute; right: 16px; top: 50%; margin-top: -7px; }
-.setup-info { position: absolute; right: 30px; top: 50%; margin: 0; transform: translateY(-50%); }
-.setup-panel { background: var(--fill2); }
-.setup-skip { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 16px 10px var(--inset); margin-top: -6px; cursor: pointer; }
-.setup-skip .setup-check { width: 24px; height: 24px; margin: 0; }
-.setup-skip-note { margin: -8px 16px 0 var(--inset); padding-bottom: 12px; }
-.setup-skip + .li::before, .setup-skip-note + .li::before, .setup-panel + .li::before { content: ""; position: absolute; top: 0; right: 0; left: var(--inset); height: .5px; background: var(--sep); }
+/* Üst çubuk: Geri, Adım n / N ve adım sayısı kadar parçalı ilerleme çubuğu (renge ek olarak yazı da durur). */
+.setup-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; margin-bottom: -10px; }
+.setup-prev { display: inline-flex; align-items: center; gap: 2px; min-height: 44px; min-width: 44px; padding: 0 8px 0 0; margin-left: -6px; color: var(--blue-t); font-size: 17px; font-weight: 500; }
+.setup-count { font-size: var(--fs-sub); font-weight: 600; color: var(--label2-t); }
+.setup-progress { display: flex; gap: 4px; margin: 0; padding: 0 2px; list-style: none; }
+.setup-progress li { flex: 1; height: 4px; border-radius: 2px; background: var(--fill); }
+.setup-progress .is-done { background: var(--blue-t); }
+.setup-progress .is-now { background: var(--blue-t); box-shadow: 0 0 8px color-mix(in srgb, var(--blue) 65%, transparent); }
+.setup-progress .is-skipped { background: var(--gray); }
 
-.setup-link { align-self: center; min-height: 44px; padding: 0 12px; font-weight: 500; }
-/* Başla: sekme çubuğunun hemen üstünde sabit durur (kaydırma alanı konumlu olmadığı için .v3'e göre); arkası sayfa rengine solar.
-   Kaydırma alanının alt boşluğu bu alan kadar artar; liste sonu ve Hesap düzenini değiştir altında kalmaz. */
-.v3-scroll:has(> .setup-foot:not(.is-off)) { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 84px + 128px); }
-.setup-foot { position: absolute; left: 0; right: 0; bottom: 0; z-index: 4; display: flex; flex-direction: column; gap: 8px; padding: 24px var(--pad) calc(env(safe-area-inset-bottom, 0px) + 84px); background: linear-gradient(to bottom, transparent, var(--bg) 24px); }
-/* Başla kapalıyken alan sabitlenmez, listenin altında akışta durur: küçük ekranda etkin adımın düğmesini örtmesin. */
-.setup-foot.is-off { position: static; order: 1; padding: 0; background: none; }
-.setup-link { order: 2; }
-.setup-start { width: 100%; min-height: 50px; border-radius: 14px; background: var(--blue-fill); color: #fff; font-size: 17px; font-weight: 600; }
-.setup-start:disabled { background: var(--fill); color: var(--label2); }
+/* Soru kartı */
+.setup-card { display: flex; flex-direction: column; align-items: stretch; gap: 12px; margin: 0; padding: 24px; border-radius: 28px; background: var(--card-grad); box-shadow: var(--sh-card); min-height: 240px; animation: setup-in .22s ease both; }
+.setup-card > .badge { align-self: flex-start; margin-bottom: -4px; }
+.setup-card-top { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 4px; }
+.setup-info-btn { width: 44px; height: 44px; margin: -6px -10px 0 0; display: grid; place-items: center; color: var(--blue-t); border-radius: 22px; }
+.setup-info-btn:active { background: var(--fill2); }
+.setup-q { margin: 0; font-size: 22px; font-weight: 700; line-height: 1.25; letter-spacing: -.01em; }
+.setup-q:focus:not(:focus-visible), .setup-h1:focus:not(:focus-visible) { outline: none; }
+.setup-h1 { margin: 0; }
+.setup-d { margin: 0; font-size: 16px; line-height: 1.45; }
+.setup-items { margin: 4px 0 0; border-radius: 16px; background: var(--fill2); overflow: hidden; --inset: 60px; }
+.setup-items .li { min-height: 56px; padding: 8px 12px; gap: 12px; }
+.setup-items .tile.sq30 { margin: 0 3px; }
+
+/* Ana düğme (Ekle, Devam, Başla): gradyan, renkli gölge ve üst yarıda beyazdan saydama parlama. Kapalıyken düz gri. */
+.setup-primary { position: relative; overflow: hidden; display: inline-flex; align-items: center; justify-content: center; gap: 6px; width: 100%; min-height: 52px; margin-top: 8px; padding: 8px 16px; border-radius: 16px; background: var(--btn-grad); color: #fff; font-size: 17px; font-weight: 600; text-align: center; box-shadow: var(--sh-btn); transition: transform .12s ease, box-shadow .12s ease; }
+.setup-primary::after { content: ""; position: absolute; inset: 0 0 50% 0; background: linear-gradient(180deg, rgba(255,255,255,.22), rgba(255,255,255,0)); pointer-events: none; }
+.setup-primary:active:not(:disabled) { transform: scale(.98); box-shadow: 0 3px 8px rgba(0,100,210,.25); }
+.setup-primary:focus-visible { outline-offset: 3px; border-radius: 16px; }
+.setup-primary:disabled { background: var(--fill); color: var(--label2-t); box-shadow: none; cursor: not-allowed; }
+.setup-primary:disabled::after { display: none; }
+
+/* Şimdilik atla: ikincil metin düğmesi, kartın altında ortalı; altında sonradan ekleme yolu. */
+.setup-later-box { display: flex; flex-direction: column; align-items: center; gap: 2px; margin-top: -8px; text-align: center; }
+.setup-later { min-height: 44px; padding: 0 16px; border-radius: 12px; color: var(--blue-t); font-size: 17px; font-weight: 600; }
+.setup-later:active { background: var(--fill2); }
+.setup-later-box .t-note { margin: 0 16px; }
+
+/* Kurulum özeti: adım satırları; satıra dokunmak o adıma götürür. */
+.setup-summary { list-style: none; padding: 8px 0; gap: 0; min-height: 0; }
+.setup-summary li + li .setup-sum-row::before { content: ""; position: absolute; top: 0; right: 0; left: 64px; height: .5px; background: var(--sep); }
+.setup-sum-row { position: relative; display: flex; align-items: center; gap: 14px; width: 100%; min-height: 64px; padding: 10px 20px; text-align: left; }
+.setup-sum-row:active { background: var(--fill2); }
+.setup-sum-row:focus-visible { outline-offset: -3px; }
+.setup-mark { width: 30px; height: 30px; border-radius: 15px; flex: none; display: grid; place-items: center; }
+.setup-mark.is-done { background: var(--green-t); color: #fff; }
+.setup-mark.is-skipped { background: var(--fill); color: var(--label2-t); }
+.setup-mark.is-missing { background: var(--fill); color: var(--orange-t); }
+.setup-foot { display: flex; flex-direction: column; gap: 8px; }
+.setup-foot .t-note { margin: 0 4px; }
+.setup-foot .setup-primary { margin-top: 0; }
+.setup-link { align-self: center; min-height: 44px; padding: 0 12px; font-weight: 500; margin-top: -8px; }
+
+@keyframes setup-in { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: none; } }
+@keyframes setup-fade { from { opacity: 0; } to { opacity: 1; } }
+@media (max-width: 360px) { .setup-card { padding: 20px; } .setup-sum-row { padding: 10px 16px; } }
+@media (prefers-reduced-motion: reduce) {
+  .setup-card { animation-name: setup-fade; }
+  .setup-primary:active:not(:disabled), .setup-mode:active { transform: none; }
+}
+/* Yüksek kontrast ve zorlanmış renklerde gölge ve parlama kapanır, kartlar kenarlıkla ayrılır. */
+@media (prefers-contrast: more), (forced-colors: active) {
+  .setup-card, .setup-mode, .setup-primary { box-shadow: none; border: 1px solid var(--sep); }
+  .setup-mode.is-on { box-shadow: 0 0 0 2px var(--blue-t); }
+  .setup-primary::after { display: none; }
+  .setup-icon, .setup-progress .is-now { box-shadow: none; }
+}

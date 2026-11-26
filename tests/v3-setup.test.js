@@ -11,7 +11,7 @@ test("Karşılama ilk hesaptan sonra sürer; maaş ve sabit ödeme girilince bit
   let s = emptyState();
   assert.equal(setupSteps(s).show, true);
   s = addAccount(s, { id: "b", name: "Banka", type: "bank", currency: "TRY" });
-  assert.deepEqual(setupSteps(s), { account: true, bank: true, credit: false, extra: false, catFixed: false, catVariable: false, income: false, fixed: false, mode: null, show: true });
+  assert.deepEqual(setupSteps(s), { account: true, bank: true, credit: false, extra: false, catFixed: false, catVariable: false, income: false, fixed: false, mode: null, skipped: [], show: true });
   s = withObligation(s, { id: "m", kind: "income", name: "Maaş" });
   assert.equal(setupSteps(s).show, true, "sabit ödeme adımı atlanmamalı");
   s = withObligation(s, { id: "k", kind: "fixed", name: "Kira" });
@@ -49,4 +49,17 @@ test("Gider takibi adımı 'ayrı hesap açmayacağım' ile tamamlanır; kategor
   assert.equal(setupSteps(s).extra, true);
   s = { ...s, categories: { k: { id: "k", name: "Kira", group: "fixed" }, m: { id: "m", name: "Market" } } };
   assert.deepEqual([setupSteps(s).catFixed, setupSteps(s).catVariable], [true, true], "dalı olmayan eski kategori değişken sayılır");
+});
+
+test("Kurulum sihirbazı: 'Şimdilik atla' denen adımlar listelenir; eski 'ayrı hesap açmayacağım' gider takibi adımını atlar", () => {
+  let s = addAccount(emptyState(), { id: "b", name: "Maaş", type: "bank", currency: "TRY", purpose: "salary" });
+  assert.deepEqual(setupSteps(s).skipped, []);
+  s = { ...s, settings: { ...s.settings, setupSkipped: ["cards", "catFixed"] } };
+  assert.deepEqual(setupSteps(s).skipped, ["cards", "catFixed"]);
+  assert.equal(setupSteps(s).credit, false, "atlamak adımı tamamlanmış saymaz");
+  s = { ...s, settings: { ...s.settings, noExpenseAccounts: true } };
+  assert.deepEqual(setupSteps(s).skipped, ["cards", "catFixed", "expense"]);
+  s = { ...s, settings: { ...s.settings, setupSkipped: ["expense"] } };
+  assert.deepEqual(setupSteps(s).skipped, ["expense"], "aynı adım iki kez yazılmaz");
+  assert.deepEqual(setupSteps({ ...s, settings: { ...s.settings, setupSkipped: "bozuk", noExpenseAccounts: false } }).skipped, [], "dizi olmayan değer yok sayılır");
 });
