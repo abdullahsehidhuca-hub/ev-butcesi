@@ -15,8 +15,9 @@ const INVITES = {
 const person = (email, verified) => ({ uid: `test-${email}`, email, displayName: "Test üye", emailVerified: verified });
 const budgetsOf = email => email === MEMBER_EMAIL ? [MAIN] : [MAIN, WORK];
 
-// start: signedOut · noFamily · choose · synced
+// start: loading · signedOut · noFamily · choose · synced. loading oturum hiç gelmeyen açılıştır (iskelet kartlar).
 function initial(start) {
+  if (start === "loading") return { user: null, budgets: [], familyId: null, loading: true };
   if (start === "signedOut") return { user: null, budgets: [], familyId: null };
   if (start === "noFamily") return { user: person("yeni@ornek.com", true), budgets: [], familyId: null };
   return { user: person("test@ornek.com", true), budgets: [MAIN, WORK], familyId: start === "synced" ? MAIN.id : null };
@@ -78,7 +79,7 @@ export function useTestCloud(spec) {
 
   if (!world) return null;
   const { user, budgets, familyId } = world;
-  const status = !user ? "signedOut" : !budgets.length ? "noFamily" : !familyId ? "choose" : "synced";
+  const status = world.loading ? "loading" : !user ? "signedOut" : !budgets.length ? "noFamily" : !familyId ? "choose" : "synced";
   return {
     status, error: null, members: {}, user, familyId, hint: null, budgets,
     current: budgets.find(b => b.id === familyId) || null,

@@ -187,11 +187,12 @@ export function Chips({ label, options, value, onChange, wrap = false }) {
 }
 
 // Form içinde kullanılır: "Kaydet" formu gönderir (klavyede Enter da çalışır).
-export function Actions({ submit, onCancel, disabled, danger }) {
+// glossy: ilk açılış formlarında (HesapSheet) parlak ana düğme; diğer çekmeceler düz kalır.
+export function Actions({ submit, onCancel, disabled, danger, glossy }) {
   return (
     <div className="v3-actions">
       <button type="button" className="v3-cancel" onClick={onCancel}>Vazgeç</button>
-      <button type="submit" className={`v3-submit${danger ? " is-danger" : ""}`} disabled={disabled}>{submit}</button>
+      <button type="submit" className={`v3-submit${danger ? " is-danger" : ""}${glossy ? " is-glossy" : ""}`} disabled={disabled}>{submit}</button>
     </div>
   );
 }

@@ -59,6 +59,15 @@ export function Tile({ icon, color = "gray", solid = false, small = false }) {
   );
 }
 
+// Derinlikli simge karosu (karşılama, ilk açılış kartları): renkli gradyan, yumuşak gölge. Süstür (aria-hidden).
+export function SetupIcon({ icon, color, small }) {
+  return (
+    <span className={`setup-icon${small ? " sm" : ""}`} style={{ "--tc": `var(--${color})` }} aria-hidden="true">
+      <Icon name={icon} size={small ? 18 : 26} />
+    </span>
+  );
+}
+
 export function DateBadge({ date, tone }) {
   const c = tone ? `var(--${tone})` : undefined;
   return (

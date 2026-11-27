@@ -5,7 +5,7 @@
 // Kredi kartı varsa altında tek satır "Kart blokesi" durur; dokununca kart kart döküm açılır (BlokeSheet).
 import { Fragment, useEffect, useRef, useState } from "react";
 import { pendingCarryover, formatUnits, balanceOf, nextAllowanceDate } from "../../core/index.js";
-import { Icon, Tile, DateBadge, Avatar, Check } from "../components/ui.jsx";
+import { Icon, Tile, SetupIcon, DateBadge, Avatar, Check } from "../components/ui.jsx";
 import { purposeOf, isExpenseAccount, groupOf } from "../setupGuide.js";
 import { overview, upcoming, recent, forecast, paymentsView, accountsView, balanceView, closeCandidate, categoryName, periodLabel, fmt, fmtNum, dayNum, monthShort, monthLong, setupSteps } from "../selectors.js";
 
@@ -61,14 +61,6 @@ const LATER = {
   catVariable: "Değişken gider kategorilerini daha sonra Ayarlar'dan ekleyebilirsiniz.",
   fixed: "Sabit ödemeleri daha sonra Ayarlar'dan ekleyebilirsiniz."
 };
-
-function SetupIcon({ icon, color, small }) {
-  return (
-    <span className={`setup-icon${small ? " sm" : ""}`} style={{ "--tc": `var(--${color})` }} aria-hidden="true">
-      <Icon name={icon} size={small ? 18 : 26} />
-    </span>
-  );
-}
 
 function Welcome({ state, today, open, onDone, onMode, onRemove, onSetting }) {
   const [choosing, setChoosing] = useState(false);

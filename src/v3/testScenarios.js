@@ -37,6 +37,7 @@ const skip = (s, ids) => ({ ...s, settings: { ...s.settings, setupSkipped: ids }
 
 export const SCENARIOS = [
   { id: "giris", group: "Giriş ve bütçeler", icon: "login", title: "Giriş ekranı", sub: "Oturum kapalı · davet koduyla katılma adımları", build: () => fresh(null), cloud: { start: "signedOut" }, note: INVITE_NOTE },
+  { id: "yukleniyor", group: "Giriş ve bütçeler", icon: "cloud", title: "Giriş ekranı · yükleniyor", sub: "Oturum durumu beklenirken giriş seçeneklerinin yerinde gri kartlar görünür.", build: () => fresh(null), cloud: { start: "loading" } },
   { id: "butcesiz", group: "Giriş ve bütçeler", icon: "plus", title: "Bütçesi olmayan üye hesabı", sub: "Kurma, davet koduyla katılma, kısa süreli bütçe", build: () => fresh(null), cloud: { start: "noFamily" }, note: INVITE_NOTE },
   { id: "secim", group: "Giriş ve bütçeler", icon: "repeat", title: "Bütçe seçimi", sub: "İki bütçesi olan kişinin açılışı", build: dolu.buildSampleState, cloud: { start: "choose" } },
   { id: "butceler", group: "Giriş ve bütçeler", icon: "people", title: "Ayarlar · bütçe ve üyeler", sub: "Başka bütçeye geçme, adı düzeltme, davet kodu ekleme", build: dolu.buildSampleState, cloud: { start: "synced" }, tab: "settings" },

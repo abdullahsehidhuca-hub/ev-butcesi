@@ -85,7 +85,8 @@ export default function V3App({ sample }) {
   const synced = cloud.status === "synced" || cloud.status === "offline";
 
   useEffect(() => { document.title = "Ev Bütçesi"; }, []);
-  useEffect(() => { const t = setTimeout(() => setAuthSlow(true), 5000); return () => clearTimeout(t); }, []);
+  // Test ekranlarındaki "yükleniyor" senaryosunda oturum hiç gelmez; giriş ekranına geçilmesin diye zamanlayıcı kurulmaz.
+  useEffect(() => { if (sample?.cloud?.start === "loading") return; const t = setTimeout(() => setAuthSlow(true), 5000); return () => clearTimeout(t); }, []);
 
   // Her değişiklik bu cihaza yazılır; ilk açılışta yazılmaz.
   useEffect(() => {

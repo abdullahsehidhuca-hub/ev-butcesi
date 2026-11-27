@@ -305,7 +305,7 @@ button.v3-alert { display: flex; flex-direction: column; align-items: flex-start
   --label2-t: rgba(235,235,245,.72); --setup-glow: rgba(10,132,255,.18);
 }
 /* Karşılama zemini: üstten hafif mavi ışıma. Kart geçişindeki kayma yatay kaydırma çubuğu açmasın diye x ekseni kırpılır. */
-.v3-scroll:has(> .setup-top), .v3-scroll:has(> .setup-modes) {
+.v3-scroll:has(> .setup-top), .v3-scroll:has(> .setup-modes), .v3-scroll.is-gate {
   background: radial-gradient(140% 420px at 50% 0, var(--setup-glow), transparent 70%) no-repeat; overflow-x: hidden; gap: 20px;
 }
 .setup-head .t-sub, .setup-mode-d, .setup-d, .setup-card .t-note, .setup-foot .t-note, .setup-later-box .t-note { color: var(--label2-t); }
@@ -393,4 +393,41 @@ button.v3-alert { display: flex; flex-direction: column; align-items: flex-start
   .setup-mode.is-on { box-shadow: 0 0 0 2px var(--blue-t); }
   .setup-primary::after { display: none; }
   .setup-icon, .setup-progress .is-now { box-shadow: none; }
+}
+
+/* İlk açılış kartları (2026-11-27): giriş, bütçesi olmayan hesap ve bütçe seçimi karşılamanın kart dilini alır. Her seçenek
+   kendi kartıdır (araya çizgi girmez); yalnız ana yol (Giriş yap, Bütçe kur) parlak mavi karttır. Parlama karşılamadakinden
+   hafiftir (.10), çünkü üstünde 14 px alt metin durur. Formlardaki ana düğme (HesapSheet) aynı gradyanı alır (is-glossy). */
+:root { --gate-btn-grad: linear-gradient(180deg, #0A5FC4, #00479E); }
+.v3-scroll.is-gate .v3-gate-head { padding-bottom: 0; }
+.v3-scroll.is-gate > .t-cap { margin-bottom: -12px; }
+.v3-gate-cards { display: flex; flex-direction: column; gap: 12px; }
+.v3-gate-card { position: relative; overflow: hidden; display: flex; align-items: center; gap: 14px; width: 100%; min-height: 72px; padding: 14px 16px; border-radius: var(--r-card); background: var(--card-grad); box-shadow: var(--sh-card); text-align: left; transition: transform .12s ease; }
+.v3-gate-card .stack { padding: 0; gap: 2px; }
+.v3-gate-card .v3-gate-t { font-weight: 600; }
+.v3-gate-card .t-meta { font-size: var(--fs-note); line-height: 1.35; color: var(--label2-t); }
+.v3-gate-card > svg { flex: none; color: var(--label2-t); }
+.v3-gate-card .setup-icon, .v3-gate-card .v3-budget-tile { width: 44px; height: 44px; border-radius: 13px; }
+.v3-gate-card .v3-budget-tile { box-shadow: 0 4px 10px rgba(0,0,0,.16), inset 0 1px 0 rgba(255,255,255,.35); }
+.v3-gate-card:active { transform: scale(.985); }
+.v3-gate-card:focus-visible { outline-offset: 3px; border-radius: var(--r-card); }
+.v3-gate-card.is-primary { background: var(--gate-btn-grad); box-shadow: var(--sh-btn); }
+.v3-gate-card.is-primary::after, .v3-submit.is-glossy::after { content: ""; position: absolute; inset: 0 0 50% 0; background: linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,0)); pointer-events: none; }
+.v3-gate-card.is-primary .v3-gate-t, .v3-gate-card.is-primary .t-meta, .v3-gate-card.is-primary > svg { color: #fff; }
+.v3-gate-card.is-primary .setup-icon { background: rgba(255,255,255,.2); box-shadow: inset 0 1px 0 rgba(255,255,255,.35); }
+/* Yükleniyor: seçeneklerin yerinde üç iskelet kart; oturum gelince düzen zıplamaz. Yükseklikler 360 ve 390 px'te ölçülen kartlardır:
+   iki seçenekte alt metin iki satıra iner (90 px), toplam 72 + 90 + 72 + 2 × 12 = 258 px. İlk çocuk gizli durum metni olduğundan nth-of-type. */
+.v3-gate-skel { display: block; height: 72px; border-radius: var(--r-card); background: var(--fill); }
+.v3-gate-skel:nth-of-type(2) { height: 90px; }
+@keyframes gate-pulse { from { opacity: 1; } to { opacity: .55; } }
+@media (prefers-reduced-motion: no-preference) { .v3-gate-skel { animation: gate-pulse 1.2s ease-in-out infinite alternate; } }
+.v3-submit.is-glossy { position: relative; overflow: hidden; background: var(--gate-btn-grad); box-shadow: var(--sh-btn); transition: transform .12s ease; }
+.v3-submit.is-glossy:active:not(:disabled) { transform: scale(.98); }
+.v3-submit.is-glossy:disabled { opacity: 1; background: var(--fill); color: var(--label2-t); box-shadow: none; }
+.v3-submit.is-glossy:disabled::after { display: none; }
+@media (prefers-reduced-motion: reduce) { .v3-gate-card:active, .v3-submit.is-glossy:active:not(:disabled) { transform: none; } }
+@media (prefers-contrast: more), (forced-colors: active) {
+  .v3-gate-card, .v3-submit.is-glossy { box-shadow: none; border: 1px solid var(--sep); }
+  .v3-gate-card.is-primary::after, .v3-submit.is-glossy::after { display: none; }
+  .v3-gate-card .setup-icon, .v3-gate-card .v3-budget-tile { box-shadow: none; }
 }

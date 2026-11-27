@@ -186,7 +186,7 @@ export default function HesapSheet({ cloud, onClose, onDone, start, api = family
           {mode === "invitePass" && <Field label="Şifre" type="password" value={pass} onChange={setPass} autoComplete="new-password" hint="En az 6 karakter" />}
           {notice && <p className="v3-hint" role="status">{notice}</p>}
           <ErrorText errors={errors} />
-          <Actions onCancel={onClose} disabled={busy} submit={busy ? BUSY[mode] : SUBMIT[mode]} />
+          <Actions glossy onCancel={onClose} disabled={busy} submit={busy ? BUSY[mode] : SUBMIT[mode]} />
         </Form>
         {(mode === "login" || mode === "register") && googleAvailable() && (
           <button type="button" className="v3-cancel" style={{ width: "100%", marginTop: 10 }} onClick={google} disabled={busy}>Google ile devam et</button>
